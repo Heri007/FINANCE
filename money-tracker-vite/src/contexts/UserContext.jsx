@@ -19,7 +19,6 @@ export const UserProvider = ({ children }) => {
   const [pinStep, setPinStep] = useState('enter');
   const [firstPin, setFirstPin] = useState('');
 
-  // ✅ Vérification de l'authentification au montage
   useEffect(() => {
     const checkAuth = async () => {
       try {
@@ -28,7 +27,6 @@ export const UserProvider = ({ children }) => {
         
         setHasPin(!!storedPin);
         
-        // ✅ Vérifier si le token est valide via votre API
         if (token) {
           try {
             const response = await fetch(`${API_BASE}/auth/verify-token`, {
@@ -39,7 +37,6 @@ export const UserProvider = ({ children }) => {
               const data = await response.json();
               setIsAuthenticated(data.valid === true);
             } else {
-              // Token invalide, le supprimer
               localStorage.removeItem('token');
               setIsAuthenticated(false);
             }
@@ -62,7 +59,6 @@ export const UserProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  // ✅ Configuration initiale du PIN (appelle votre endpoint /auth/setup-pin)
   const setupPin = async (pin) => {
     try {
       const response = await fetch(`${API_BASE}/auth/setup-pin`, {
@@ -78,7 +74,6 @@ export const UserProvider = ({ children }) => {
 
       const data = await response.json();
       
-      // ✅ Sauvegarder le PIN et le token
       localStorage.setItem('userPin', pin);
       localStorage.setItem('token', data.token);
       
@@ -91,7 +86,6 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // ✅ Connexion avec PIN (appelle votre endpoint /auth/verify-pin)
   const login = async (pin) => {
     try {
       const response = await fetch(`${API_BASE}/auth/verify-pin`, {
@@ -107,7 +101,6 @@ export const UserProvider = ({ children }) => {
 
       const data = await response.json();
       
-      // ✅ Sauvegarder le token retourné par l'API
       localStorage.setItem('token', data.token);
       setIsAuthenticated(true);
     } catch (error) {
@@ -115,7 +108,6 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // ✅ Déconnexion (appelle votre endpoint /auth/logout)
   const logout = async () => {
     try {
       const token = localStorage.getItem('token');

@@ -8,14 +8,7 @@ import { useUser } from './UserContext';
 
 const FinanceContext = createContext(null);
 
-export const useFinance = () => {
-  const context = useContext(FinanceContext);
-  if (!context) {
-    throw new Error('useFinance doit être utilisé dans un FinanceProvider');
-  }
-  return context;
-};
-
+// ✅ Exporter le hook APRÈS le provider
 export const FinanceProvider = ({ children }) => {
   const { isAuthenticated } = useUser();
   
@@ -31,7 +24,6 @@ export const FinanceProvider = ({ children }) => {
   const [projectFilterId, setProjectFilterId] = useState(null);
   const [accountFilterId, setAccountFilterId] = useState(null);
 
-  // ✅ Chargement des comptes avec gestion d'erreur
   const refreshAccounts = useCallback(async () => {
     if (!isAuthenticated) return;
     
@@ -47,7 +39,6 @@ export const FinanceProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // ✅ Chargement des transactions avec gestion d'erreur
   const refreshTransactions = useCallback(async () => {
     if (!isAuthenticated) return;
     
@@ -63,7 +54,6 @@ export const FinanceProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // ✅ Chargement des projets avec gestion d'erreur
   const refreshProjects = useCallback(async () => {
     if (!isAuthenticated) return;
     
@@ -79,7 +69,6 @@ export const FinanceProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // ✅ Chargement des receivables avec validation robuste
   const refreshReceivables = useCallback(async () => {
     if (!isAuthenticated) return;
     
@@ -97,9 +86,8 @@ export const FinanceProvider = ({ children }) => {
       
       const data = await res.json();
       
-      // ✅ Validation : vérifier que c'est un tableau
       if (!Array.isArray(data)) {
-        console.warn('Receivables response is not an array:', typeof data);
+        console.warn('Receivables response is not an array');
         setTotalOpenReceivables(0);
         return;
       }
@@ -112,7 +100,6 @@ export const FinanceProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  // ✅ Chargement initial
   useEffect(() => {
     if (isAuthenticated) {
       refreshAccounts();
@@ -120,7 +107,6 @@ export const FinanceProvider = ({ children }) => {
       refreshProjects();
       refreshReceivables();
     } else {
-      // Réinitialiser les données si déconnecté
       setAccounts([]);
       setTransactions([]);
       setProjects([]);
@@ -128,7 +114,6 @@ export const FinanceProvider = ({ children }) => {
     }
   }, [isAuthenticated, refreshAccounts, refreshTransactions, refreshProjects, refreshReceivables]);
 
-  // ========== CRUD COMPTES ==========
   const createAccount = useCallback(async (data) => {
     const newAccount = await accountsService.create(data);
     await refreshAccounts();
@@ -146,7 +131,6 @@ export const FinanceProvider = ({ children }) => {
     await refreshAccounts();
   }, [refreshAccounts]);
 
-  // ========== CRUD TRANSACTIONS ==========
   const createTransaction = useCallback(async (data) => {
     const newTransaction = await transactionsService.create(data);
     await refreshTransactions();
@@ -167,7 +151,6 @@ export const FinanceProvider = ({ children }) => {
     await refreshAccounts();
   }, [refreshTransactions, refreshAccounts]);
 
-  // ========== CRUD PROJETS ==========
   const createProject = useCallback(async (data) => {
     const newProject = await projectsService.create(data);
     await refreshProjects();
@@ -185,7 +168,6 @@ export const FinanceProvider = ({ children }) => {
     await refreshProjects();
   }, [refreshProjects]);
 
-  // ========== CALCULS ET DONNÉES DÉRIVÉES ==========
   const visibleTransactions = useMemo(() => {
     let list = transactions || [];
     if (projectFilterId) {
@@ -338,3 +320,12 @@ export const FinanceProvider = ({ children }) => {
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 };
+
+// ✅ Hook exporté APRÈS le Provider
+export function useFinance() {
+  const context = useContext(FinanceContext);
+  if (!context) {
+    throw new Error('useFinance doit être utilisé dans un FinanceProvider');
+  }
+  return context;
+}
