@@ -23,6 +23,7 @@ import { CalculatorInput } from './components/common/CalculatorInput';
 import { transactionsService } from './services/transactionsService';
 import { normalizeDate } from './utils/transactionUtils';
 
+
 export function ProjectPlannerModal({
   isOpen,
   onClose,
@@ -562,8 +563,9 @@ await transactionsService.createTransaction(txPayload);
 };
 
 
-  if (!isOpen) return null;
-
+  if (!isOpen) {
+  return null;
+}
   // --- RENDER ---
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">

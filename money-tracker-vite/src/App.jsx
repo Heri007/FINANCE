@@ -1,8 +1,8 @@
-// FICHIER: src/App.jsx - VERSION REFACTORISÉE AVEC CONTEXT
-import React, { useState, useEffect } from 'react';
+// FICHIER: src/App.jsx - VERSION REFACTORISÉE & CORRIGÉE
+import React, { useState } from 'react';
 import { Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 
-// ✅ NOUVEAUX CONTEXTS
+// ✅ CONTEXTS
 import { useUser } from './contexts/UserContext';
 import { useFinance } from './contexts/FinanceContext';
 
@@ -12,7 +12,6 @@ import { useToast } from './hooks/useToast';
 // Services
 import { accountsService } from './services/accountsService';
 import { transactionsService } from './services/transactionsService';
-import { projectsService } from './services/projectsService';
 import { API_BASE } from './services/api';
 import backupService from './services/backupService';
 
@@ -54,9 +53,6 @@ import { PinInput } from './components/common/PinInput';
 // Utilitaires
 import { formatCurrency } from './utils/formatters';
 
-/* ============================================================================
-   CONSTANTES
-============================================================================ */
 const DEFAULT_ACCOUNTS = [
   { name: 'Argent Liquide', type: 'cash', balance: 0 },
   { name: 'MVola', type: 'mobile', balance: 0 },
@@ -67,16 +63,11 @@ const DEFAULT_ACCOUNTS = [
   { name: 'Redotpay', type: 'digital', balance: 0 },
 ];
 
-/* ============================================================================
-   COMPOSANT PRINCIPAL APP
-============================================================================ */
 export default function App() {
-  // ✅ CONTEXTS GLOBAUX
   const auth = useUser();
   const finance = useFinance();
   const { toast, showToast, hideToast } = useToast();
 
-  // Déstructuration pour faciliter l'accès
   const {
     accounts,
     transactions,
@@ -110,7 +101,6 @@ export default function App() {
     parseJSONSafe,
   } = finance;
 
-  // ========== ÉTATS UI LOCAUX ==========
   const [activeTab, setActiveTab] = useState('overview');
   const [showAdd, setShowAdd] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -127,7 +117,6 @@ export default function App() {
   const [editingProject, setEditingProject] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
-  // ========== GESTION AUTHENTIFICATION ==========
   const handleLogout = async () => {
     try {
       await auth.logout();
@@ -166,7 +155,6 @@ export default function App() {
     }
   };
 
-  // ========== INTERFACE PIN ==========
   if (auth.isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -191,14 +179,10 @@ export default function App() {
     );
   }
 
-  // ========== GESTION DES COMPTES ==========
   const handleInitDefaults = async () => {
     if (!confirm('Voulez-vous créer les 7 comptes par défaut ?')) return;
-    
     try {
-      await Promise.all(
-        DEFAULT_ACCOUNTS.map((account) => accountsService.create(account))
-      );
+      await Promise.all(DEFAULT_ACCOUNTS.map((account) => accountsService.create(account)));
       showToast('Comptes créés avec succès !', 'success');
       await refreshAccounts();
     } catch (e) {
@@ -225,7 +209,6 @@ export default function App() {
     }
   };
 
-  // ========== GESTION DES TRANSACTIONS ==========
   const addTransaction = async (trx) => {
     try {
       await createTransaction({
@@ -259,6 +242,7 @@ export default function App() {
   };
 
   const handleTransactionClick = (transaction) => {
+    console.log('🖱️ Transaction cliquée:', transaction.id);
     setEditingTransaction(transaction);
   };
 
@@ -274,12 +258,17 @@ export default function App() {
     setEditingTransaction(null);
   };
 
-  // ========== RENDU PRINCIPAL ==========
+console.log('État showProjectPlanner:', showProjectPlanner);
+console.log('État showProjectsList:', showProjectsList);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
+        onAddTransaction={() => setShowAdd(true)}
         onLogout={handleLogout}
-        onExport={async () => {
+        onImport={() => setShowImport(true)}
+        onRestore={() => setShowBackupImport(true)}
+        onBackup={async () => {
           try {
             const backupData = await backupService.fetchFull();
             const serverResult = await backupService.createLegacy(
@@ -294,11 +283,22 @@ export default function App() {
             showToast(`Erreur backup: ${error.message}`, 'error');
           }
         }}
-        onImport={() => setShowBackupImport(true)}
+        onShowBookkeeper={() => setShowBookkeeper(true)}
+        onShowOperator={() => setShowOperator(true)}
+        onShowContent={() => setShowContentReplicator(true)}
+        onShowReports={() => setShowReports(true)}
+        onShowNotes={() => setActiveTab('notes')}
+        onShowProjectPlanner={() => {
+          console.log('📊 Planifier Projet cliqué');
+          setShowProjectPlanner(true);
+        }}
+        onShowProjectsList={() => {
+          console.log('📁 Mes Projets cliqué');
+          setShowProjectsList(true);
+        }}
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* STATISTIQUES GLOBALES */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
           <StatCard
             title="Solde Total"
@@ -322,26 +322,23 @@ export default function App() {
           />
         </div>
 
-        {/* NAVIGATION */}
         <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* CONTENU */}
         {activeTab === 'overview' && (
           <div className="space-y-6">
             <AccountList
               accounts={accounts}
-              onAccountClick={setSelectedAccount}
+              onSelectAccount={setSelectedAccount} // ✅ CORRIGÉ (était onAccountClick)
               onAddAccount={() => setShowAddAccount(true)}
               onInitDefaults={handleInitDefaults}
             />
-            
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-xl font-bold mb-4">Transactions Récentes</h2>
               <TransactionList
                 transactions={transactions.slice(0, 10)}
                 accounts={accounts}
                 onTransactionClick={handleTransactionClick}
-                onDeleteTransaction={handleDeleteTransaction}
+                onDelete={handleDeleteTransaction} // ✅ CORRIGÉ (était onDeleteTransaction)
               />
             </div>
           </div>
@@ -362,8 +359,9 @@ export default function App() {
               transactions={visibleTransactions}
               accounts={accounts}
               onTransactionClick={handleTransactionClick}
-              onDeleteTransaction={handleDeleteTransaction}
+              onDelete={handleDeleteTransaction} // ✅ CORRIGÉ
             />
+            <CategoryBreakdown transactions={transactions} />
           </div>
         )}
 
@@ -372,6 +370,31 @@ export default function App() {
             onRefresh={refreshReceivables}
             totalOpenReceivables={totalOpenReceivables}
           />
+        )}
+
+        {activeTab === 'projects' && (
+          <div>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold">Gestion des Projets</h2>
+              <div className="space-x-2">
+                <button
+                  onClick={() => setShowProjectsList(true)}
+                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+                >
+                  📋 Liste
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingProject(null);
+                    setShowProjectPlanner(true);
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                >
+                  + Nouveau
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {activeTab === 'notes' && <NotesSlide />}
@@ -421,8 +444,106 @@ export default function App() {
             await refreshAccounts();
             await refreshTransactions();
             await refreshProjects();
+            await refreshReceivables();
             showToast('Restauré avec succès !', 'success');
           }}
+        />
+      )}
+
+      {showImport && (
+        <ImportModal
+          accounts={accounts}
+          onClose={() => setShowImport(false)}
+          onImport={async (importedTransactions) => {
+            try {
+              for (const trx of importedTransactions) {
+                await transactionsService.create({
+                  account_id: trx.accountId,
+                  type: trx.type,
+                  amount: trx.amount,
+                  category: trx.category,
+                  description: trx.description,
+                  date: trx.date,
+                  is_posted: true,
+                  is_planned: false,
+                });
+              }
+              await refreshTransactions();
+              await refreshAccounts();
+              showToast(`${importedTransactions.length} transactions importées !`, 'success');
+            } catch (error) {
+              showToast(`Erreur import: ${error.message}`, 'error');
+            }
+          }}
+        />
+      )}
+
+      {showBookkeeper && (
+        <BookkeeperDashboard
+          accounts={accounts}
+          transactions={transactions}
+          projects={projects}
+          onClose={() => setShowBookkeeper(false)}
+        />
+      )}
+
+      {showOperator && (
+        <OperatorDashboard
+          accounts={accounts}
+          transactions={transactions}
+          onClose={() => setShowOperator(false)}
+        />
+      )}
+
+      {showContentReplicator && (
+        <ContentReplicator onClose={() => setShowContentReplicator(false)} />
+      )}
+
+      {showReports && (
+        <ReportsModal
+          accounts={accounts}
+          transactions={transactions}
+          projects={projects}
+          onClose={() => setShowReports(false)}
+        />
+      )}
+
+      {showProjectPlanner && (
+        <ProjectPlannerModal
+          project={editingProject}
+          accounts={accounts}
+          onClose={() => {
+            setShowProjectPlanner(false);
+            setEditingProject(null);
+          }}
+          onSuccess={async () => {
+            await refreshProjects();
+            setShowProjectPlanner(false);
+            setEditingProject(null);
+            showToast('Projet enregistré !', 'success');
+          }}
+        />
+      )}
+
+      {showProjectsList && (
+        <ProjectsListModal
+          projects={projects}
+          accounts={accounts}
+          onClose={() => setShowProjectsList(false)}
+          onEdit={(project) => {
+            setEditingProject(project);
+            setShowProjectPlanner(true);
+            setShowProjectsList(false);
+          }}
+        />
+      )}
+
+      {transactionDetailsModal && (
+        <TransactionDetailsModal
+          type={transactionDetailsModal}
+          transactions={transactions}
+          accounts={accounts}
+          onClose={() => setTransactionDetailsModal(null)}
         />
       )}
 
