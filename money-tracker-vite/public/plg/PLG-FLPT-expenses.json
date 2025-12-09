@@ -1,0 +1,250 @@
+[
+  {
+    "category": "Investissement",
+    "amount": 980000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "GPS",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 160000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Sondeur",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 9000000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Compresseur",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 7000000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Moteur YAMAHA 25CV 4T",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 50000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Poire",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 0,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "DELAH",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 10000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Sakafo",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 95000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Chambre + sakafo + frais",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 25000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Logistique TMV-FLPT",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 0,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Congélateur 200-300L (Brunel)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 0,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Vedette XMC24 (non louée)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 5500,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Fatana",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 42000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Essai essence 5L + huile 5L + Tport moteur",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 70000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Huille moteur",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 6500,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Scotch",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 10000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Calle moteur",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 34500,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Clés/Outils",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 80000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "T/port TNR-TMV (mercredi/lun)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 20000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Sakafo an-dalana (aller-retour)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 247500,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Hebergement TMV (jeu/ven/sam/dim)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 35000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Sakafo TMV (matin/midi/soir) jeu,ven,sam, dim, lun",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 20000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Déplacement TMV (bajaj)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 20000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "T/port TMV-FLPT (aller-retour)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 11000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Sakafo FLPT (ven)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 15000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Déplacement FLTP (essence)",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 403000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Ecart",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 230000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Batterie 80A SSOYDD",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 30000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Courroie 12.5x1900 Comp",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 70000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Huile 20W50 5L Comp",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 130000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "Huile 15W50 4L Comp",
+    "phase": "investissement"
+  },
+  {
+    "category": "Investissement",
+    "amount": 25000,
+    "account": "Déjà Payé",
+    "isRecurring": false,
+    "description": "T/port + Logistique Flpt",
+    "phase": "investissement"
+  }
+]

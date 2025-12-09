@@ -1,0 +1,22 @@
+# Dépendances
+node_modules/
+
+# Environnement et Sécurité (TRÈS IMPORTANT)
+.env
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build de production
+dist/
+build/
+
+# Sauvegardes locales
+backup/
+
+# Dossiers spécifiques du Backend
+money-tracker-backend/csv/
+money-tracker-backend/backup/

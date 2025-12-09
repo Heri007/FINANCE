@@ -1,0 +1,251 @@
+// controllers/accountController.js
+// -----------------------------------------------------------------------------
+// Contrôleur des comptes Money Tracker.
+// - CRUD des comptes (liste, création, mise à jour, suppression)
+// - Recalcul du solde d’un compte à partir des transactions
+// - Recalcul de tous les soldes pour remettre la base en cohérence
+// -----------------------------------------------------------------------------
+
+const pool = require('../config/database');
+
+// -----------------------------------------------------------------------------
+// GET /api/accounts
+// -----------------------------------------------------------------------------
+// Retourne la liste de tous les comptes, triés par id croissant.
+// Utilisé par le frontend pour afficher le tableau/résumé des comptes.
+// -----------------------------------------------------------------------------
+exports.getAllAccounts = async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM accounts ORDER BY id ASC'
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des comptes' });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// POST /api/accounts
+// -----------------------------------------------------------------------------
+// Crée un nouveau compte.
+// Body attendu : { name, balance?, type }
+// - balance est optionnel, par défaut 0.
+// -----------------------------------------------------------------------------
+exports.createAccount = async (req, res) => {
+  try {
+    const { name, balance, type } = req.body;
+
+    const result = await pool.query(
+      'INSERT INTO accounts (name, balance, type) VALUES ($1, $2, $3) RETURNING *',
+      [name, balance || 0, type]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur lors de la création du compte' });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// PUT /api/accounts/:id
+// -----------------------------------------------------------------------------
+// Met à jour un compte existant (nom, solde, type).
+// Met aussi à jour updated_at pour garder une trace de la dernière modif.
+// -----------------------------------------------------------------------------
+exports.updateAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, balance, type } = req.body;
+
+    const result = await pool.query(
+      'UPDATE accounts SET name = $1, balance = $2, type = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING *',
+      [name, balance, type, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Compte non trouvé' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour du compte' });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// DELETE /api/accounts/:id
+// -----------------------------------------------------------------------------
+// Supprime un compte.
+// ⚠️ Les transactions associées sont supprimées en cascade (FK ON DELETE CASCADE).
+// -----------------------------------------------------------------------------
+exports.deleteAccount = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'DELETE FROM accounts WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Compte non trouvé' });
+    }
+
+    res.json({ success: true, message: 'Compte supprimé' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur lors de la suppression du compte' });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// POST /api/accounts/:id/recalculate
+// -----------------------------------------------------------------------------
+// Recalcule le solde d’un compte donné à partir de ses transactions.
+// Règle métier :
+// - On ne prend en compte que les transactions “postées”
+//   (is_posted = true) OU les transactions non planifiées (is_planned = false).
+// - income  => +amount
+// - expense => -amount
+// Utile pour réparer les soldes après import ou bug de calcul.
+// -----------------------------------------------------------------------------
+exports.recalculateBalance = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log(`🔄 Recalcul du solde pour le compte ${id}`);
+
+    // Vérifier que le compte existe
+    const accountCheck = await pool.query(
+      'SELECT * FROM accounts WHERE id = $1',
+      [id]
+    );
+
+    if (accountCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Compte introuvable' });
+    }
+
+    const account = accountCheck.rows[0];
+
+    // Récupérer les transactions pertinentes du compte
+    const transactionsResult = await pool.query(
+      `SELECT type, amount FROM transactions 
+       WHERE account_id = $1 
+       AND (is_posted = true OR is_planned = false)
+       ORDER BY transaction_date ASC`,
+      [id]
+    );
+
+    // Calcul du nouveau solde
+    let newBalance = 0;
+    transactionsResult.rows.forEach(t => {
+      const amount = parseFloat(t.amount);
+      if (t.type === 'income') {
+        newBalance += amount;
+      } else if (t.type === 'expense') {
+        newBalance -= amount;
+      }
+    });
+
+    // Mise à jour du compte
+    await pool.query(
+      'UPDATE accounts SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newBalance, id]
+    );
+
+    console.log(
+      `✅ Solde recalculé: ${account.name} → ${newBalance} Ar (${transactionsResult.rows.length} transactions)`
+    );
+
+    res.json({
+      success: true,
+      accountId: id,
+      accountName: account.name,
+      oldBalance: parseFloat(account.balance),
+      newBalance: newBalance,
+      transactionCount: transactionsResult.rows.length,
+    });
+  } catch (error) {
+    console.error('❌ Erreur recalculateBalance:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+};
+
+// -----------------------------------------------------------------------------
+// POST /api/accounts/recalculate-all
+// -----------------------------------------------------------------------------
+// Recalcule le solde de TOUS les comptes en parcourant leurs transactions.
+// Même logique que recalculateBalance, mais appliquée en boucle à chaque compte.
+// Renvoie un tableau récapitulatif avec l’ancien et le nouveau solde.
+// -----------------------------------------------------------------------------
+exports.recalculateAllBalances = async (req, res) => {
+  try {
+    console.log('🔄 Recalcul de tous les soldes...');
+
+    const accountsResult = await pool.query(
+      'SELECT id, name, balance FROM accounts ORDER BY id ASC'
+    );
+
+    const results = [];
+
+    for (const account of accountsResult.rows) {
+      let newBalance = 0;
+      let transactionCount = 0;
+
+      if (account.id === 7) {
+        // Compte AVOIR = somme des receivables ouverts
+        const receivablesResult = await pool.query(
+          `SELECT COALESCE(SUM(amount), 0) AS total
+           FROM receivables
+           WHERE status <> 'closed'`
+        );
+        newBalance = parseFloat(receivablesResult.rows[0].total || 0);
+      } else {
+        const transactionsResult = await pool.query(
+          `SELECT type, amount FROM transactions 
+           WHERE account_id = $1 
+           AND (is_posted = true OR is_planned = false)
+           ORDER BY transaction_date ASC`,
+          [account.id]
+        );
+
+        transactionCount = transactionsResult.rows.length;
+
+        transactionsResult.rows.forEach(t => {
+          const amount = parseFloat(t.amount);
+          if (t.type === 'income') newBalance += amount;
+          else if (t.type === 'expense') newBalance -= amount;
+        });
+      }
+
+      await pool.query(
+        'UPDATE accounts SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [newBalance, account.id]
+      );
+
+      results.push({
+        accountId: account.id,
+        accountName: account.name,
+        oldBalance: parseFloat(account.balance),
+        newBalance,
+        transactionCount,
+      });
+
+      console.log(
+        `  ✅ ${account.name}: ${account.balance} → ${newBalance} Ar (${transactionCount} trx)`
+      );
+    }
+
+    console.log(`✅ Tous les soldes ont été recalculés (${results.length} comptes)`);
+
+    res.json({ success: true, results, totalAccounts: results.length });
+  } catch (error) {
+    console.error('❌ Erreur recalculateAllBalances:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+};
+

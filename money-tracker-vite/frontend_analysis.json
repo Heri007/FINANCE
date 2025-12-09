@@ -1,0 +1,668 @@
+{
+  "files": [
+    {
+      "path": "tailwind.config.js",
+      "imports": [],
+      "exports": [
+        "export default {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "vite.config.js",
+      "imports": [
+        "import { defineConfig } from 'vite'",
+        "import react from '@vitejs/plugin-react'"
+      ],
+      "exports": [
+        "export default defineConfig({"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "eslint.config.js",
+      "imports": [
+        "import js from '@eslint/js'",
+        "import globals from 'globals'",
+        "import reactHooks from 'eslint-plugin-react-hooks'",
+        "import reactRefresh from 'eslint-plugin-react-refresh'",
+        "import { defineConfig, globalIgnores } from 'eslint/config'"
+      ],
+      "exports": [
+        "export default defineConfig(["
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "postcss.config.js",
+      "imports": [],
+      "exports": [
+        "export default {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": ".vite/deps/react-dom_client.js",
+      "imports": [
+        "import {",
+        "import {"
+      ],
+      "exports": [
+        "export default require_client();"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": ".vite/deps/react.js",
+      "imports": [
+        "import {",
+        "import \"./chunk-G3PMV62Z.js\";"
+      ],
+      "exports": [
+        "export default require_react();"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": ".vite/deps/chunk-ULSRCYB6.js",
+      "imports": [
+        "import {"
+      ],
+      "exports": [
+        "export {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": ".vite/deps/lucide-react.js",
+      "imports": [
+        "import {",
+        "import {"
+      ],
+      "exports": [
+        "export {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": ".vite/deps/chunk-G3PMV62Z.js",
+      "imports": [],
+      "exports": [
+        "export {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": ".vite/deps/papaparse.js",
+      "imports": [
+        "import {"
+      ],
+      "exports": [
+        "export default require_papaparse_min();"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/BackupImportModal.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { X, Upload, AlertTriangle } from 'lucide-react';",
+        "import { API_BASE } from './services/api';"
+      ],
+      "exports": [
+        "export function BackupImportModal({ onClose, onRestoreSuccess }) {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/ReportsModal.jsx",
+      "imports": [
+        "import React, { useState, useMemo } from 'react';",
+        "import {",
+        "import { CopyButton } from './components/common/CopyButton';"
+      ],
+      "exports": [
+        "export function ReportsModal({ onClose, transactions = [], accounts = [] }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/ImportModal.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import Papa from 'papaparse';"
+      ],
+      "exports": [
+        "export default ImportModal;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/ContentReplicator.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import {",
+        "import { CopyButton } from './components/common/CopyButton';"
+      ],
+      "exports": [
+        "export function ContentReplicator({ onClose }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/ProjectsListModal.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { X, Plus, Eye, Edit, Trash2, TrendingUp, Calendar, DollarSign, CheckCircle, AlertCircle } from 'lucide-react';",
+        "import { ProjectDetailsModal } from './ProjectDetailsModal';"
+      ],
+      "exports": [
+        "export function ProjectsListModal({"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/TransactionDetailsModal.jsx",
+      "imports": [
+        "import React, { useState, useMemo } from 'react';",
+        "import { X, TrendingUp, TrendingDown, Calendar, DollarSign, Tag, FileText, Search } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function TransactionDetailsModal({ type, transactions, onClose }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/OperatorDashboard.jsx",
+      "imports": [
+        "import React, { useState, useEffect, useMemo } from 'react';",
+        "import {",
+        "import { operatorService } from './services/operatorService';",
+        "import { CopyButton } from './components/common/CopyButton';"
+      ],
+      "exports": [
+        "export function OperatorDashboard({ onClose, projects = [], transactions = [], accounts = [] }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/ProjectDetailsModal.jsx",
+      "imports": [
+        "import React, { useMemo } from 'react';",
+        "import {",
+        "import { formatCurrency, formatDate } from './utils/formatters';"
+      ],
+      "exports": [
+        "export function ProjectDetailsModal({"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/main.jsx",
+      "imports": [
+        "import { StrictMode } from 'react'",
+        "import { createRoot } from 'react-dom/client'",
+        "import './index.css'",
+        "import App from './App.jsx'"
+      ],
+      "exports": [],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/App.jsx",
+      "imports": [
+        "import React, { useState, useEffect, useMemo } from \"react\";",
+        "import { Wallet, TrendingUp, TrendingDown } from \"lucide-react\";",
+        "import { useAuth } from \"./hooks/useAuth\";",
+        "import { useAccounts } from \"./hooks/useAccounts\";",
+        "import { useTransactions } from \"./hooks/useTransactions\";",
+        "import { useToast } from \"./hooks/useToast\";",
+        "import { useProjects } from \"./hooks/useProjects\";",
+        "import { accountsService } from \"./services/accountsService\";",
+        "import { transactionsService } from \"./services/transactionsService\";",
+        "import { projectsService } from \"./services/projectsService\";",
+        "import { API_BASE } from \"./services/api\";",
+        "import { Header } from \"./components/layout/Header\";",
+        "import { Navigation } from \"./components/layout/Navigation\";",
+        "import { AccountList } from \"./components/accounts/AccountList\";",
+        "import { AccountDetails } from \"./components/accounts/AccountDetails\";",
+        "import { AccountModal } from \"./components/accounts/AccountModal\";",
+        "import { TransactionList } from \"./components/transactions/TransactionList\";",
+        "import { TransactionModal } from \"./components/transactions/TransactionModal\";",
+        "import { CategoryBreakdown } from \"./components/transactions/CategoryBreakdown\";",
+        "import ReceivablesScreen from \"./components/ReceivablesScreen\";",
+        "import { Toast } from \"./components/common/Toast\";",
+        "import { StatCard } from \"./components/common/StatCard\";",
+        "import { PinInput } from \"./components/common/PinInput\";",
+        "import ImportModal from \"./ImportModal\";",
+        "import { BackupImportModal } from \"./BackupImportModal\";",
+        "import { BookkeeperDashboard } from \"./BookkeeperDashboard\";",
+        "import { OperatorDashboard } from \"./OperatorDashboard\";",
+        "import { ContentReplicator } from \"./ContentReplicator\";",
+        "import { ReportsModal } from \"./ReportsModal\";",
+        "import { ProjectPlannerModal } from \"./ProjectPlannerModal\";",
+        "import { ProjectsListModal } from \"./ProjectsListModal\";",
+        "import { TransactionDetailsModal } from \"./TransactionDetailsModal\";",
+        "import backupService from \"./services/backupService\";",
+        "import { formatCurrency } from \"./utils/formatters\";"
+      ],
+      "exports": [
+        "export default function App() {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/BookkeeperDashboard.jsx",
+      "imports": [
+        "import React, { useState, useMemo, useEffect } from 'react';",
+        "import { X, TrendingUp, TrendingDown, AlertTriangle, DollarSign, Calendar, Clock, Target, ArrowRight, AlertCircle, CheckCircle, XCircle } from 'lucide-react';",
+        "import { CopyButton } from './components/common/CopyButton';"
+      ],
+      "exports": [
+        "export function BookkeeperDashboard({"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/ProjectPlannerModal.jsx",
+      "imports": [
+        "import React, { useState, useMemo, useEffect } from 'react';",
+        "import {",
+        "import { formatCurrency } from './utils/formatters';",
+        "import { projectsService } from './services/projectsService';",
+        "import { CalculatorInput } from './components/common/CalculatorInput';",
+        "import { transactionsService } from './services/transactionsService';",
+        "import { normalizeDate } from './utils/transactionUtils';"
+      ],
+      "exports": [
+        "export function ProjectPlannerModal({"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/utils/constants.js",
+      "imports": [
+        "import {"
+      ],
+      "exports": [
+        "export const categoryIcons = {",
+        "export const accountIcons = {",
+        "export const accountTypes = ["
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/utils/transactionUtils.js",
+      "imports": [],
+      "exports": [
+        "export function normalizeDate(d) {",
+        "export function createSignature(accountId, date, amount, type, description) {",
+        "export function indexTransactions(transactions) {",
+        "export function filterNewTransactions(imported, existingIndex) {",
+        "export function calculateImpact(transactions, accounts) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/utils/formatters.js",
+      "imports": [],
+      "exports": [
+        "export const formatCurrency = (amount) =>",
+        "export const formatDate = (dateString) =>",
+        "export const formatDateTime = (dateString) =>"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/ReceivablesScreen.jsx",
+      "imports": [
+        "import React, { useEffect, useState } from \"react\";",
+        "import { API_BASE } from \"../services/api\";"
+      ],
+      "exports": [
+        "export default ReceivablesScreen;"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/components/index.js",
+      "imports": [],
+      "exports": [
+        "export { Header } from './layout/Header';",
+        "export { Navigation } from './layout/Navigation';",
+        "export { AccountList } from './accounts/AccountList';",
+        "export { AccountDetails } from './accounts/AccountDetails';",
+        "export { AccountModal } from './accounts/AccountModal';",
+        "export { TransactionList } from './transactions/TransactionList';",
+        "export { TransactionModal } from './transactions/TransactionModal';",
+        "export { CategoryBreakdown } from './transactions/CategoryBreakdown';",
+        "export { Toast } from './common/Toast';",
+        "export { StatCard } from './common/StatCard';",
+        "export { PinInput } from './common/PinInput';",
+        "export { AccountCard } from './common/AccountCard';",
+        "export { CopyButton } from './common/CopyButton';",
+        "export { CalculatorInput } from './common/CalculatorInput';"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/layout/Header.jsx",
+      "imports": [
+        "import React from 'react';",
+        "import { Wallet, Plus, Save, Calculator, Eye } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function Header({",
+        "export default Header;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/layout/Navigation.jsx",
+      "imports": [
+        "import React from \"react\";"
+      ],
+      "exports": [
+        "export function Navigation({ activeTab, onTabChange }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/transactions/TransactionList.jsx",
+      "imports": [
+        "import React from 'react';",
+        "import { Trash2 } from 'lucide-react';",
+        "import { formatCurrency, formatDate } from '../../utils/formatters';",
+        "import { categoryIcons } from '../../utils/constants';"
+      ],
+      "exports": [
+        "export function TransactionList({ transactions, onViewAll, onDelete }) {",
+        "export default TransactionList;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/transactions/TransactionModal.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { X } from 'lucide-react';",
+        "import { categoryIcons } from '../../utils/constants';"
+      ],
+      "exports": [
+        "export function TransactionModal({ onClose, onSave, accounts }) {",
+        "export default TransactionModal;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/transactions/CategoryBreakdown.jsx",
+      "imports": [
+        "import React, { useMemo } from 'react';",
+        "import { formatCurrency } from '../../utils/formatters';",
+        "import { categoryIcons } from '../../utils/constants';"
+      ],
+      "exports": [
+        "export function CategoryBreakdown({ transactions, type = 'expense' }) {",
+        "export default CategoryBreakdown;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/CopyButton.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { Copy, Check } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function CopyButton({ getText }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/PinInput.jsx",
+      "imports": [
+        "import { useState } from 'react';",
+        "import { Lock } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function PinInput({ onSubmit, title, subtitle }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/Toast.jsx",
+      "imports": [
+        "import { useEffect } from 'react';",
+        "import { X } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function Toast({ message, type = 'success', onClose }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/CalculatorInput.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { Calculator } from 'lucide-react';"
+      ],
+      "exports": [
+        "export function CalculatorInput({ value, onChange, placeholder, className = '', min = 0 }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/StatCard.jsx",
+      "imports": [],
+      "exports": [
+        "export function StatCard({ icon: Icon, label, value, color = \"indigo\" }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/common/AccountCard.jsx",
+      "imports": [
+        "import { Trash2 } from 'lucide-react';",
+        "import { accountIcons } from '../../utils/constants';",
+        "import { formatCurrency } from '../../utils/formatters';"
+      ],
+      "exports": [
+        "export function AccountCard({ account, onDelete, onClick }) {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/accounts/AccountList.jsx",
+      "imports": [
+        "import React from 'react';",
+        "import { Wallet, Plus, RefreshCw } from 'lucide-react';",
+        "import { AccountCard } from '../common/AccountCard';"
+      ],
+      "exports": [
+        "export function AccountList({ accounts, onSelectAccount, onAddAccount, onDeleteAccount, onInitDefaults }) {",
+        "export default AccountList;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/accounts/AccountModal.jsx",
+      "imports": [
+        "import React, { useState } from 'react';",
+        "import { X } from 'lucide-react';",
+        "import { accountTypes } from '../../utils/constants';"
+      ],
+      "exports": [
+        "export function AccountModal({ onClose, onSave }) {",
+        "export default AccountModal;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/components/accounts/AccountDetails.jsx",
+      "imports": [
+        "import React from 'react';",
+        "import { X, TrendingUp, TrendingDown } from 'lucide-react';",
+        "import { formatCurrency, formatDate } from '../../utils/formatters';",
+        "import { categoryIcons } from '../../utils/constants';"
+      ],
+      "exports": [
+        "export function AccountDetails({ account, transactions, onClose, onSelectTransaction }) {",
+        "export default AccountDetails;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/hooks/useProjects.js",
+      "imports": [
+        "import { useState, useCallback, useEffect } from 'react';",
+        "import { projectsService } from '../services/projectsService';"
+      ],
+      "exports": [
+        "export const useProjects = (isAuthenticated) => {",
+        "export default useProjects;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/hooks/useAuth.js",
+      "imports": [
+        "import { useState, useEffect } from 'react';",
+        "import { authService } from '../services/authService';"
+      ],
+      "exports": [
+        "export function useAuth() {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/hooks/useToast.js",
+      "imports": [
+        "import { useState, useCallback } from 'react';"
+      ],
+      "exports": [
+        "export const useToast = () => {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/hooks/useTransactions.js",
+      "imports": [
+        "import { useState, useEffect, useCallback } from 'react';",
+        "import { transactionsService } from '../services/transactionsService';"
+      ],
+      "exports": [
+        "export const useTransactions = (isAuthenticated) => {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/hooks/useAccounts.js",
+      "imports": [
+        "import { useState, useEffect, useCallback } from 'react';",
+        "import { accountsService } from '../services/accountsService';"
+      ],
+      "exports": [
+        "export const useAccounts = (isAuthenticated) => {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/services/operatorService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const operatorService = {",
+        "export default operatorService;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/services/index.js",
+      "imports": [],
+      "exports": [
+        "export { apiRequest, getAuthHeader } from './api';",
+        "export { authService } from './authService';",
+        "export { accountsService } from './accountsService';",
+        "export { transactionsService } from './transactionsService';",
+        "export { projectsService } from './projectsService';",
+        "export { backupService } from './backupService';",
+        "export { contentService } from './contentService';",
+        "export { operatorService } from './operatorService';"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/services/backupService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const backupService = {",
+        "export default backupService;"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/services/contentService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const contentService = {",
+        "export default contentService;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/services/accountsService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const accountsService = {"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/services/authService.js",
+      "imports": [],
+      "exports": [
+        "export const authService = {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/services/api.js",
+      "imports": [],
+      "exports": [
+        "export const API_BASE =",
+        "export const getAuthHeader = () => {",
+        "export const apiRequest = async (endpoint, options = {}) => {"
+      ],
+      "uses_fetch": true
+    },
+    {
+      "path": "src/services/transactionsService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const transactionsService = {",
+        "export default transactionsService;"
+      ],
+      "uses_fetch": false
+    },
+    {
+      "path": "src/services/projectsService.js",
+      "imports": [
+        "import { apiRequest } from './api';"
+      ],
+      "exports": [
+        "export const projectsService = {",
+        "export default projectsService;"
+      ],
+      "uses_fetch": false
+    }
+  ]
+}
