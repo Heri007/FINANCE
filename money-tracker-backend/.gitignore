@@ -16,6 +16,7 @@ build/
 
 # Sauvegardes locales
 backup/
+csv/
 
 # Dossiers spécifiques du Backend
 money-tracker-backend/csv/
