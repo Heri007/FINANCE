@@ -1,8 +1,8 @@
-// FICHIER: src/App.jsx - VERSION REFACTORISÉE & CORRIGÉE
-import React, { useState } from 'react';
+// FICHIER: src/App.jsx - VERSION CORRIGÉE
+import React, { useState, useEffect } from 'react';
 import { Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 
-// ✅ CONTEXTS
+// Contexts
 import { useUser } from './contexts/UserContext';
 import { useFinance } from './contexts/FinanceContext';
 
@@ -12,30 +12,23 @@ import { useToast } from './hooks/useToast';
 // Services
 import { accountsService } from './services/accountsService';
 import { transactionsService } from './services/transactionsService';
+import { projectsService } from './services/projectsService';
 import { API_BASE } from './services/api';
 import backupService from './services/backupService';
 
-// Composants Layout
+// Composants (tous vos imports actuels)
 import { Header } from './components/layout/Header';
 import { Navigation } from './components/layout/Navigation';
-
-// Composants Accounts
 import { AccountList } from './components/accounts/AccountList';
 import { AccountDetails } from './components/accounts/AccountDetails';
 import { AccountModal } from './components/accounts/AccountModal';
-
-// Composants Transactions
 import TransactionList from './components/transactions/TransactionList';
 import { TransactionModal } from './components/transactions/TransactionModal';
 import { CategoryBreakdown } from './components/transactions/CategoryBreakdown';
 import TransactionEditModal from './TransactionEditModal';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
-
-// Composants Projets
 import { ProjectPlannerModal } from './ProjectPlannerModal';
 import { ProjectsListModal } from './ProjectsListModal';
-
-// Autres composants
 import ReceivablesScreen from './components/ReceivablesScreen';
 import NotesSlide from './components/NotesSlide';
 import ImportModal from './ImportModal';
@@ -44,13 +37,9 @@ import { BookkeeperDashboard } from './BookkeeperDashboard';
 import { OperatorDashboard } from './OperatorDashboard';
 import { ContentReplicator } from './ContentReplicator';
 import { ReportsModal } from './ReportsModal';
-
-// Composants communs
 import { Toast } from './components/common/Toast';
 import { StatCard } from './components/common/StatCard';
 import { PinInput } from './components/common/PinInput';
-
-// Utilitaires
 import { formatCurrency } from './utils/formatters';
 
 const DEFAULT_ACCOUNTS = [
@@ -64,6 +53,7 @@ const DEFAULT_ACCOUNTS = [
 ];
 
 export default function App() {
+  // ✅ TOUS LES HOOKS EN PREMIER (AVANT TOUT RETURN)
   const auth = useUser();
   const finance = useFinance();
   const { toast, showToast, hideToast } = useToast();
@@ -117,44 +107,26 @@ export default function App() {
   const [editingProject, setEditingProject] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
 
-  const handleLogout = async () => {
-    try {
-      await auth.logout();
-      showToast('Déconnexion réussie', 'success');
-    } catch (error) {
-      showToast('Erreur lors de la déconnexion', 'error');
-    }
-  };
-
-  const handlePinSubmit = async (pin) => {
-    try {
-      if (!auth.hasPin) {
-        if (auth.pinStep === 'enter') {
-          auth.setFirstPin(pin);
-          auth.setPinStep('confirm');
-          return;
+  // ✅ useEffect DOIT ÊTRE ICI (avant les returns conditionnels)
+  useEffect(() => {
+    const migrateProjects = async () => {
+      if (!auth.isAuthenticated) return;
+      
+      try {
+        const result = await projectsService.migrateFromLocalStorage();
+        if (result.migrated > 0) {
+          showToast(`✅ ${result.migrated} projets migrés vers la base de données`, 'success');
+          refreshProjects();
         }
-        if (auth.pinStep === 'confirm') {
-          if (pin !== auth.firstPin) {
-            showToast('Les PIN ne correspondent pas', 'error');
-            auth.setFirstPin('');
-            auth.setPinStep('enter');
-            return;
-          }
-          await auth.setupPin(auth.firstPin);
-          showToast('PIN créé avec succès', 'success');
-        }
-      } else {
-        await auth.login(pin);
-        showToast('Connexion réussie', 'success');
+      } catch (error) {
+        console.error('Migration échouée:', error);
       }
-    } catch (error) {
-      showToast(error.message || 'Erreur de connexion', 'error');
-      auth.setFirstPin('');
-      auth.setPinStep('enter');
-    }
-  };
+    };
 
+    migrateProjects();
+  }, [auth.isAuthenticated, refreshProjects, showToast]);
+
+  // ✅ MAINTENANT les returns conditionnels (après tous les hooks)
   if (auth.isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -167,6 +139,35 @@ export default function App() {
   }
 
   if (!auth.isAuthenticated) {
+    const handlePinSubmit = async (pin) => {
+      try {
+        if (!auth.hasPin) {
+          if (auth.pinStep === 'enter') {
+            auth.setFirstPin(pin);
+            auth.setPinStep('confirm');
+            return;
+          }
+          if (auth.pinStep === 'confirm') {
+            if (pin !== auth.firstPin) {
+              showToast('Les PIN ne correspondent pas', 'error');
+              auth.setFirstPin('');
+              auth.setPinStep('enter');
+              return;
+            }
+            await auth.setupPin(auth.firstPin);
+            showToast('PIN créé avec succès', 'success');
+          }
+        } else {
+          await auth.login(pin);
+          showToast('Connexion réussie', 'success');
+        }
+      } catch (error) {
+        showToast(error.message || 'Erreur de connexion', 'error');
+        auth.setFirstPin('');
+        auth.setPinStep('enter');
+      }
+    };
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <PinInput
@@ -178,6 +179,16 @@ export default function App() {
       </div>
     );
   }
+
+  // ✅ HANDLERS (après les returns conditionnels, c'est OK car ils ne sont pas des hooks)
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+      showToast('Déconnexion réussie', 'success');
+    } catch (error) {
+      showToast('Erreur lors de la déconnexion', 'error');
+    }
+  };
 
   const handleInitDefaults = async () => {
     if (!confirm('Voulez-vous créer les 7 comptes par défaut ?')) return;
@@ -258,9 +269,7 @@ export default function App() {
     setEditingTransaction(null);
   };
 
-console.log('État showProjectPlanner:', showProjectPlanner);
-console.log('État showProjectsList:', showProjectsList);
-
+  // ✅ RENDU PRINCIPAL
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
@@ -289,13 +298,10 @@ console.log('État showProjectsList:', showProjectsList);
         onShowReports={() => setShowReports(true)}
         onShowNotes={() => setActiveTab('notes')}
         onShowProjectPlanner={() => {
-          console.log('📊 Planifier Projet cliqué');
+          setEditingProject(null);
           setShowProjectPlanner(true);
         }}
-        onShowProjectsList={() => {
-          console.log('📁 Mes Projets cliqué');
-          setShowProjectsList(true);
-        }}
+        onShowProjectsList={() => setShowProjectsList(true)}
       />
 
       <div className="max-w-7xl mx-auto px-4 py-6">
@@ -328,18 +334,81 @@ console.log('État showProjectsList:', showProjectsList);
           <div className="space-y-6">
             <AccountList
               accounts={accounts}
-              onSelectAccount={setSelectedAccount} // ✅ CORRIGÉ (était onAccountClick)
+              onSelectAccount={setSelectedAccount}
               onAddAccount={() => setShowAddAccount(true)}
               onInitDefaults={handleInitDefaults}
             />
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-4">Transactions Récentes</h2>
-              <TransactionList
-                transactions={transactions.slice(0, 10)}
-                accounts={accounts}
-                onTransactionClick={handleTransactionClick}
-                onDelete={handleDeleteTransaction} // ✅ CORRIGÉ (était onDeleteTransaction)
-              />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Transactions récentes */}
+              <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+                <div className="flex items-start justify-between mb-4">
+                  <h2 className="text-xl font-bold">Transactions Récentes</h2>
+                  <div className="text-sm text-gray-500">Dernières 10</div>
+                </div>
+                <TransactionList
+                  transactions={transactions.slice(0, 10)}
+                  accounts={accounts}
+                  onTransactionClick={handleTransactionClick}
+                  onDelete={handleDeleteTransaction}
+                />
+              </div>
+
+              {/* Prévisions & États de caisse */}
+              <aside className="space-y-4">
+                <div className="bg-white rounded-lg shadow p-5">
+                  <h3 className="text-lg font-semibold mb-3">Prévisions</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">Coffre actuel</div>
+                      <div className="font-bold text-gray-900">{formatCurrency(currentCoffreBalance)}</div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">Prévision Avoirs (coffre)</div>
+                      <div className={`font-bold ${receivablesForecastCoffre >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {formatCurrency(receivablesForecastCoffre || 0)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-gray-600">Prévision Projets (coffre)</div>
+                      <div className={`font-bold ${projectsForecastCoffre >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {formatCurrency(projectsForecastCoffre || 0)}
+                      </div>
+                    </div>
+
+                    <div className="border-t pt-3 mt-2 flex items-center justify-between">
+                      <div className="text-sm font-medium">Coffre projeté</div>
+                      <div className={`font-bold ${((currentCoffreBalance || 0) + (receivablesForecastCoffre || 0) + (projectsForecastCoffre || 0)) >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {formatCurrency((currentCoffreBalance || 0) + (receivablesForecastCoffre || 0) + (projectsForecastCoffre || 0))}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 text-xs text-gray-500">Total projeté (tous comptes)</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">Solde total actuel</div>
+                      <div className="font-medium">{formatCurrency(totalBalance)}</div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm">Prévision totale (arrivée)</div>
+                      <div className="font-medium">{formatCurrency((receivablesForecastTotal || 0) + (projectsForecastTotal || 0))}</div>
+                    </div>
+                    <div className="border-t pt-2 flex items-center justify-between font-bold">
+                      <div>Solde total projeté</div>
+                      <div className={`${((totalBalance || 0) + (receivablesForecastTotal || 0) + (projectsForecastTotal || 0)) >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {formatCurrency((totalBalance || 0) + (receivablesForecastTotal || 0) + (projectsForecastTotal || 0))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow p-4">
+                  <h4 className="text-sm font-semibold mb-2">Actions rapides</h4>
+                  <button onClick={refreshAccounts} className="w-full mb-2 px-3 py-2 bg-indigo-600 text-white rounded-lg">Rafraîchir Comptes</button>
+                  <button onClick={refreshTransactions} className="w-full px-3 py-2 bg-gray-100 rounded-lg">Rafraîchir Transactions</button>
+                </div>
+              </aside>
             </div>
           </div>
         )}
@@ -440,13 +509,7 @@ console.log('État showProjectsList:', showProjectsList);
       {showBackupImport && (
         <BackupImportModal
           onClose={() => setShowBackupImport(false)}
-          onSuccess={async () => {
-            await refreshAccounts();
-            await refreshTransactions();
-            await refreshProjects();
-            await refreshReceivables();
-            showToast('Restauré avec succès !', 'success');
-          }}
+          onSuccess={handleRestoreSuccess}
         />
       )}
 
@@ -454,27 +517,7 @@ console.log('État showProjectsList:', showProjectsList);
         <ImportModal
           accounts={accounts}
           onClose={() => setShowImport(false)}
-          onImport={async (importedTransactions) => {
-            try {
-              for (const trx of importedTransactions) {
-                await transactionsService.create({
-                  account_id: trx.accountId,
-                  type: trx.type,
-                  amount: trx.amount,
-                  category: trx.category,
-                  description: trx.description,
-                  date: trx.date,
-                  is_posted: true,
-                  is_planned: false,
-                });
-              }
-              await refreshTransactions();
-              await refreshAccounts();
-              showToast(`${importedTransactions.length} transactions importées !`, 'success');
-            } catch (error) {
-              showToast(`Erreur import: ${error.message}`, 'error');
-            }
-          }}
+          onImport={handleImportTransactions}
         />
       )}
 
@@ -510,6 +553,7 @@ console.log('État showProjectsList:', showProjectsList);
 
       {showProjectPlanner && (
         <ProjectPlannerModal
+          isOpen={showProjectPlanner}
           project={editingProject}
           accounts={accounts}
           onClose={() => {
@@ -527,6 +571,7 @@ console.log('État showProjectsList:', showProjectsList);
 
       {showProjectsList && (
         <ProjectsListModal
+          isOpen={showProjectsList}
           projects={projects}
           accounts={accounts}
           onClose={() => setShowProjectsList(false)}
