@@ -1219,7 +1219,7 @@ console.log('🔍 PROJETS DEBUG:', {
               </div>
 
               {/* PRÉVISIONS COMPLÈTES */}
-<section className="mt-6 rounded-2xl border border-indigo-100 bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 p-4">
+<section className="mt-6 rounded-2xl border border-blue-800 bg-blue-300 from-slate-50 via-blue-50 to-emerald-50 p-4">
   <h3 className="text-xs font-black tracking-[0.18em] text-slate-700 mb-3">
     PRÉVISIONS COMPLÈTES
   </h3>
