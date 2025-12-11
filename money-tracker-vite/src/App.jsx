@@ -2,7 +2,9 @@
 // Version REFACTORISÉE avec composants extraits
 
 import React, { useState, useEffect, useMemo } from "react";
-import { Wallet, TrendingUp, TrendingDown } from "lucide-react";
+import { 
+  Wallet, TrendingUp, TrendingDown, AlertTriangle, Briefcase 
+} from "lucide-react";
 
 // Hooks personnalisés
 import { useAuth } from "./hooks/useAuth";
@@ -34,6 +36,7 @@ import NotesSlide from './components/NotesSlide';
 import { Toast } from "./components/common/Toast";
 import { StatCard } from "./components/common/StatCard";
 import { PinInput } from "./components/common/PinInput";
+import FinancialChart from './components/charts/FinancialChart';
 
 // Modals et Dashboards existants
 import ImportModal from "./ImportModal";
@@ -1125,196 +1128,207 @@ console.log('🔍 PROJETS DEBUG:', {
   }
 
   // MAIN RENDER
-  return (
-    <>
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={hideToast}
-        />
-      )}
+return (
+  <>
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={hideToast}
+      />
+    )}
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <Header
-          onAddTransaction={() => setShowAdd(true)}
-          onLogout={handleLogout}
-          onImport={() => setShowImport(true)}
-          onRestore={() => setShowBackupImport(true)}
-          onBackup={handleExportBackup}
-          onShowNotes={() => setActiveTab('notes')} 
-          onShowBookkeeper={() => setShowBookkeeper(true)}
-          onShowOperator={() => setShowOperator(true)}
-          onShowContent={() => setShowContentReplicator(true)}
-          onShowReports={() => setShowReports(true)}
-          onShowProjectPlanner={() => setShowProjectPlanner(true)}
-          onShowProjectsList={() => setShowProjectsList(true)}
-        />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <Header
+        onAddTransaction={() => setShowAdd(true)}
+        onLogout={handleLogout}
+        onImport={() => setShowImport(true)}
+        onRestore={() => setShowBackupImport(true)}
+        onBackup={handleExportBackup}
+        onShowNotes={() => setActiveTab("notes")}
+        onShowBookkeeper={() => setShowBookkeeper(true)}
+        onShowOperator={() => setShowOperator(true)}
+        onShowContent={() => setShowContentReplicator(true)}
+        onShowReports={() => setShowReports(true)}
+        onShowProjectPlanner={() => setShowProjectPlanner(true)}
+        onShowProjectsList={() => setShowProjectsList(true)}
+      />
 
-        <Navigation
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
+      <Navigation
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
-        <main className="px-8 py-8">
-          {activeTab === "overview" && (
-            <div className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <StatCard
-                  icon={Wallet}
-                  label="Solde Total"
-                  value={formatCurrency(totalBalance)}
-                  color="indigo"
-                />
-                <button
-                  onClick={() => openTransactionDetails("income")}
-                  className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-green-100 p-3 rounded-xl">
-                      <TrendingUp className="w-6 h-6 text-green-600" />
-                    </div>
-                    <span className="text-sm font-medium text-green-600">
-                      {
-                        transactions.filter(
-                          (t) => t.type === "income"
-                        ).length
-                      }{" "}
-                      transactions
-                    </span>
-                  </div>
-                  <h3 className="text-gray-600 text-sm font-medium mb-2">
-                    Encaissements
-                  </h3>
-                  <p className="text-3xl font-bold text-green-600">
-                    {income.toLocaleString("fr-FR")} Ar
-                  </p>
-                </button>
-
-                <button
-                  onClick={() => openTransactionDetails("expense")}
-                  className="bg-gradient-to-br from-red-50 to-rose-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-red-100 p-3 rounded-xl">
-                      <TrendingDown className="w-6 h-6 text-red-600" />
-                    </div>
-                    <span className="text-sm font-medium text-red-600">
-                      {
-                        transactions.filter(
-                          (t) => t.type === "expense"
-                        ).length
-                      }{" "}
-                      transactions
-                    </span>
-                  </div>
-                  <h3 className="text-gray-600 text-sm font-medium mb-2">
-                    Dépenses
-                  </h3>
-                  <p className="text-3xl font-bold text-red-600">
-                    {expense.toLocaleString("fr-FR")} Ar
-                  </p>
-                </button>
-
-              </div>
-
-              {/* PRÉVISIONS COMPLÈTES */}
-<section className="mt-6 rounded-2xl border border-blue-800 bg-blue-300 from-slate-50 via-blue-50 to-emerald-50 p-4">
-  <h3 className="text-xs font-black tracking-[0.18em] text-slate-700 mb-3">
-    PRÉVISIONS COMPLÈTES
-  </h3>
-
-  <div className="space-y-3">
-    {/* Après règlements */}
-    <div className="rounded-xl bg-white/70 border border-slate-100 shadow-sm px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-100">
-          APRÈS RÈGLEMENTS
-        </span>
-        <span className="text-lg font-bold text-red-900">
-          +{totalOpenReceivables.toLocaleString('fr-FR')} Ar
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 items-end">
-        <div>
-          <p className="text-sm font-bold text-slate-500">
-            COFFRE (+ AVOIR)
-          </p>
-          <p className="text-2xl font-extrabold text-emerald-700">
-            {receivablesForecastCoffre.toLocaleString('fr-FR')}<span className="text-lg font-bold ml-1">Ar</span>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-bold text-slate-500">
-            TOTAL (TOUS LES COMPTES)
-          </p>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {receivablesForecastTotal.toLocaleString('fr-FR')}<span className="text-xs font-semibold ml-1">Ar</span>
-          </p>
-        </div>
-      </div>
-    </div>
-
-    {/* Après projets */}
-    <div className="rounded-xl bg-white/80 border border-emerald-100 shadow-sm px-4 py-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-sm font-bold bg-rose-50 text-rose-700 border border-rose-100">
-          APRÈS PROJETS
-        </span>
-        <span className="text-lg font-bold text-red-900">
-          +{projectsNetImpact.toLocaleString('fr-FR')} Ar
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 items-end">
-        <div>
-          <p className="text-sm font-bold text-slate-500">
-            COFFRE (+ AVOIR + PROJETS)
-          </p>
-          <p className="text-2xl font-extrabold text-emerald-700">
-            {projectsForecastCoffre.toLocaleString('fr-FR')}<span className="text-2xl font-semibold ml-1">Ar</span>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-extrabold text-slate-500">
-            TOTAL FINAL (TOUS LES COMPTES)
-          </p>
-          <p className="text-2xl font-extrabold text-slate-900">
-            {projectsForecastTotal.toLocaleString('fr-FR')}<span className="text-2xl font-semibold ml-1">Ar</span>
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center justify-end gap-3 text-sm text-slate-600">
-  <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 font-bold">
-    {activeProjects.length} projets
-  </span>
-
-  <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 border border-emerald-100 font-bold">
-    Résultats Prévisionnels: {remainingCostSum.toLocaleString('fr-FR')} Ar
-  </span>
-</div>
-    </div>
-  </div>
-</section>
-
-              {/* ✅ CORRECTION: Utiliser accountsWithCorrectAvoir */}
-              <AccountList
-                accounts={accountsWithCorrectAvoir}
-                onSelectAccount={(acc) => {
-                  if (acc.name === "Avoir") {
-                    setActiveTab("receivables");
-                    return;
-                  }
-                  setSelectedAccount(acc);
-                }}
-                onAddAccount={() => setShowAddAccount(true)}
-                onDeleteAccount={handleDeleteAccount}
-                onInitDefaults={handleInitDefaults}
+      <div className="px-8 py-8">
+        {activeTab === "overview" && (
+          <div className="space-y-8">
+            {/* Statistiques principales */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <StatCard
+                icon={Wallet}
+                label="Solde Total"
+                value={formatCurrency(totalBalance)}
+                color="indigo"
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <button
+                onClick={() => openTransactionDetails("income")}
+                className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="bg-green-100 p-3 rounded-xl">
+                    <TrendingUp className="w-6 h-6 text-green-600" />
+                  </div>
+                  <span className="text-sm font-medium text-green-600">
+                    {
+                      transactions.filter(
+                        (t) => t.type === "income"
+                      ).length
+                    }{" "}
+                    transactions
+                  </span>
+                </div>
+                <h3 className="text-gray-600 text-sm font-medium mb-2">
+                  Encaissements
+                </h3>
+                <p className="text-3xl font-bold text-green-600">
+                  {income.toLocaleString("fr-FR")} Ar
+                </p>
+              </button>
+
+              <button
+                onClick={() => openTransactionDetails("expense")}
+                className="bg-gradient-to-br from-red-50 to-rose-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="bg-red-100 p-3 rounded-xl">
+                    <TrendingDown className="w-6 h-6 text-red-600" />
+                  </div>
+                  <span className="text-sm font-medium text-red-600">
+                    {
+                      transactions.filter(
+                        (t) => t.type === "expense"
+                      ).length
+                    }{" "}
+                    transactions
+                  </span>
+                </div>
+                <h3 className="text-gray-600 text-sm font-medium mb-2">
+                  Dépenses
+                </h3>
+                <p className="text-3xl font-bold text-red-600">
+                  {expense.toLocaleString("fr-FR")} Ar
+                </p>
+              </button>
+            </div>
+
+            {/* PRÉVISIONS COMPLÈTES */}
+            <section className="mt-6 rounded-2xl border border-blue-800 bg-blue-300 from-slate-50 via-blue-50 to-emerald-50 p-4">
+              <h3 className="text-xs font-black tracking-[0.18em] text-slate-700 mb-3">
+  PRÉVISIONS COMPLÈTES
+</h3>
+              <div className="space-y-3">
+                {/* Après règlements */}
+                <div className="rounded-xl bg-white/70 border border-slate-100 shadow-sm px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-100">
+  APRÈS RÈGLEMENTS
+</span>
+                    <span className="text-lg font-bold text-red-900">
+                      +{totalOpenReceivables.toLocaleString("fr-FR")} Ar
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 items-end">
+                    <div>
+                      <p className="text-sm font-bold text-slate-500">
+                        COFFRE (+ AVOIR)
+                      </p>
+                      <p className="text-2xl font-extrabold text-emerald-700">
+                        {receivablesForecastCoffre.toLocaleString("fr-FR")}
+                        <span className="text-lg font-bold ml-1">Ar</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-slate-500">
+                        TOTAL (TOUS LES COMPTES)
+                      </p>
+                      <p className="text-2xl font-extrabold text-slate-900">
+                        {receivablesForecastTotal.toLocaleString("fr-FR")}
+                        <span className="text-xs font-semibold ml-1">Ar</span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Après projets */}
+                <div className="rounded-xl bg-white/80 border border-emerald-100 shadow-sm px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-sm font-bold bg-rose-50 text-rose-700 border border-rose-100">
+                      APRÈS PROJETS
+                    </span>
+                    <span className="text-lg font-bold text-red-900">
+                      +{projectsNetImpact.toLocaleString("fr-FR")} Ar
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 items-end">
+                    <div>
+                      <p className="text-sm font-bold text-slate-500">
+                        COFFRE (+ AVOIR + PROJETS)
+                      </p>
+                      <p className="text-2xl font-extrabold text-emerald-700">
+                        {projectsForecastCoffre.toLocaleString("fr-FR")}
+                        <span className="text-2xl font-semibold ml-1">Ar</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-extrabold text-slate-500">
+                        TOTAL FINAL (TOUS LES COMPTES)
+                      </p>
+                      <p className="text-2xl font-extrabold text-slate-900">
+                        {projectsForecastTotal.toLocaleString("fr-FR")}
+                        <span className="text-2xl font-semibold ml-1">Ar</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-end gap-3 text-sm text-slate-600">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 font-bold">
+                      {activeProjects.length} projets
+                    </span>
+
+                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 border border-emerald-100 font-bold">
+                      Résultats Prévisionnels:{" "}
+                      {remainingCostSum.toLocaleString("fr-FR")} Ar
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* ✅ Utiliser accountsWithCorrectAvoir */}
+            <AccountList
+              accounts={accountsWithCorrectAvoir}
+              onSelectAccount={(acc) => {
+                if (acc.name === "Avoir") {
+                  setActiveTab("receivables");
+                  return;
+                }
+                setSelectedAccount(acc);
+              }}
+              onAddAccount={() => setShowAddAccount(true)}
+              onDeleteAccount={handleDeleteAccount}
+              onInitDefaults={handleInitDefaults}
+            />
+
+            {/* Graphique et Catégories */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+  <div className="lg:col-span-2 h-80 min-w-0">
+    <FinancialChart transactions={transactions} />
+  </div>
+
+              <div className="space-y-8">
                 <CategoryBreakdown transactions={transactions} />
                 <TransactionList
                   transactions={transactions.slice(0, 5)}
@@ -1324,246 +1338,249 @@ console.log('🔍 PROJETS DEBUG:', {
                 />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === "transactions" && (
-  <div className="space-y-4">
-    {/* Filtres projet + compte */}
-    <div className="flex flex-wrap gap-3 items-center mb-2 text-xs">
-      <div className="flex items-center gap-1">
-        <span className="text-gray-600 font-semibold">Projet:</span>
-        <select
-          className="border rounded-lg px-2 py-1 text-xs"
-          value={projectFilterId || ""}
-          onChange={e =>
-            setProjectFilterId(e.target.value || null)
-          }
-        >
-          <option value="">Tous</option>
-          {projects.map(p => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        {activeTab === "transactions" && (
+          <div className="space-y-4">
+            {/* Filtres projet + compte */}
+            <div className="flex flex-wrap gap-3 items-center mb-2 text-xs">
+              <div className="flex items-center gap-1">
+                <span className="text-gray-600 font-semibold">
+                  Projet:
+                </span>
+                <select
+                  className="border rounded-lg px-2 py-1 text-xs"
+                  value={projectFilterId || ""}
+                  onChange={(e) =>
+                    setProjectFilterId(e.target.value || null)
+                  }
+                >
+                  <option value="">Tous</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <span className="text-gray-600 font-semibold">
+                  Compte:
+                </span>
+                <select
+                  className="border rounded-lg px-2 py-1 text-xs"
+                  value={accountFilterId || ""}
+                  onChange={(e) =>
+                    setAccountFilterId(e.target.value || null)
+                  }
+                >
+                  <option value="">Tous</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {(projectFilterId || accountFilterId) && (
+                <button
+                  className="ml-auto text-xs text-indigo-600 hover:underline"
+                  onClick={() => {
+                    setProjectFilterId(null);
+                    setAccountFilterId(null);
+                  }}
+                >
+                  Réinitialiser filtres
+                </button>
+              )}
+            </div>
+
+            <TransactionList
+              transactions={visibleTransactions}
+              onViewAll={() => {
+                setProjectFilterId(null);
+                setAccountFilterId(null);
+              }}
+              onDelete={deleteTransaction}
+              onTransactionClick={handleTransactionClick}
+            />
+          </div>
+        )}
+
+        {/* ✅ Receivables avec onTotalsChange */}
+        {activeTab === "receivables" && (
+          <ReceivablesScreen
+            token={localStorage.getItem("token")}
+            accounts={accounts}
+            onAfterChange={async () => {
+              await accountsHook.refreshAccounts();
+            }}
+            onTotalsChange={({ totalOpenReceivables }) =>
+              setTotalOpenReceivables(totalOpenReceivables)
+            }
+          />
+        )}
+
+        {activeTab === "notes" && (
+          <div className="p-6 bg-white rounded-lg shadow-xl">
+            <NotesSlide />
+          </div>
+        )}
       </div>
-
-      <div className="flex items-center gap-1">
-        <span className="text-gray-600 font-semibold">Compte:</span>
-        <select
-          className="border rounded-lg px-2 py-1 text-xs"
-          value={accountFilterId || ""}
-          onChange={e =>
-            setAccountFilterId(e.target.value || null)
-          }
-        >
-          <option value="">Tous</option>
-          {accounts.map(a => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {(projectFilterId || accountFilterId) && (
-        <button
-          className="ml-auto text-xs text-indigo-600 hover:underline"
-          onClick={() => {
-            setProjectFilterId(null);
-            setAccountFilterId(null);
-          }}
-        >
-          Réinitialiser filtres
-        </button>
-      )}
     </div>
 
-    <TransactionList
-      transactions={visibleTransactions}
-      onViewAll={() => {
-        setProjectFilterId(null);
-        setAccountFilterId(null);
-      }}
-      onDelete={deleteTransaction}
-      onTransactionClick={handleTransactionClick}
-    />
-  </div>
-)}
-
-
-          {/* ✅ CORRECTION: Ajouter le callback onTotalsChange */}
-          {activeTab === "receivables" && (
-            <ReceivablesScreen
-              token={localStorage.getItem("token")}
-              accounts={accounts}
-              onAfterChange={async () => {
-                await accountsHook.refreshAccounts();
-              }}
-              onTotalsChange={({ totalOpenReceivables }) =>
-                setTotalOpenReceivables(totalOpenReceivables)
-              }
-            />
-          )}
-
-{activeTab === 'notes' && (
-  <div className="p-6 bg-white rounded-lg shadow-xl">
-    <NotesSlide />
-  </div>
-)}
-        </main>
-      </div>
-
-      {/* MODALS */}
-      {showAdd && (
-        <TransactionModal
-          onClose={() => setShowAdd(false)}
-          accounts={accounts}
-          onSave={async (tx) => {
-            try {
-              await transactionsHook.createTransaction({
-                account_id: tx.accountId,
-                type: tx.type,
-                amount: tx.amount,
-                category: tx.category,
-                description: tx.description,
-                date: tx.date,
-                project_id: plgProjectId || null,
-                is_posted: true,   // ✅ Ajouter si manquant
-                is_planned: false  // ✅ Ajouter si manquant
-              });
-              showToast("Transaction enregistrée", "success");
-              await accountsHook.refreshAccounts();
-              await transactionsHook.refreshTransactions();
-            } catch (e) {
-              showToast("Erreur ajout transaction", "error");
-            }
-          }}
-        />
-      )}
-
-      {showAddAccount && (
-        <AccountModal
-          onClose={() => setShowAddAccount(false)}
-          onSave={handleCreateAccount}
-        />
-      )}
-
-      {showImport && (
-        <ImportModal
-          isOpen={showImport}
-          accounts={accounts}
-          onClose={() => setShowImport(false)}
-          onImport={handleImportTransactions}
-        />
-      )}
-
-      {showBackupImport && (
-        <BackupImportModal
-          onClose={() => setShowBackupImport(false)}
-          onRestoreSuccess={handleRestoreSuccess}
-        />
-      )}
-
-      {selectedAccount && (
-        <AccountDetails
-          account={selectedAccount}
-          transactions={transactions}
-          onClose={() => setSelectedAccount(null)}
-          onDelete={deleteTransaction}
-        />
-      )}
-
-      {showReports && (
-        <ReportsModal
-          onClose={() => setShowReports(false)}
-          transactions={transactions}
-          accounts={accounts}
-        />
-      )}
-
-      {showBookkeeper && (
-        <BookkeeperDashboard
-          onClose={() => setShowBookkeeper(false)}
-          transactions={transactions}
-          accounts={accounts}
-          projects={projects}
-        />
-      )}
-
-      {showOperator && (
-  <OperatorDashboard
-    onClose={() => setShowOperator(false)}
-    projects={projects}
-    transactions={transactions}
-    accounts={accounts}
-  />
-)}
-
-
-      {showContentReplicator && (
-        <ContentReplicator
-          onClose={() => setShowContentReplicator(false)}
-        />
-      )}
-
-      <ProjectsListModal
-  isOpen={showProjectsList}
-  onClose={() => setShowProjectsList(false)}
-  onNewProject={() => {
-    setEditingProject(null);
-    setShowProjectPlanner(true);
-  }}
-  onEditProject={handleEditProject}
-  onActivateProject={handleActivateProject}
-  onDeleteProject={async (id) => {
-    await projectsService.deleteProject(id);
-    await refreshProjects();
-  }}
-  onCompleteProject={handleCompleteProject}
-  onProjectUpdate={refreshProjects} 
-  onTransactionClick={handleTransactionClick}
-  accounts={accounts}
-  projects={projects}
-  transactions={transactions}
-  totalBalance={totalBalance}
-/>
-
-      <ProjectPlannerModal
-        isOpen={showProjectPlanner}
-        onClose={() => {
-          setShowProjectPlanner(false);
-          setEditingProject(null);
-        }}
+    {/* MODALS */}
+    {showAdd && (
+      <TransactionModal
+        onClose={() => setShowAdd(false)}
         accounts={accounts}
-        project={editingProject}
-        onProjectSaved={async () => {
-          await refreshProjects();
-          setEditingProject(null);
+        onSave={async (tx) => {
+          try {
+            await transactionsHook.createTransaction({
+              account_id: tx.accountId,
+              type: tx.type,
+              amount: tx.amount,
+              category: tx.category,
+              description: tx.description,
+              date: tx.date,
+              project_id: plgProjectId || null,
+              is_posted: true,
+              is_planned: false,
+            });
+            showToast("Transaction enregistrée", "success");
+            await accountsHook.refreshAccounts();
+            await transactionsHook.refreshTransactions();
+          } catch (e) {
+            showToast("Erreur ajout transaction", "error");
+          }
         }}
-        onProjectUpdated={handleProjectUpdated}
       />
+    )}
 
-{/* ✅ MODAL D'ÉDITION DE TRANSACTION */}
-{editingTransaction && (
-  <TransactionEditModal
-    transaction={editingTransaction}      // ✅ la vraie transaction
-    isOpen={!!editingTransaction}
-    onClose={() => setEditingTransaction(null)}
-    onDelete={handleTransactionDelete}
-    onDeleted={handleTransactionDelete}
-    onUpdate={handleTransactionUpdate}
-    accounts={accountsWithCorrectAvoir}
-  />
-)}
+    {showAddAccount && (
+      <AccountModal
+        onClose={() => setShowAddAccount(false)}
+        onSave={handleCreateAccount}
+      />
+    )}
 
-      {transactionDetailsModal && (
-        <TransactionDetailsModal
-          type={transactionDetailsModal}
-          transactions={transactions}
-          onClose={() => setTransactionDetailsModal(null)}
-        />
-      )}
-    </>
-  );
+    {showImport && (
+      <ImportModal
+        isOpen={showImport}
+        accounts={accounts}
+        onClose={() => setShowImport(false)}
+        onImport={handleImportTransactions}
+      />
+    )}
+
+    {showBackupImport && (
+      <BackupImportModal
+        onClose={() => setShowBackupImport(false)}
+        onRestoreSuccess={handleRestoreSuccess}
+      />
+    )}
+
+    {selectedAccount && (
+      <AccountDetails
+        account={selectedAccount}
+        transactions={transactions}
+        onClose={() => setSelectedAccount(null)}
+        onDelete={deleteTransaction}
+      />
+    )}
+
+    {showReports && (
+      <ReportsModal
+        onClose={() => setShowReports(false)}
+        transactions={transactions}
+        accounts={accounts}
+      />
+    )}
+
+    {showBookkeeper && (
+      <BookkeeperDashboard
+        onClose={() => setShowBookkeeper(false)}
+        transactions={transactions}
+        accounts={accounts}
+        projects={projects}
+      />
+    )}
+
+    {showOperator && (
+      <OperatorDashboard
+        onClose={() => setShowOperator(false)}
+        projects={projects}
+        transactions={transactions}
+        accounts={accounts}
+      />
+    )}
+
+    {showContentReplicator && (
+      <ContentReplicator
+        onClose={() => setShowContentReplicator(false)}
+      />
+    )}
+
+    <ProjectsListModal
+      isOpen={showProjectsList}
+      onClose={() => setShowProjectsList(false)}
+      onNewProject={() => {
+        setEditingProject(null);
+        setShowProjectPlanner(true);
+      }}
+      onEditProject={handleEditProject}
+      onActivateProject={handleActivateProject}
+      onDeleteProject={async (id) => {
+        await projectsService.deleteProject(id);
+        await refreshProjects();
+      }}
+      onCompleteProject={handleCompleteProject}
+      onProjectUpdate={refreshProjects}
+      onTransactionClick={handleTransactionClick}
+      accounts={accounts}
+      projects={projects}
+      transactions={transactions}
+      totalBalance={totalBalance}
+    />
+
+    <ProjectPlannerModal
+      isOpen={showProjectPlanner}
+      onClose={() => {
+        setShowProjectPlanner(false);
+        setEditingProject(null);
+      }}
+      accounts={accounts}
+      project={editingProject}
+      onProjectSaved={async () => {
+        await refreshProjects();
+        setEditingProject(null);
+      }}
+      onProjectUpdated={handleProjectUpdated}
+    />
+
+    {/* ✅ MODAL D'ÉDITION DE TRANSACTION */}
+    {editingTransaction && (
+      <TransactionEditModal
+        transaction={editingTransaction}
+        isOpen={!!editingTransaction}
+        onClose={() => setEditingTransaction(null)}
+        onDelete={handleTransactionDelete}
+        onDeleted={handleTransactionDelete}
+        onUpdate={handleTransactionUpdate}
+        accounts={accountsWithCorrectAvoir}
+      />
+    )}
+
+    {transactionDetailsModal && (
+      <TransactionDetailsModal
+        type={transactionDetailsModal}
+        transactions={transactions}
+        onClose={() => setTransactionDetailsModal(null)}
+      />
+    )}
+  </>
+);
 }

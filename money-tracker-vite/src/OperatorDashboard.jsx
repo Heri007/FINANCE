@@ -385,12 +385,12 @@ const generateCopyText = () => {
                 {sops.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg">
                     <FileText size={48} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-500">Aucune SOP crÃ©Ã©e</p>
+                    <p className="text-gray-500">Aucune SOP crée</p>
                     <button 
                       onClick={() => setShowSOPModal(true)}
                       className="mt-3 text-purple-600 hover:text-purple-700 font-semibold"
                     >
-                      CrÃ©er votre premiÃ¨re SOP
+                      Créer votre première SOP
                     </button>
                   </div>
                 ) : (
@@ -832,101 +832,150 @@ const generateCopyText = () => {
 }
 
 // ============================================
-// COMPOSANTS MODALS
+// COMPOSANT MODAL SOP CORRIGÉ (Avec Sauvegarde Checklist)
 // ============================================
 
 function SOPDetailsModal({ sop, onClose, onUpdate }) {
+  
+  // ✅ Fonction qui gère le clic et sauvegarde
+  const handleCheck = (index) => {
+    // 1. On copie la checklist pour ne pas modifier l'état directement
+    const updatedChecklist = sop.checklist.map((item, i) => {
+      if (i === index) {
+        // On inverse l'état (true <-> false)
+        return { ...item, checked: !item.checked }; 
+      }
+      return item;
+    });
+
+    // 2. On appelle la fonction de mise à jour du parent
+    // Cela va déclencher l'appel API (operatorService.updateSOP)
+    console.log("💾 Sauvegarde checklist...", updatedChecklist);
+    onUpdate(sop.id, { checklist: updatedChecklist });
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-xl font-bold">{sop.title}</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 shadow-2xl">
+        
+        {/* En-tête */}
+        <div className="flex justify-between items-start mb-4 border-b pb-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">{sop.title}</h3>
+            <p className="text-sm text-gray-500 mt-1">{sop.description}</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-full transition"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <p className="text-gray-600 mb-4">{sop.description}</p>
+        <div className="space-y-6 text-sm">
+          
+          {/* Infos Générales */}
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Responsable</span>
+              <span className="font-medium text-gray-900">{sop.owner || "Non assigné"}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Durée moy.</span>
+              <span className="font-medium text-gray-900">{sop.avg_time || sop.avgtime || 0} jours</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Statut</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold mt-1 ${
+                sop.status === 'active' ? 'bg-green-100 text-green-700' :
+                sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-200 text-gray-700'
+              }`}>
+                {sop.status === 'active' ? 'Active' : sop.status === 'draft' ? 'Brouillon' : 'Archivée'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Catégorie</span>
+              <span className="font-medium text-gray-900">{sop.category || "Général"}</span>
+            </div>
+          </div>
 
-        <div className="space-y-4 text-sm">
-          <div>
-            <strong>Responsable:</strong> {sop.owner}
-          </div>
-          <div>
-            <strong>DurÃ©e moyenne:</strong> {sop.avg_time || sop.avgtime} jours
-          </div>
-          <div>
-            <strong>Statut:</strong>{' '}
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              sop.status === 'active' ? 'bg-green-100 text-green-700' :
-              sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-gray-100 text-gray-700'
-            }`}>
-              {sop.status}
-            </span>
-          </div>
-          <div>
-            <strong>CatÃ©gorie:</strong> {sop.category}
-          </div>
-
-          {/* âœ… Ã‰TAPES - CORRECTION ICI */}
+          {/* Étapes */}
           {sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0 && (
             <div>
-              <strong className="block mb-2">Étapes ({sop.steps.length}):</strong>
-              <div className="space-y-2">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-purple-100 text-purple-700 w-6 h-6 rounded flex items-center justify-center text-xs">1</span>
+                Étapes ({sop.steps.length})
+              </h4>
+              <div className="space-y-3 pl-2">
                 {sop.steps.map((step, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="bg-purple-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
-                        {step.order || index + 1}
-                      </span>
-                      <strong className="text-gray-900">{step.title}</strong>
-                    </div>
-                    <p className="text-gray-600 text-xs ml-8">{step.description}</p>
-                    <span className="text-xs text-gray-500 ml-8">â±ï¸ {step.duration}</span>
+                  <div key={index} className="relative pl-6 border-l-2 border-gray-200 pb-2 last:pb-0">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-gray-200 border-2 border-white"></div>
+                    <strong className="text-gray-900 block">{step.title}</strong>
+                    <p className="text-gray-600 text-xs mt-1">{step.description}</p>
+                    {step.duration && (
+                      <span className="text-xs text-purple-600 font-medium mt-1 block">⏱️ {step.duration}</span>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* âœ… CHECKLIST - CORRECTION ICI */}
+          {/* ✅ CHECKLIST INTERACTIVE CORRIGÉE ✅ */}
           {sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0 && (
-            <div>
-              <strong className="block mb-2">Checklist ({sop.checklist.length}):</strong>
-              <div className="space-y-1">
+            <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-yellow-100 text-yellow-700 w-6 h-6 rounded flex items-center justify-center text-xs">2</span>
+                Checklist de Validation ({sop.checklist.filter(i => i.checked).length}/{sop.checklist.length})
+              </h4>
+              
+              <div className="space-y-2">
                 {sop.checklist.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <label 
+                    key={index} 
+                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none ${
+                      item.checked 
+                        ? 'bg-green-50 border-green-200' 
+                        : 'bg-white border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
                     <input
                       type="checkbox"
-                      id={`check-${index}`}
-                      className="w-4 h-4"
+                      // 👇 C'est ici que la magie opère
+                      checked={item.checked || false} 
+                      onChange={() => handleCheck(index)}
+                      className="mt-1 w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
                     />
-                    <label htmlFor={`check-${index}`} className="text-gray-700">
-                      {item.item}
-                      {item.required && <span className="text-red-500 ml-1">*</span>}
-                    </label>
-                  </div>
+                    <div className="flex-1">
+                      <span className={`text-sm font-medium transition-all ${item.checked ? 'text-green-800 line-through opacity-60' : 'text-gray-800'}`}>
+                        {item.item}
+                      </span>
+                      {item.required && !item.checked && (
+                        <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                          Requis
+                        </span>
+                      )}
+                    </div>
+                  </label>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        <button
-          onClick={onClose}
-          className="mt-6 w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700"
-        >
-          Fermer
-        </button>
+        <div className="mt-6 pt-4 border-t flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition"
+          >
+            Fermer
+          </button>
+        </div>
       </div>
     </div>
   );
 }
-
 function SOPCreateModal({ onClose, onCreate }) {
   const [formData, setFormData] = useState({
     title: '',

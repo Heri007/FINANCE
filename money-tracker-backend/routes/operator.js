@@ -1,4 +1,4 @@
-// routes/operator.js - VERSION CORRIGÉE UTF-8
+// routes/operator.js - VERSION OPTIMISÉE
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
@@ -7,91 +7,76 @@ const authMiddleware = require('../middleware/auth');
 
 router.use(authMiddleware);
 
-// ============================================================================
-// MIDDLEWARE UTF-8 POUR TOUTES LES RÉPONSES
-// ============================================================================
+// Middleware UTF-8
 router.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   next();
 });
 
 // ============================================================================
-// ROUTES SOPs
+// ROUTES SOPs (Standardized Procedure)
 // ============================================================================
 
-// GET - Récupérer toutes les SOPs
+// GET ALL
 router.get('/sops', async (req, res) => {
   try {
+    // Utilisation de sops pour la cohérence
     const result = await pool.query('SELECT * FROM sops ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ Erreur GET /api/operator/sops:', err);
+    console.error('❌ GET /sops:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET - Récupérer une SOP par ID
+// GET ONE
 router.get('/sops/:id', async (req, res) => {
-  const { id } = req.params;
   try {
-    const result = await pool.query('SELECT * FROM sops WHERE id = $1', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'SOP introuvable' });
-    }
+    const result = await pool.query('SELECT * FROM sops WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'SOP introuvable' });
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('❌ Erreur GET /api/operator/sops/:id:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST - Créer une nouvelle SOP
+// POST
 router.post('/sops', validate('sop'), async (req, res) => {
   const { title, description, owner, steps, avg_time, status, category, checklist } = req.body;
-  
   try {
-    const stepsJSON = Array.isArray(steps) ? steps : [];
-    const checklistJSON = Array.isArray(checklist) ? checklist : [];
-
     const result = await pool.query(
       `INSERT INTO sops (title, description, owner, steps, avg_time, status, category, checklist) 
        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb) 
        RETURNING *`,
       [
-        title,
-        description || null,
-        owner || null,
-        JSON.stringify(stepsJSON),
-        avg_time || null,
-        status || 'draft',
-        category || null,
-        JSON.stringify(checklistJSON)
+        title, 
+        description, 
+        owner, 
+        JSON.stringify(steps || []), 
+        avg_time, 
+        status || 'draft', 
+        category, 
+        JSON.stringify(checklist || [])
       ]
     );
-
-    console.log('✅ SOP créée:', result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('❌ Erreur POST /api/operator/sops:', err);
+    console.error('❌ POST /sops:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// PUT - Mettre à jour une SOP
-router.put('/sops/:id', validate('sop'), async (req, res) => {
+// PUT (Mise à jour complète ou partielle)
+router.put('/sops/:id', async (req, res) => {
   const { id } = req.params;
   const { title, description, owner, steps, avg_time, status, category, checklist } = req.body;
 
   try {
+    // On récupère d'abord l'existant pour faire un COALESCE intelligent
     const existing = await pool.query('SELECT * FROM sops WHERE id = $1', [id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: 'SOP introuvable' });
     
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ error: 'SOP introuvable' });
-    }
-
-    const currentSOP = existing.rows[0];
-    const stepsJSON = steps !== undefined ? (Array.isArray(steps) ? steps : []) : currentSOP.steps;
-    const checklistJSON = checklist !== undefined ? (Array.isArray(checklist) ? checklist : []) : currentSOP.checklist;
+    const current = existing.rows[0];
 
     const result = await pool.query(
       `UPDATE sops 
@@ -104,103 +89,67 @@ router.put('/sops/:id', validate('sop'), async (req, res) => {
          status = COALESCE($6, status),
          category = COALESCE($7, category),
          checklist = COALESCE($8::jsonb, checklist),
-         updated_at = CURRENT_TIMESTAMP
+         updated_at = NOW()
        WHERE id = $9
        RETURNING *`,
       [
-        title,
-        description,
-        owner,
-        JSON.stringify(stepsJSON),
-        avg_time,
-        status,
-        category,
-        JSON.stringify(checklistJSON),
+        title, 
+        description, 
+        owner, 
+        steps ? JSON.stringify(steps) : null, 
+        avg_time, 
+        status, 
+        category, 
+        checklist ? JSON.stringify(checklist) : null, 
         id
       ]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'SOP introuvable' });
-    }
-
-    console.log('✅ SOP mise à jour:', result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
-    console.error('❌ Erreur PUT /api/operator/sops:', err);
+    console.error('❌ PUT /sops:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE - Supprimer une SOP
+// DELETE
 router.delete('/sops/:id', async (req, res) => {
-  const { id } = req.params;
   try {
-    const result = await pool.query('DELETE FROM sops WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'SOP introuvable' });
-    }
-    console.log('✅ SOP supprimée:', result.rows[0]);
-    res.json({ message: 'SOP supprimée', sop: result.rows[0] });
+    const result = await pool.query('DELETE FROM sops WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'SOP introuvable' });
+    res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
-    console.error('❌ Erreur DELETE /api/operator/sops:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // ============================================================================
-// ROUTES TASKS
+// ROUTES TASKS (operator_tasks)
 // ============================================================================
 
-// GET - Récupérer toutes les tâches avec jointures
 router.get('/tasks', async (req, res) => {
   try {
     const { projectid, status, priority, sopid } = req.query;
-    
     let query = `
-      SELECT 
-        t.*,
-        s.title as sop_title,
-        p.name as project_name
+      SELECT t.*, s.title as sop_title, p.name as project_name
       FROM operator_tasks t
-      LEFT JOIN operator_sops s ON t.sopid = s.id
+      LEFT JOIN sops s ON t.sopid = s.id
       LEFT JOIN projects p ON t.projectid = p.id
       WHERE 1=1
     `;
-    
     const params = [];
-    let paramCount = 1;
+    let idx = 1;
 
-    if (projectid) {
-      query += ` AND t.projectid = $${paramCount}`;
-      params.push(projectid);
-      paramCount++;
-    }
-    
-    if (status) {
-      query += ` AND t.status = $${paramCount}`;
-      params.push(status);
-      paramCount++;
-    }
-    
-    if (priority) {
-      query += ` AND t.priority = $${paramCount}`;
-      params.push(priority);
-      paramCount++;
-    }
-    
-    if (sopid) {
-      query += ` AND t.sopid = $${paramCount}`;
-      params.push(sopid);
-      paramCount++;
-    }
+    if (projectid) { query += ` AND t.projectid = $${idx++}`; params.push(projectid); }
+    if (status) { query += ` AND t.status = $${idx++}`; params.push(status); }
+    if (priority) { query += ` AND t.priority = $${idx++}`; params.push(priority); }
+    if (sopid) { query += ` AND t.sopid = $${idx++}`; params.push(sopid); }
 
-    query += ' ORDER BY t.duedate ASC, t.priority DESC';
+    query += ' ORDER BY t.duedate ASC NULLS LAST, t.priority DESC'; // NULLS LAST pour mettre les dates vides à la fin
 
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ Erreur GET /api/operator/tasks:', err);
+    console.error('❌ GET /tasks:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -215,7 +164,7 @@ router.get('/tasks/:id', async (req, res) => {
         s.title as sop_title,
         p.name as project_name
       FROM operator_tasks t
-      LEFT JOIN operator_sops s ON t.sopid = s.id
+      LEFT JOIN sops s ON t.sopid = s.id
       LEFT JOIN projects p ON t.projectid = p.id
       WHERE t.id = $1
     `, [id]);
