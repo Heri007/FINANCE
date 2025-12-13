@@ -31,6 +31,9 @@ import { TransactionModal } from "./components/transactions/TransactionModal";
 import { CategoryBreakdown } from "./components/transactions/CategoryBreakdown";
 import ReceivablesScreen from "./components/ReceivablesScreen";
 import NotesSlide from './components/NotesSlide';
+import HumanResourcesPage from './HumanResourcesPage';
+import TreasuryForecast from './components/TreasuryForecast';
+
 
 // Composants communs existants
 import { Toast } from "./components/common/Toast";
@@ -108,6 +111,7 @@ export default function App() {
 
   // États UI locaux
   const [activeTab, setActiveTab] = useState("overview");
+  const [activeView, setActiveView] = useState("dashboard"); 
   const [showAdd, setShowAdd] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -1074,6 +1078,39 @@ const activeProjects = useMemo(() => {
   });
 }, [projects]);
 
+// --- ALERTES TRÉSORERIE (MANQUANT) ---
+  const alerts = useMemo(() => {
+    const warnings = [];
+    
+    // Pour chaque compte, on regarde le solde actuel
+    accounts.forEach(acc => {
+      let projectedBalance = parseFloat(acc.balance || 0);
+      
+      // On cherche les transactions PLANIFIÉES (non postées) pour ce compte
+      const plannedTrx = transactions.filter(t => 
+        (String(t.account_id) === String(acc.id)) && 
+        (t.is_planned === true || t.is_posted === false)
+      );
+
+      // On simule l'impact
+      plannedTrx.forEach(t => {
+        if (t.type === 'income') projectedBalance += parseFloat(t.amount);
+        else projectedBalance -= parseFloat(t.amount);
+      });
+
+      // Si le solde projeté est négatif
+      if (projectedBalance < 0) {
+        warnings.push({
+          id: acc.id,
+          account: acc.name,
+          current: parseFloat(acc.balance),
+          projected: projectedBalance
+        });
+      }
+    });
+    return warnings;
+  }, [accounts, transactions]);
+
 // CALCUL INVESTISSEMENT - SEULEMENT Futur et Planifié + projets actifs
 const remainingCostSum = useMemo(() => {
   return activeProjects.reduce((sum, p) => {
@@ -1131,474 +1168,284 @@ if (DEBUG) {
     return <PinInput onSubmit={handlePinSubmit} title={title} />;
   }
 
-  // MAIN RENDER
-return (
-  <>
-    {toast && (
-      <Toast
-        message={toast.message}
-        type={toast.type}
-        onClose={hideToast}
-      />
-    )}
+// MAIN RENDER
+  return (
+    <>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={hideToast}
+        />
+      )}
 
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <Header
-        onAddTransaction={() => setShowAdd(true)}
-        onLogout={handleLogout}
-        onImport={() => setShowImport(true)}
-        onRestore={() => setShowBackupImport(true)}
-        onBackup={handleExportBackup}
-        onShowNotes={() => setActiveTab("notes")}
-        onShowBookkeeper={() => setShowBookkeeper(true)}
-        onShowOperator={() => setShowOperator(true)}
-        onShowContent={() => setShowContentReplicator(true)}
-        onShowReports={() => setShowReports(true)}
-        onShowProjectPlanner={() => setShowProjectPlanner(true)}
-        onShowProjectsList={() => setShowProjectsList(true)}
-      />
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+        <Header
+          onAddTransaction={() => setShowAdd(true)}
+          onLogout={handleLogout}
+          onImport={() => setShowImport(true)}
+          onRestore={() => setShowBackupImport(true)}
+          onBackup={handleExportBackup}
+          onShowNotes={() => setActiveTab('notes')} 
+          onShowBookkeeper={() => setShowBookkeeper(true)}
+          onShowOperator={() => setShowOperator(true)}
+          onShowContent={() => setShowContentReplicator(true)}
+          onShowReports={() => setShowReports(true)}
+          onShowProjectPlanner={() => setShowProjectPlanner(true)}
+          onShowProjectsList={() => setShowProjectsList(true)}
+        />
 
-      <Navigation
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
+        <Navigation
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
 
-      <div className="px-8 py-8">
-        {activeTab === "overview" && (
-          <div className="space-y-8">
-            {/* Statistiques principales */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <StatCard
-                icon={Wallet}
-                label="Solde Total"
-                value={formatCurrency(totalBalance)}
-                color="indigo"
+        <main className="px-8 py-8">
+          {activeTab === "overview" && (
+            <div className="space-y-8">
+              
+              {/* --- 1. ALERTES --- */}
+              {alerts.length > 0 && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm">
+                  <div className="flex items-start">
+                    <AlertTriangle className="h-6 w-6 text-red-500 mr-3" />
+                    <div>
+                      <h3 className="text-red-800 font-bold">Attention : Trésorerie tendue</h3>
+                      <div className="mt-1 text-sm text-red-700">
+                        {alerts.map(a => (
+                          <div key={a.id}>• <strong>{a.account}</strong> risque découvert (Proj: {formatCurrency(a.projected)})</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* --- 2. KPI CARDS --- */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <StatCard
+                  icon={Wallet}
+                  label="Solde Total"
+                  value={formatCurrency(totalBalance)}
+                  color="indigo"
+                />
+
+                <button
+                  onClick={() => openTransactionDetails("income")}
+                  className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="bg-green-100 p-3 rounded-xl">
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
+                    <span className="text-sm font-medium text-green-600">
+                      {transactions.filter((t) => t.type === "income").length} trx
+                    </span>
+                  </div>
+                  <h3 className="text-gray-600 text-sm font-medium mb-2">Encaissements</h3>
+                  <p className="text-3xl font-bold text-green-600">{formatCurrency(income)}</p>
+                </button>
+
+                <button
+                  onClick={() => openTransactionDetails("expense")}
+                  className="bg-gradient-to-br from-red-50 to-rose-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="bg-red-100 p-3 rounded-xl">
+                      <TrendingDown className="w-6 h-6 text-red-600" />
+                    </div>
+                    <span className="text-sm font-medium text-red-600">
+                      {transactions.filter((t) => t.type === "expense").length} trx
+                    </span>
+                  </div>
+                  <h3 className="text-gray-600 text-sm font-medium mb-2">Dépenses</h3>
+                  <p className="text-3xl font-bold text-red-600">{formatCurrency(expense)}</p>
+                </button>
+                
+                {/* Bouton RH temporaire (en attendant un vrai onglet) */}
+                <button
+  onClick={() => setActiveTab('hr')} // ✅ Utiliser activeTab au lieu de activeView
+  className={`bg-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full border border-gray-100`}
+>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="bg-purple-100 p-3 rounded-xl">
+                      <Briefcase className="w-6 h-6 text-purple-600" />
+                    </div>
+                  </div>
+                  <h3 className="text-gray-600 text-sm font-medium mb-2">Ressources Humaines</h3>
+                  <p className="text-lg font-bold text-purple-600">Gérer l'équipe</p>
+                </button>
+              </div>
+
+              {/* --- 3. PRÉVISIONS --- */}
+             <TreasuryForecast 
+  accounts={accountsWithCorrectAvoir}
+  projects={activeProjects}
+/>
+              {/* --- 4. COMPTES --- */}
+              <AccountList
+                accounts={accountsWithCorrectAvoir}
+                onSelectAccount={(acc) => acc.name === "Avoir" ? setActiveTab("receivables") : setSelectedAccount(acc)}
+                onAddAccount={() => setShowAddAccount(true)}
+                onDeleteAccount={handleDeleteAccount}
+                onInitDefaults={handleInitDefaults}
               />
 
-              <button
-                onClick={() => openTransactionDetails("income")}
-                className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-green-100 p-3 rounded-xl">
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  </div>
-                  <span className="text-sm font-medium text-green-600">
-                    {
-                      transactions.filter(
-                        (t) => t.type === "income"
-                      ).length
-                    }{" "}
-                    transactions
-                  </span>
-                </div>
-                <h3 className="text-gray-600 text-sm font-medium mb-2">
-                  Encaissements
-                </h3>
-                <p className="text-3xl font-bold text-green-600">
-                  {income.toLocaleString("fr-FR")} Ar
-                </p>
-              </button>
-
-              <button
-                onClick={() => openTransactionDetails("expense")}
-                className="bg-gradient-to-br from-red-50 to-rose-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-red-100 p-3 rounded-xl">
-                    <TrendingDown className="w-6 h-6 text-red-600" />
-                  </div>
-                  <span className="text-sm font-medium text-red-600">
-                    {
-                      transactions.filter(
-                        (t) => t.type === "expense"
-                      ).length
-                    }{" "}
-                    transactions
-                  </span>
-                </div>
-                <h3 className="text-gray-600 text-sm font-medium mb-2">
-                  Dépenses
-                </h3>
-                <p className="text-3xl font-bold text-red-600">
-                  {expense.toLocaleString("fr-FR")} Ar
-                </p>
-              </button>
-            </div>
-
-            {/* PRÉVISIONS COMPLÈTES */}
-            <section className="mt-6 rounded-2xl border-2 border-blue-200 bg-white p-6 shadow-lg">
-  <h3 className="text-sm font-bold text-slate-700 mb-4">
-    Prévisions Complètes
-  </h3>
-              <div className="space-y-3">
-                {/* Après règlements */}
-                <div className="rounded-xl bg-white/70 border border-slate-100 shadow-sm px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-100">
-  APRÈS RÈGLEMENTS
-</span>
-                    <span className="text-lg font-bold text-red-900">
-                      +{totalOpenReceivables.toLocaleString("fr-FR")} Ar
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 items-end">
-                    <div>
-                      <p className="text-sm font-bold text-slate-500">
-                        COFFRE (+ AVOIR)
-                      </p>
-                      <p className="text-2xl font-extrabold text-emerald-700">
-                        {receivablesForecastCoffre.toLocaleString("fr-FR")}
-                        <span className="text-lg font-bold ml-1">Ar</span>
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-slate-500">
-                        TOTAL (TOUS LES COMPTES)
-                      </p>
-                      <p className="text-2xl font-extrabold text-slate-900">
-                        {receivablesForecastTotal.toLocaleString("fr-FR")}
-                        <span className="text-xs font-semibold ml-1">Ar</span>
-                      </p>
-                    </div>
-                  </div>
+              {/* --- 5. GRAPHIQUE & TRANSACTIONS --- */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Colonne Gauche : Graphique */}
+                <div className="lg:col-span-2">
+                   <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 h-full">
+                      <h3 className="text-lg font-bold text-gray-800 mb-4">Flux Financiers (30 Jours)</h3>
+                      <div className="h-64">
+                        <FinancialChart transactions={transactions} />
+                      </div>
+                   </div>
                 </div>
 
-                {/* Après projets */}
-                <div className="rounded-xl bg-white/80 border border-emerald-100 shadow-sm px-4 py-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-sm font-bold bg-rose-50 text-rose-700 border border-rose-100">
-                      APRÈS PROJETS
-                    </span>
-                    <span className="text-lg font-bold text-red-900">
-                      +{projectsNetImpact.toLocaleString("fr-FR")} Ar
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 items-end">
-                    <div>
-                      <p className="text-sm font-bold text-slate-500">
-                        COFFRE (+ AVOIR + PROJETS)
-                      </p>
-                      <p className="text-2xl font-extrabold text-emerald-700">
-                        {projectsForecastCoffre.toLocaleString("fr-FR")}
-                        <span className="text-2xl font-semibold ml-1">Ar</span>
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-extrabold text-slate-500">
-                        TOTAL FINAL (TOUS LES COMPTES)
-                      </p>
-                      <p className="text-2xl font-extrabold text-slate-900">
-                        {projectsForecastTotal.toLocaleString("fr-FR")}
-                        <span className="text-2xl font-semibold ml-1">Ar</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-end gap-3 text-sm text-slate-600">
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 font-bold">
-                      {activeProjects.length} projets
-                    </span>
-
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-200 text-blue-900 border border-emerald-100 font-bold">
-                      Résultats Prévisionnels:{" "}
-                      {remainingCostSum.toLocaleString("fr-FR")} Ar
-                    </span>
-                  </div>
+                {/* Colonne Droite : Dernières Transactions */}
+                <div className="lg:col-span-1 flex flex-col gap-6">
+                  <TransactionList
+                    transactions={transactions.slice(0, 5)}
+                    onViewAll={() => setActiveTab("transactions")}
+                    onDelete={deleteTransaction}
+                    onTransactionClick={handleTransactionClick}
+                    compact={true} // Optionnel si votre composant supporte un mode compact
+                  />
                 </div>
               </div>
-            </section>
 
-            {/* ✅ Utiliser accountsWithCorrectAvoir */}
-            <AccountList
-              accounts={accountsWithCorrectAvoir}
-              onSelectAccount={(acc) => {
-                if (acc.name === "Avoir") {
-                  setActiveTab("receivables");
-                  return;
-                }
-                setSelectedAccount(acc);
-              }}
-              onAddAccount={() => setShowAddAccount(true)}
-              onDeleteAccount={handleDeleteAccount}
-              onInitDefaults={handleInitDefaults}
+              {/* --- 6. RÉPARTITION --- */}
+              <div className="w-full">
+                <CategoryBreakdown transactions={transactions} />
+              </div>
+
+            </div>
+          )}
+
+          {/* --- ONGLETS SECONDAIRES --- */}
+          {activeTab === "transactions" && (
+            <div className="space-y-4">
+              <div className="flex gap-2 mb-2">
+                <select className="border rounded px-2 py-1 text-sm bg-white" value={projectFilterId || ""} onChange={e => setProjectFilterId(e.target.value || null)}>
+                  <option value="">Tous Projets</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <select className="border rounded px-2 py-1 text-sm bg-white" value={accountFilterId || ""} onChange={e => setAccountFilterId(e.target.value || null)}>
+                  <option value="">Tous Comptes</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                {(projectFilterId || accountFilterId) && <button onClick={() => { setProjectFilterId(null); setAccountFilterId(null); }} className="text-indigo-600 text-xs hover:underline">Reset</button>}
+              </div>
+              <TransactionList transactions={visibleTransactions} onDelete={deleteTransaction} onTransactionClick={handleTransactionClick} />
+            </div>
+          )}
+
+          {activeTab === "receivables" && (
+            <ReceivablesScreen
+              token={localStorage.getItem("token")}
+              accounts={accounts}
+              onAfterChange={async () => { await accountsHook.refreshAccounts(); }}
+              onTotalsChange={({ totalOpenReceivables }) => setTotalOpenReceivables(totalOpenReceivables)}
             />
-        {/* NOUVELLE VERSION */}
-<div className="space-y-8">
-  {/* Graphique + Transactions Récentes côte à côte */}
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-    {/* Graphique - Occupe 2/3 */}
-    <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-lg">
-      <h3 className="text-lg font-bold text-slate-800 mb-4">
-        Évolution Financière (30 derniers jours)
-      </h3>
-      <div className="w-full h-80">
-        <FinancialChart transactions={transactions} />
+          )}
+
+          {activeTab === 'notes' && (
+            <div className="p-6 bg-white rounded-lg shadow-xl">
+              <NotesSlide />
+            </div>
+          )}
+          
+          {/* Remplacer activeView === 'hr' par activeTab === 'hr' */}
+          {activeTab === 'hr' && <HumanResourcesPage />}
+          
+        </main>
       </div>
-    </div>
 
-    {/* Transactions Récentes - Occupe 1/3 */}
-    <div className="lg:col-span-1">
-      <TransactionList
-        transactions={transactions.slice(0, 5)}
-        onViewAll={() => setActiveTab("transactions")}
-        onDelete={deleteTransaction}
-        onTransactionClick={handleTransactionClick}
-      />
-    </div>
-  </div>
-
-  {/* CategoryBreakdown - Pleine largeur en dessous */}
-  <div className="w-full">
-    <CategoryBreakdown transactions={transactions} />
-  </div>
-</div>
-          </div>
-        )}
-            
-
-        {activeTab === "transactions" && (
-          <div className="space-y-4">
-            {/* Filtres projet + compte */}
-            <div className="flex flex-wrap gap-3 items-center mb-2 text-xs">
-              <div className="flex items-center gap-1">
-                <span className="text-gray-600 font-semibold">
-                  Projet:
-                </span>
-                <select
-                  className="border rounded-lg px-2 py-1 text-xs"
-                  value={projectFilterId || ""}
-                  onChange={(e) =>
-                    setProjectFilterId(e.target.value || null)
-                  }
-                >
-                  <option value="">Tous</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <span className="text-gray-600 font-semibold">
-                  Compte:
-                </span>
-                <select
-                  className="border rounded-lg px-2 py-1 text-xs"
-                  value={accountFilterId || ""}
-                  onChange={(e) =>
-                    setAccountFilterId(e.target.value || null)
-                  }
-                >
-                  <option value="">Tous</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {(projectFilterId || accountFilterId) && (
-                <button
-                  className="ml-auto text-xs text-indigo-600 hover:underline"
-                  onClick={() => {
-                    setProjectFilterId(null);
-                    setAccountFilterId(null);
-                  }}
-                >
-                  Réinitialiser filtres
-                </button>
-              )}
-            </div>
-
-            <TransactionList
-              transactions={visibleTransactions}
-              onViewAll={() => {
-                setProjectFilterId(null);
-                setAccountFilterId(null);
-              }}
-              onDelete={deleteTransaction}
-              onTransactionClick={handleTransactionClick}
-            />
-          </div>
-        )}
-
-        {/* ✅ Receivables avec onTotalsChange */}
-        {activeTab === "receivables" && (
-          <ReceivablesScreen
-            token={localStorage.getItem("token")}
-            accounts={accounts}
-            onAfterChange={async () => {
+      {/* --- MODALS GLOBAUX --- */}
+      
+      {showAdd && (
+        <TransactionModal
+          onClose={() => setShowAdd(false)}
+          accounts={accounts}
+          onSave={async (tx) => {
+            try {
+              await transactionsHook.createTransaction({
+                account_id: tx.accountId,
+                type: tx.type,
+                amount: tx.amount,
+                category: tx.category,
+                description: tx.description,
+                date: tx.date,
+                project_id: plgProjectId || null,
+                is_posted: true,
+                is_planned: false,
+              });
+              showToast("Transaction enregistrée", "success");
               await accountsHook.refreshAccounts();
-            }}
-            onTotalsChange={({ totalOpenReceivables }) =>
-              setTotalOpenReceivables(totalOpenReceivables)
+              await transactionsHook.refreshTransactions();
+            } catch (e) {
+              showToast("Erreur ajout transaction", "error");
             }
-          />
-        )}
+          }}
+        />
+      )}
 
-        {activeTab === "notes" && (
-          <div className="p-6 bg-white rounded-lg shadow-xl">
-            <NotesSlide />
-          </div>
-        )}
-      </div>
-    </div>
-
-    {/* MODALS */}
-    {showAdd && (
-      <TransactionModal
-        onClose={() => setShowAdd(false)}
-        accounts={accounts}
-        onSave={async (tx) => {
-          try {
-            await transactionsHook.createTransaction({
-              account_id: tx.accountId,
-              type: tx.type,
-              amount: tx.amount,
-              category: tx.category,
-              description: tx.description,
-              date: tx.date,
-              project_id: plgProjectId || null,
-              is_posted: true,
-              is_planned: false,
-            });
-            showToast("Transaction enregistrée", "success");
-            await accountsHook.refreshAccounts();
-            await transactionsHook.refreshTransactions();
-          } catch (e) {
-            showToast("Erreur ajout transaction", "error");
-          }
-        }}
-      />
-    )}
-
-    {showAddAccount && (
-      <AccountModal
-        onClose={() => setShowAddAccount(false)}
-        onSave={handleCreateAccount}
-      />
-    )}
-
-    {showImport && (
-      <ImportModal
-        isOpen={showImport}
-        accounts={accounts}
-        onClose={() => setShowImport(false)}
-        onImport={handleImportTransactions}
-      />
-    )}
-
-    {showBackupImport && (
-      <BackupImportModal
-        onClose={() => setShowBackupImport(false)}
-        onRestoreSuccess={handleRestoreSuccess}
-      />
-    )}
-
-    {selectedAccount && (
-      <AccountDetails
-        account={selectedAccount}
-        transactions={transactions}
-        onClose={() => setSelectedAccount(null)}
-        onDelete={deleteTransaction}
-      />
-    )}
-
-    {showReports && (
-      <ReportsModal
-        onClose={() => setShowReports(false)}
-        transactions={transactions}
-        accounts={accounts}
-      />
-    )}
-
-    {showBookkeeper && (
-      <BookkeeperDashboard
-        onClose={() => setShowBookkeeper(false)}
-        transactions={transactions}
+      {showAddAccount && <AccountModal onClose={() => setShowAddAccount(false)} onSave={handleCreateAccount} />}
+      {showImport && <ImportModal isOpen={showImport} accounts={accounts} onClose={() => setShowImport(false)} onImport={handleImportTransactions} />}
+      {showBackupImport && <BackupImportModal onClose={() => setShowBackupImport(false)} onRestoreSuccess={handleRestoreSuccess} />}
+      
+      {selectedAccount && <AccountDetails account={selectedAccount} transactions={transactions} onClose={() => setSelectedAccount(null)} onDelete={deleteTransaction} />}
+      {showReports && <ReportsModal onClose={() => setShowReports(false)} transactions={transactions} accounts={accounts} />}
+      {showBookkeeper && <BookkeeperDashboard onClose={() => setShowBookkeeper(false)} transactions={transactions} accounts={accounts} projects={projects} />}
+      {showOperator && <OperatorDashboard onClose={() => setShowOperator(false)} projects={projects} transactions={transactions} accounts={accounts} />}
+      {showContentReplicator && <ContentReplicator onClose={() => setShowContentReplicator(false)} />}
+      
+      <ProjectsListModal
+        isOpen={showProjectsList}
+        onClose={() => setShowProjectsList(false)}
+        onNewProject={() => { setEditingProject(null); setShowProjectPlanner(true); }}
+        onEditProject={handleEditProject}
+        onActivateProject={handleActivateProject}
+        onDeleteProject={async (id) => { await projectsService.deleteProject(id); await refreshProjects(); }}
+        onCompleteProject={handleCompleteProject}
+        onProjectUpdate={refreshProjects}
+        onTransactionClick={handleTransactionClick}
         accounts={accounts}
         projects={projects}
-      />
-    )}
-
-    {showOperator && (
-      <OperatorDashboard
-        onClose={() => setShowOperator(false)}
-        projects={projects}
         transactions={transactions}
+        totalBalance={totalBalance}
+      />
+
+      <ProjectPlannerModal
+        isOpen={showProjectPlanner}
+        onClose={() => { setShowProjectPlanner(false); setEditingProject(null); }}
         accounts={accounts}
+        project={editingProject}
+        onProjectSaved={async () => { await refreshProjects(); setEditingProject(null); }}
+        onProjectUpdated={handleProjectUpdated}
       />
-    )}
 
-    {showContentReplicator && (
-      <ContentReplicator
-        onClose={() => setShowContentReplicator(false)}
-      />
-    )}
+      {editingTransaction && (
+        <TransactionEditModal
+          transaction={editingTransaction}
+          isOpen={!!editingTransaction}
+          onClose={() => setEditingTransaction(null)}
+          onDelete={handleTransactionDelete} // Appel du wrapper
+          onDeleted={handleTransactionDelete} // Appel du wrapper
+          onUpdate={handleTransactionUpdate}
+          accounts={accountsWithCorrectAvoir}
+        />
+      )}
 
-    <ProjectsListModal
-      isOpen={showProjectsList}
-      onClose={() => setShowProjectsList(false)}
-      onNewProject={() => {
-        setEditingProject(null);
-        setShowProjectPlanner(true);
-      }}
-      onEditProject={handleEditProject}
-      onActivateProject={handleActivateProject}
-      onDeleteProject={async (id) => {
-        await projectsService.deleteProject(id);
-        await refreshProjects();
-      }}
-      onCompleteProject={handleCompleteProject}
-      onProjectUpdate={refreshProjects}
-      onTransactionClick={handleTransactionClick}
-      accounts={accounts}
-      projects={projects}
-      transactions={transactions}
-      totalBalance={totalBalance}
-    />
-
-    <ProjectPlannerModal
-      isOpen={showProjectPlanner}
-      onClose={() => {
-        setShowProjectPlanner(false);
-        setEditingProject(null);
-      }}
-      accounts={accounts}
-      project={editingProject}
-      onProjectSaved={async () => {
-        await refreshProjects();
-        setEditingProject(null);
-      }}
-      onProjectUpdated={handleProjectUpdated}
-    />
-
-    {/* ✅ MODAL D'ÉDITION DE TRANSACTION */}
-    {editingTransaction && (
-      <TransactionEditModal
-        transaction={editingTransaction}
-        isOpen={!!editingTransaction}
-        onClose={() => setEditingTransaction(null)}
-        onDelete={handleTransactionDelete}
-        onDeleted={handleTransactionDelete}
-        onUpdate={handleTransactionUpdate}
-        accounts={accountsWithCorrectAvoir}
-      />
-    )}
-
-    {transactionDetailsModal && (
-      <TransactionDetailsModal
-        type={transactionDetailsModal}
-        transactions={transactions}
-        onClose={() => setTransactionDetailsModal(null)}
-      />
-    )}
-  </>
-);
+      {transactionDetailsModal && (
+        <TransactionDetailsModal
+          type={transactionDetailsModal}
+          transactions={transactions}
+          onClose={() => setTransactionDetailsModal(null)}
+        />
+      )}
+    </>
+  );
 }

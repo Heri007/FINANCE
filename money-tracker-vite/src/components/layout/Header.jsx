@@ -22,11 +22,11 @@ export function Header({
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
-              <Wallet className="w-8 h-8" />
+             <Wallet className="text-amber-500" /> 
             </div>
             <div>
-              <h1 className="text-3xl font-bold">Money Tracker</h1>
-              <p className="text-indigo-100 text-sm">Gestion de mes finances</p>
+              <h1 className="text-3xl font-bold">MONEY 🏦💰</h1>
+              <p className="text-indigo-100 text-sm">GESTION DE PORTE-FEUILLE</p>
             </div>
           </div>
           

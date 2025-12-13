@@ -1,62 +1,71 @@
-// src/components/NotesSlide.jsx - CORRIGÉ POUR NOTE EXISTANTE
+// src/components/NotesSlide.jsx - VERSION AGRANDIE ET LISIBLE
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, Clock, Plus, List } from 'lucide-react';
+import { Save, Trash2, Clock, Plus, ChevronLeft, FileText } from 'lucide-react';
 import { API_BASE } from '../services/api';
 
 export default function NotesSlide() {
-  const [currentNote, setCurrentNote] = useState({ id: null, content: '' });
+  const [view, setView] = useState('list'); // 'list' ou 'edit'
   const [notesList, setNotesList] = useState([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [saveStatus, setSaveStatus] = useState('');
+  const [currentNote, setCurrentNote] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showList, setShowList] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
 
-  // ✅ CHARGER LA NOTE EXISTANTE (ou liste)
+  // 1. CHARGER LA LISTE AU DÉMARRAGE
   useEffect(() => {
-    const fetchNotes = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/notes`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          
-          // ✅ SI 1 SEULE NOTE (cas actuel) - l'afficher directement
-          if (data.id && !Array.isArray(data)) {
-            setCurrentNote(data);
-            setNotesList([data]);
-            setSaveStatus('✅ Note chargée');
-          } 
-          // ✅ SI LISTE DE NOTES
-          else if (Array.isArray(data)) {
-            setNotesList(data);
-            if (data.length > 0) {
-              setCurrentNote(data[0]);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Erreur chargement notes:', error);
-        setSaveStatus('❌ Erreur chargement');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchNotes();
   }, []);
 
-  // Auto-sauvegarde 5s
-  useEffect(() => {
-    if (currentNote.content && currentNote.id) {
-      const timer = setTimeout(() => saveNote(), 5000);
-      return () => clearTimeout(timer);
+  const fetchNotes = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/notes`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const list = Array.isArray(data) ? data : (data.id ? [data] : []);
+        list.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        setNotesList(list);
+      }
+    } catch (error) {
+      console.error('Erreur chargement:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [currentNote.content, currentNote.id]);
+  };
 
-  const saveNote = async () => {
-    if (!currentNote.id) return;
+  const openNote = (note) => {
+    setCurrentNote({ ...note });
+    setSaveStatus('Prêt');
+    setView('edit');
+  };
+
+  const createNote = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/notes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ content: '' })
+      });
+      
+      if (response.ok) {
+        const newNote = await response.json();
+        setNotesList([newNote, ...notesList]);
+        openNote(newNote);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveCurrentNote = async () => {
+    if (!currentNote || !currentNote.id) return;
     
     setIsSaving(true);
     setSaveStatus('Sauvegarde...');
@@ -72,168 +81,155 @@ export default function NotesSlide() {
       });
 
       if (response.ok) {
-        const note = await response.json();
-        setLastSaved(note.updated_at);
+        const updated = await response.json();
         setSaveStatus('✅ Sauvegardé');
+        setNotesList(prev => prev.map(n => n.id === updated.id ? updated : n));
         setTimeout(() => setSaveStatus(''), 2000);
-      } else {
-        setSaveStatus('❌ Erreur serveur');
       }
     } catch (error) {
-      console.error('Erreur sauvegarde:', error);
-      setSaveStatus('❌ Erreur réseau');
+      setSaveStatus('❌ Erreur');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const createNewNote = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/notes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const newNote = await response.json();
-      
-      setCurrentNote(newNote);
-      setNotesList([newNote, ...notesList]);
-      setSaveStatus('🆕 Nouvelle note');
-      setShowList(false);
-    } catch (error) {
-      console.error('Erreur création:', error);
+  useEffect(() => {
+    if (view === 'edit' && currentNote?.id) {
+      const timer = setTimeout(saveCurrentNote, 3000);
+      return () => clearTimeout(timer);
     }
+  }, [currentNote?.content]);
+
+  const deleteNote = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm("Supprimer cette note ?")) return;
+
+    try {
+      await fetch(`${API_BASE}/notes/${id}`, { 
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setNotesList(prev => prev.filter(n => n.id !== id));
+      if (view === 'edit' && currentNote?.id === id) {
+        setView('list');
+      }
+    } catch (e) { console.error(e); }
   };
 
-  const loadNote = (note) => {
-    setCurrentNote(note);
-    setShowList(false);
-    setSaveStatus(`Chargée: ${new Date(note.updated_at).toLocaleDateString('fr-FR')}`);
-  };
+  if (loading && view === 'list') {
+    return <div className="p-12 text-center text-gray-500 text-lg">Chargement...</div>;
+  }
 
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleString('fr-FR');
-  };
-
-  if (loading) {
+  // --- VUE LISTE (AGRANDIE) ---
+  if (view === 'list') {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-500">
-        <div>Chargement des notes...</div>
+      // h-[80vh] force une grande hauteur par défaut
+      <div className="flex flex-col bg-gray-50 rounded-xl overflow-hidden shadow-lg border border-gray-200 h-[75vh]">
+        <div className="p-6 bg-white border-b flex justify-between items-center sticky top-0 z-10 shadow-sm">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+            <FileText className="text-blue-600" size={28} />
+            Mes Notes ({notesList.length})
+          </h2>
+          <button 
+            onClick={createNote}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl flex items-center gap-2 text-base font-semibold transition-all shadow-md"
+          >
+            <Plus size={20} /> Nouvelle Note
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {notesList.length === 0 ? (
+            <div className="text-center text-gray-400 mt-20">
+              <p className="text-xl">Aucune note pour le moment.</p>
+              <p className="text-sm mt-3">Cliquez sur "Nouvelle Note" pour commencer.</p>
+            </div>
+          ) : (
+            notesList.map(note => (
+              <div 
+                key={note.id}
+                onClick={() => openNote(note)}
+                className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-400 cursor-pointer transition-all group relative"
+              >
+                <div className="pr-10">
+                  {/* Titre plus grand */}
+                  <p className="font-bold text-gray-900 text-lg mb-2 line-clamp-1">
+                    {note.content ? note.content.split('\n')[0].substring(0, 80) : 'Nouvelle note...'}
+                  </p>
+                  
+                  {/* Contenu : Affichage de 6 lignes au lieu de 2 */}
+                  <p className="text-base text-gray-600 line-clamp-6 leading-relaxed whitespace-pre-wrap">
+                    {note.content || '(Vide)'}
+                  </p>
+                  
+                  <div className="flex items-center gap-2 mt-4 text-sm text-gray-400 bg-gray-50 inline-block px-3 py-1 rounded-lg">
+                    <Clock size={14} />
+                    {new Date(note.updated_at).toLocaleString('fr-FR', {
+                      day: 'numeric', month: 'long', hour: '2-digit', minute:'2-digit'
+                    })}
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={(e) => deleteNote(e, note.id)}
+                  className="absolute top-6 right-6 text-gray-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"
+                  title="Supprimer"
+                >
+                  <Trash2 size={24} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     );
   }
 
+  // --- VUE ÉDITEUR (AGRANDIE) ---
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-xl shadow-lg">
-      {/* Header */}
-      <div className="mb-6 pb-4 border-b-2 border-slate-200">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-            📝 Bloc-Notes
-            <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
-              {notesList.length} note{notesList.length > 1 ? 's' : ''}
-            </span>
-          </h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowList(!showList)}
-              className="p-2 hover:bg-slate-200 rounded-lg transition-all"
-              title="Voir toutes les notes"
-            >
-              <List size={20} className={showList ? 'text-blue-600' : ''} />
-            </button>
-            <button
-              onClick={createNewNote}
-              className="p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-md transition-all flex items-center gap-1"
-              title="Nouvelle note"
-            >
-              <Plus size={16} />
-            </button>
-          </div>
+    // h-[80vh] force une grande hauteur pour l'édition
+    <div className="flex flex-col bg-white rounded-xl overflow-hidden shadow-2xl border border-gray-200 h-[80vh]">
+      {/* Header Éditeur */}
+      <div className="p-4 border-b flex justify-between items-center bg-gray-50 sticky top-0 z-10">
+        <button 
+          onClick={() => {
+            saveCurrentNote(); 
+            setView('list');
+          }}
+          className="flex items-center text-gray-700 hover:text-blue-700 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors text-base font-bold"
+        >
+          <ChevronLeft size={24} className="mr-1" /> Retour liste
+        </button>
+        
+        <div className="text-sm font-medium text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+          {saveStatus || (isSaving ? 'Enregistrement...' : 'Mode Édition')}
         </div>
 
-        {lastSaved && (
-          <div className="text-sm text-slate-600 flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-lg">
-            <Clock size={16} />
-            Dernière sauvegarde: {formatTime(lastSaved)}
-          </div>
-        )}
+        <button 
+          onClick={(e) => deleteNote(e, currentNote.id)}
+          className="text-red-500 hover:text-white hover:bg-red-500 p-3 rounded-lg transition-colors border border-red-200"
+        >
+          <Trash2 size={20} />
+        </button>
       </div>
 
-      {/* Liste des notes (optionnelle) */}
-      {showList && notesList.length > 0 && (
-        <div className="mb-6 max-h-48 overflow-y-auto bg-white rounded-xl shadow-sm border border-slate-200">
-          {notesList.map((note) => (
-            <div
-              key={note.id}
-              onClick={() => loadNote(note)}
-              className="p-4 border-b last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors flex justify-between items-start group"
-            >
-              <div className="flex-1 pr-4">
-                <div className="font-medium text-slate-900 text-sm leading-tight line-clamp-2" title={note.content}>
-                  {note.content || '[Note vide]'}
-                </div>
-                <div className="text-xs text-slate-500 mt-1.5">
-                  {formatTime(note.updated_at)}
-                </div>
-              </div>
-              <div className="text-xs text-slate-400 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                {note.content.length} chars
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Zone d'édition */}
-      <textarea
-        value={currentNote.content}
-        onChange={(e) => setCurrentNote({ ...currentNote, content: e.target.value })}
-        placeholder="Votre note existante s'affiche ici... Tapez pour modifier (auto-sauvegarde 5s)"
-        className="flex-1 p-6 border-2 border-dashed border-slate-300 rounded-2xl resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50/50 font-mono text-base leading-relaxed shadow-inner"
-        rows={12}
-      />
-
-      {/* Contrôles + Stats */}
-      <div className="mt-6 pt-5 border-t-2 border-slate-200">
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-sm font-medium text-slate-700 px-3 py-1.5 bg-slate-100 rounded-lg">
-            {saveStatus}
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={saveNote}
-              disabled={isSaving || !currentNote.id}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
-            >
-              <Save size={18} />
-              {isSaving ? 'Sauvegarde...' : 'Sauvegarder maintenant'}
-            </button>
-            
-            <button
-              onClick={() => {
-                if (confirm('Vider cette note ?')) {
-                  setCurrentNote({ ...currentNote, content: '' });
-                  saveNote();
-                }
-              }}
-              className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-lg transition-all flex items-center gap-2 font-medium text-sm"
-              disabled={isSaving}
-            >
-              <Trash2 size={18} />
-              Effacer
-            </button>
-          </div>
-        </div>
-
-        <div className="text-xs text-slate-500 text-right grid grid-cols-2 gap-4 font-mono bg-slate-50 p-2 rounded-lg">
-          <span>• {currentNote.content.length} caractères</span>
-          <span>• {currentNote.content.split('\n').length} lignes</span>
-        </div>
+      {/* Zone de texte géante */}
+      <div className="flex-1 relative bg-white">
+        <textarea
+            key={currentNote.id}
+            value={currentNote.content}
+            onChange={(e) => setCurrentNote({ ...currentNote, content: e.target.value })}
+            placeholder="Écrivez votre note ici..."
+            // Texte plus grand (text-lg) et plus aéré (leading-relaxed)
+            className="w-full h-full p-8 resize-none outline-none text-gray-800 font-mono text-lg leading-loose"
+            autoFocus
+            spellCheck={false}
+        />
+      </div>
+      
+      <div className="px-6 py-3 bg-gray-50 border-t text-xs text-gray-500 flex justify-between uppercase tracking-wide">
+         <span>ID: {currentNote.id}</span>
+         <span>{currentNote.content ? currentNote.content.length : 0} caractères</span>
       </div>
     </div>
   );
