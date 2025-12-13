@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import transactionsService from './services/transactionsService';
+import { projectsService } from './services/projectsService';
 import { X, Trash2 } from 'lucide-react';
 
 const TransactionEditModal = ({ transaction, onClose, onUpdate, onDelete, accounts }) => {
@@ -63,6 +64,71 @@ const TransactionEditModal = ({ transaction, onClose, onUpdate, onDelete, accoun
       try {
         await transactionsService.deleteTransaction(transaction.id);
         console.log('✅ Transaction supprimée');
+        // Si la transaction était liée à un projet, tenter de resynchroniser l'état des lignes
+        try {
+          const projectId = transaction.project_id || transaction.projectId;
+          if (projectId) {
+            // Récupérer le projet et les transactions restants pour ce projet
+            const proj = await projectsService.getById(projectId);
+            const allTx = await transactionsService.getAll();
+            const projectTx = allTx.filter(t => String(t.project_id || t.projectId) === String(projectId));
+
+            const parseList = (data) => {
+              if (!data) return [];
+              if (Array.isArray(data)) return data;
+              try { return JSON.parse(data); } catch { return []; }
+            };
+
+            const expenses = parseList(proj.expenses).map(e => ({ ...e }));
+            const revenues = parseList(proj.revenues).map(r => ({ ...r }));
+
+            // Marquer isPaid true si un transaction correspondant existe
+            const matchTx = (line, txs, type) => {
+              return txs.find(t => {
+                const tAmount = parseFloat(t.amount || 0);
+                const lAmount = parseFloat(line.amount || 0);
+                const sameAmount = Math.abs(tAmount - lAmount) < 0.01;
+                const sameType = (type === 'expense' && (t.type === 'expense')) || (type === 'revenue' && (t.type === 'income'));
+                const descMatch = line.description && t.description ? (t.description.includes(line.description) || line.description.includes(t.description)) : true;
+                return sameAmount && sameType && descMatch;
+              });
+            };
+
+            // Update flags
+            for (let i = 0; i < expenses.length; i++) {
+              const found = matchTx(expenses[i], projectTx, 'expense');
+              expenses[i].isPaid = !!found;
+            }
+            for (let i = 0; i < revenues.length; i++) {
+              const found = matchTx(revenues[i], projectTx, 'revenue');
+              revenues[i].isPaid = !!found;
+            }
+
+            // Construire payload complet en gardant les champs existants du projet
+            const payload = {
+              name: proj.name || proj.name,
+              description: proj.description || proj.description,
+              type: proj.type || proj.type,
+              status: proj.status || proj.status,
+              startDate: proj.startDate || proj.startDate,
+              endDate: proj.endDate || proj.endDate,
+              totalCost: proj.totalCost || 0,
+              totalRevenues: proj.totalRevenues || 0,
+              netProfit: proj.netProfit || 0,
+              roi: proj.roi || 0,
+              remainingBudget: proj.remainingBudget || 0,
+              totalAvailable: proj.totalAvailable || 0,
+              expenses: JSON.stringify(expenses),
+              revenues: JSON.stringify(revenues)
+            };
+
+            await projectsService.updateProject(projectId, payload);
+            console.log('🔁 Projet resynchronisé après suppression de transaction');
+          }
+        } catch (syncErr) {
+          console.warn('⚠️ Erreur lors de la resynchronisation du projet:', syncErr);
+        }
+
         onDelete(); // Rafraîchir la liste
         onClose(); // Fermer le modal
       } catch (error) {

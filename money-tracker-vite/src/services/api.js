@@ -25,9 +25,14 @@ export const apiRequest = async (endpoint, options = {}) => {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      // Fournir le message retourné par le serveur si présent (message ou error)
+      const serverMessage = error.message || error.error || error.msg || null;
+      const details = error.errors || null;
       throw {
-        message: error.error || `Erreur HTTP ${response.status}`,
+        message: serverMessage || `Erreur HTTP ${response.status}`,
         status: response.status,
+        details,
+        raw: error
       };
     }
 

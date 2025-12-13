@@ -19,6 +19,7 @@ exports.getTransactions = async (req, res, next) => {
         t.is_planned, 
         t.is_posted,
         t.project_id,
+        t.project_line_id,
         t.created_at,
         a.name as account_name,
         p.name as project_name
@@ -76,7 +77,8 @@ exports.createTransaction = async (req, res, next) => {
       transaction_date,  
       is_planned, 
       is_posted, 
-      project_id 
+      project_id,
+      project_line_id
     } = req.body;
 
     const finalDate = transaction_date || date;
@@ -92,12 +94,11 @@ exports.createTransaction = async (req, res, next) => {
 
     const insertResult = await client.query(
       `INSERT INTO transactions 
-       (account_id, type, amount, category, description, transaction_date, is_planned, is_posted, project_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (account_id, type, amount, category, description, transaction_date, is_planned, is_posted, project_id, project_line_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [account_id, type, finalAmount, category, description, finalDate, is_planned || false, shouldPost, project_id || null]
+      [account_id, type, finalAmount, category, description, finalDate, is_planned || false, shouldPost, project_id || null, project_line_id || null]
     );
-
     const transaction = insertResult.rows[0];
 
     // Mise à jour du solde SI posté
@@ -186,6 +187,7 @@ exports.updateTransaction = async (req, res, next) => {
       account_id, type, amount, category, description, date,
       is_posted, is_planned, project_id 
     } = req.body;
+      project_line_id
 
     // 1. Récupérer l'ancienne transaction
     const beforeResult = await client.query('SELECT * FROM transactions WHERE id = $1', [id]);
@@ -217,6 +219,7 @@ exports.updateTransaction = async (req, res, next) => {
         newPosted,
         is_planned !== undefined ? is_planned : oldTx.is_planned,
         project_id !== undefined ? project_id : oldTx.project_id,
+          project_line_id !== undefined ? project_line_id : oldTx.project_line_id,
         id
       ]
     );

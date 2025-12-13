@@ -306,6 +306,29 @@ const generateCopyText = () => {
     );
   }
 
+  // Fonction pour calculer le montant réellement investi (payé)
+const calculateInvestedAmount = (project) => {
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(project.expenses);
+  
+  // Somme des dépenses avec isPaid: true
+  const invested = expenses.reduce((sum, exp) => {
+    if (exp.isPaid) {
+      return sum + (parseFloat(exp.amount) || 0);
+    }
+    return sum;
+  }, 0);
+  
+  return invested;
+};
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden">
@@ -574,62 +597,63 @@ const generateCopyText = () => {
             </div>
           </div>
 
-          {/* Liste Projets Actifs */}
-          <div className="space-y-4 max-h-[350px] overflow-y-auto">
-            {projectStats.active === 0 ? (
-              <div className="text-center py-12 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200">
-                <TrendingUp size={64} className="mx-auto text-blue-300 mb-4" />
-                <h4 className="text-xl font-bold text-gray-700 mb-2">Aucun projet actif</h4>
-                <p className="text-gray-500 mb-6">Activez un projet depuis le Planificateur</p>
+{/* Liste Projets Actifs */}
+<div className="space-y-4 max-h-[350px] overflow-y-auto">
+  {projectStats.active === 0 ? (
+    <div className="text-center py-12...">...</div>
+  ) : (
+    projectStats.activeProjects.map((project) => {
+      const stepGroups = buildProjectSteps(project);
+      
+      // CALCULER LE MONTANT INVESTI
+      const investedAmount = calculateInvestedAmount(project);
+      
+      // CALCULER LE POURCENTAGE DE PROGRESSION
+      const totalBudget = parseFloat(project.totalCost || project.totalcost) || 0;
+      const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+      
+      return (
+        <div key={project.id} className="group border border-gray-200...">
+          {/* En-tête projet */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex-1 mr-4">
+              <h4 className="font-bold text-xl...">{project.name}</h4>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="px-3 py-1 bg-emerald-100...">Actif</span>
+                
+                {/* MONTANT INVESTI (PAYÉ) */}
+                <span className="text-sm font-medium text-gray-700">
+                  {formatCurrency(investedAmount)}
+                </span>
+                
+                {/* POURCENTAGE */}
+                <span className="text-xs text-gray-500">
+                  {progress.toFixed(1)}% payé
+                </span>
+                
+                <span className="text-xs text-gray-500">
+                  {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
+                </span>
               </div>
-            ) : (
-              projectStats.activeProjects.map(project => {
-                const stepGroups = buildProjectSteps(project);
-
-                return (
-                  <div
-                    key={project.id}
-                    className="group border border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-blue-300 transition-all bg-white"
-                  >
-                    {/* En-tête projet */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1 mr-4">
-                        <h4 className="font-bold text-xl text-gray-900 mb-1 line-clamp-1 group-hover:text-blue-700">
-                          {project.name}
-                        </h4>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
-                            💰 Actif
-                          </span>
-                          <span className="text-sm font-medium text-gray-700">
-  {formatCurrency(parseFloat(project.totalcost) || 0)}
-</span>
-                          <span className="text-xs text-gray-500">
-                            {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
-                          </span>
-                        </div>
-                        {project.description && (
-                          <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
-                        )}
-                      </div>
-
-                      {/* ROI rapide */}
-                      <div className="w-28 text-right">
-                        <div className={`text-2xl font-bold ${
-                          ((project.totalrevenues || project.totalRevenues || 0) - 
-                           (project.totalcost || project.totalCost || 0)) >= 0 
-                            ? 'text-emerald-600' 
-                            : 'text-red-600'
-                        }`}>
-                          {project.totalrevenues
-  ? (
-      (parseFloat(project.totalrevenues) / 
-      Math.max(parseFloat(project.totalcost) || 1, 1)) * 100
-    ).toFixed(0)
-  : 0}%
-                        </div>
-                      </div>
-                    </div>
+              
+              {project.description && (
+                <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
+              )}
+            </div>
+            
+            {/* ROI rapide */}
+            <div className="w-28 text-right">
+              <div className={`text-2xl font-bold ${
+                (project.totalrevenues || project.totalRevenues || 0) - (project.totalcost || project.totalCost || 0) > 0
+                  ? 'text-emerald-600'
+                  : 'text-red-600'
+              }`}>
+                {project.totalrevenues
+                  ? ((parseFloat(project.totalrevenues) / Math.max(parseFloat(project.totalcost), 1)) * 100).toFixed(0)
+                  : 0}%
+              </div>
+            </div>
+          </div>
 
                     {/* Suivi par étapes (codes) */}
                     {stepGroups.length > 0 && (

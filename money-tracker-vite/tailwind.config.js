@@ -8,4 +8,8 @@ export default {
     extend: {},
   },
   plugins: [],
+  corePlugins: {
+    // Désactive les propriétés CSS qui causent problème
+    preflight: true,
+  },
 }

@@ -58,6 +58,8 @@ import { formatCurrency } from "./utils/formatters";
 /* ============================================================================
    CONSTANTES
 ============================================================================ */
+// Debug switch to silence noisy console logs in production/dev
+const DEBUG = false;
 const DEFAULT_ACCOUNTS = [
   { name: "Argent Liquide", type: "cash", balance: 0 },
   { name: "MVola", type: "mobile", balance: 0 },
@@ -1100,12 +1102,14 @@ const projectsNetImpact = projectsTotalRevenues - remainingCostSum;
 const projectsForecastCoffre = receivablesForecastCoffre + projectsNetImpact;
 const projectsForecastTotal = receivablesForecastTotal + projectsNetImpact;
 
-console.log('🔍 PROJETS DEBUG:', {
-  'Investissement Global': remainingCostSum.toLocaleString(),
-  'Total Revenues': projectsTotalRevenues.toLocaleString(),
-  'Net Impact': projectsNetImpact.toLocaleString(),
-  projects: activeProjects.map(p => ({ name: p.name, status: p.status }))
-});
+if (DEBUG) {
+  console.log('🔍 PROJETS DEBUG:', {
+    'Investissement Global': remainingCostSum.toLocaleString(),
+    'Total Revenues': projectsTotalRevenues.toLocaleString(),
+    'Net Impact': projectsNetImpact.toLocaleString(),
+    projects: activeProjects.map(p => ({ name: p.name, status: p.status }))
+  });
+}
 
 
   // LOADING STATE

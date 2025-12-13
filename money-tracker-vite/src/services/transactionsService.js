@@ -21,6 +21,7 @@ export const transactionsService = {
       is_planned: transaction.is_planned !== undefined ? transaction.is_planned : (transaction.isPlanned || false),
       is_posted: transaction.is_posted !== undefined ? transaction.is_posted : (transaction.isPosted || false),
       project_id: transaction.project_id || transaction.projectId || null,
+      project_line_id: transaction.project_line_id || transaction.projectLineId || transaction.projectLine || null,
       remarks: transaction.remarks || ""
     };
     
@@ -45,6 +46,7 @@ export const transactionsService = {
       is_planned: updates.is_planned !== undefined ? updates.is_planned : updates.isPlanned,
       is_posted: updates.is_posted !== undefined ? updates.is_posted : updates.isPosted,
       project_id: updates.project_id || updates.projectId,
+      project_line_id: updates.project_line_id || updates.projectLineId || updates.projectLine || undefined,
       remarks: updates.remarks
     };
     

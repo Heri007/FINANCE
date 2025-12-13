@@ -97,7 +97,7 @@ const schemas = {
     // Accepter tous les types définis dans le frontend
     type: Joi.string().valid(
       'ponctuel', 'recurrent', 
-      'PRODUCTFLIP', 'LIVESTOCK', 'FISHING', 'REALESTATE', 'VEHICLE', 'OTHER'
+      'PRODUCTFLIP', 'LIVESTOCK', 'FISHING', 'REALESTATE', 'VEHICLE', 'EXPORT', 'OTHER'
     ).required(),
     
     description: Joi.string().allow('', null).optional(),

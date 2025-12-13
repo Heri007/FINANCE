@@ -12,6 +12,7 @@ router.use(authMiddleware);
 // ============================================================================
 
 router.get('/', projectsController.getProjects);
+router.get('/:id', projectsController.getProjectById);
 router.delete('/:id', projectsController.deleteProject);
 
 // ✅ POST/PUT avec validation
@@ -24,6 +25,7 @@ router.put('/:id', validate('project'), projectsController.updateProject);
 
 // ✅ PATCH simple pour changer uniquement le statut
 router.patch('/:id/status', projectsController.updateProjectStatus);
+ 
 
 // Routes statut existantes
 router.post('/:id/update-status', projectsController.updateProjectStatus);

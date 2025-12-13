@@ -3,10 +3,97 @@ const pool = require('../config/database');
 console.log('🔍 POOL IMPORT:', !!pool, typeof pool);
 
 // ============================================================================
-// 1. GET - Récupérer tous les projets
+// 1. GET - Récupérer tous les projets avec mapping explicite
 // ============================================================================
 exports.getProjects = async (req, res) => {
   try {
+    const result = await pool.query(`
+      SELECT 
+        id,
+        name,
+        description,
+        type,
+        status,
+        start_date,
+        end_date,
+        frequency,
+        occurrences_count,
+        total_cost,
+        total_revenues,
+        net_profit,
+        roi,
+        remaining_budget,
+        total_available,
+        expenses,
+        revenues,
+        allocation,
+        revenue_allocation,
+        created_at,
+        updated_at
+      FROM projects 
+      ORDER BY created_at DESC
+    `);
+    
+    // Mapper manuellement pour garantir la bonne casse
+    const projects = result.rows.map(project => ({
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      type: project.type,
+      status: project.status,
+      startDate: project.start_date,
+      endDate: project.end_date,
+      frequency: project.frequency,
+      occurrencesCount: project.occurrences_count,
+      
+      // CONVERSION EXPLICITE DES MONTANTS
+      totalCost: parseFloat(project.total_cost) || 0,
+      totalRevenues: parseFloat(project.total_revenues) || 0,
+      
+      // Aliases secondaires pour compatibilité
+      totalcost: parseFloat(project.total_cost) || 0,
+      totalrevenues: parseFloat(project.total_revenues) || 0,
+      
+      netProfit: parseFloat(project.net_profit) || 0,
+      roi: parseFloat(project.roi) || 0,
+      remainingBudget: parseFloat(project.remaining_budget) || 0,
+      totalAvailable: parseFloat(project.total_available) || 0,
+      
+      // JSON fields
+      expenses: project.expenses,
+      revenues: project.revenues,
+      allocation: project.allocation,
+      revenueAllocation: project.revenue_allocation,
+      
+      createdAt: project.created_at,
+      updatedAt: project.updated_at
+    }));
+    
+    // DEBUG : Afficher les montants
+    console.log('📊 Projets récupérés:', projects.length);
+    projects.forEach(p => {
+      console.log(`
+  📌 ${p.name}
+     - totalCost: ${p.totalCost} (${typeof p.totalCost})
+     - totalRevenues: ${p.totalRevenues} (${typeof p.totalRevenues})
+     - totalcost: ${p.totalcost} (${typeof p.totalcost})
+     - totalrevenues: ${p.totalrevenues} (${typeof p.totalrevenues})
+      `);
+    });
+    
+    res.json(projects);
+  } catch (error) {
+    console.error('❌ getProjects:', error.message);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+};
+
+// ============================================================================
+// GET - Récupérer un projet par ID
+// ============================================================================
+exports.getProjectById = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
     const result = await pool.query(`
       SELECT 
         id,
@@ -30,14 +117,64 @@ exports.getProjects = async (req, res) => {
         revenue_allocation AS "revenueAllocation",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
-      FROM projects 
-      ORDER BY created_at DESC
-    `);
-    
-    //console.log('📊 Projets récupérés:', result.rows.length);
-    res.json(result.rows);
+      FROM projects WHERE id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Projet non trouvé' });
+    }
+
+    const project = result.rows[0];
+
+    // Attempt to load normalized project lines if tables exist
+    try {
+      const expLines = await pool.query(`
+        SELECT id, description, category, projected_amount, actual_amount, transaction_date, is_paid, created_at
+        FROM project_expense_lines
+        WHERE project_id = $1
+        ORDER BY id ASC
+      `, [id]);
+
+      if (expLines.rows && expLines.rows.length > 0) {
+        project.expenseLines = expLines.rows.map(r => ({
+          id: r.id,
+          description: r.description,
+          category: r.category,
+          projectedAmount: parseFloat(r.projected_amount || 0),
+          actualAmount: parseFloat(r.actual_amount || 0),
+          transactionDate: r.transaction_date,
+          isPaid: !!r.is_paid,
+          createdAt: r.created_at
+        }));
+      }
+
+      const revLines = await pool.query(`
+        SELECT id, description, category, projected_amount, actual_amount, transaction_date, is_received, created_at
+        FROM project_revenue_lines
+        WHERE project_id = $1
+        ORDER BY id ASC
+      `, [id]);
+
+      if (revLines.rows && revLines.rows.length > 0) {
+        project.revenueLines = revLines.rows.map(r => ({
+          id: r.id,
+          description: r.description,
+          category: r.category,
+          projectedAmount: parseFloat(r.projected_amount || 0),
+          actualAmount: parseFloat(r.actual_amount || 0),
+          transactionDate: r.transaction_date,
+          isReceived: !!r.is_received,
+          createdAt: r.created_at
+        }));
+      }
+    } catch (e) {
+      // If tables don't exist or any error occurs, ignore and fall back to JSON fields
+      console.warn('⚠️ Normalized project lines not available or failed to load:', e.message);
+    }
+
+    res.json(project);
   } catch (error) {
-    console.error('❌ getProjects:', error.message);
+    console.error('❌ getProjectById:', error.message);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
@@ -225,74 +362,11 @@ exports.updateProjectStatus = async (req, res) => {
         validStatuses 
       });
     }
-
+    // Mise à jour simple du statut uniquement
     const result = await pool.query(
-  `UPDATE projects 
-   SET 
-     name               = $1,
-     description        = $2,
-     type               = $3,
-     status             = $4,
-     start_date         = $5,
-     end_date           = $6,
-     frequency          = $7,
-     occurrences_count  = $8,
-     total_cost         = $9,
-     total_revenues     = $10,
-     net_profit         = $11,
-     roi                = $12,
-     remaining_budget   = $13,
-     total_available    = $14,
-     expenses           = $15::jsonb,
-     revenues           = $16::jsonb,
-     allocation         = $17::jsonb,
-     revenue_allocation = $18::jsonb,
-     updated_at         = NOW()
-   WHERE id = $19
-   RETURNING 
-     id,
-     name,
-     description,
-     type,
-     status,
-     start_date AS "startDate",
-     end_date AS "endDate",
-     frequency,
-     occurrences_count AS "occurrencesCount",
-     total_cost AS "totalCost",
-     total_revenues AS "totalRevenues",
-     net_profit AS "netProfit",
-     roi,
-     remaining_budget AS "remainingBudget",
-     total_available AS "totalAvailable",
-     expenses,
-     revenues,
-     allocation,
-     revenue_allocation AS "revenueAllocation",
-     created_at AS "createdAt",
-     updated_at AS "updatedAt"`,
-  [
-    name,
-    description,
-    type,
-    finalStatus,
-    startDate || null,
-    endDate || null,
-    frequency || null,
-    occCount,
-    parseFloat(totalCost || 0),
-    parseFloat(totalRevenues || 0),
-    parseFloat(netProfit || 0),
-    parseFloat(roi || 0),
-    parseFloat(remainingBudget || 0),
-    parseFloat(totalAvailable || 0),
-    JSON.stringify(expenses || []),
-    JSON.stringify(revenues || []),
-    JSON.stringify(allocation || {}),
-    JSON.stringify(finalRevenueAllocation || {}),
-    id,
-  ]
-);
+      'UPDATE projects SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, id]
+    );
 
     if (!result.rows[0]) {
       return res.status(404).json({ error: 'Projet non trouvé' });
@@ -368,7 +442,6 @@ exports.toggleProjectActive = async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
-
 // ============================================================================
 // 8. POST - Archiver un projet
 // ============================================================================
