@@ -3,7 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const authMiddleware = require('../middleware/auth');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
-const Joi = require('joi');
+// const Joi = require('joi'); // unused
 
 // Rate limiting : 5 tentatives de PIN par minute et par IP
 const pinLimiter = new RateLimiterMemory({

@@ -108,7 +108,7 @@ async function initializeDatabase() {
     // - JSONB (expenses, revenues, allocation...) pour stocker les détails
     // - accounts_snapshot : état des comptes au moment de l’activation
     // -------------------------------------------------------------------------
-    await pool.query(`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS projects (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,

@@ -292,7 +292,7 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN');
 
-    const truncateStatements = [];
+    // const truncateStatements = []; // not used
 for (const acc of backup.accounts) {
   await client.query(
     `INSERT INTO accounts (id, name, balance, type, created_at, updated_at)

@@ -1,15 +1,11 @@
 // scripts/import-plg-flpt-from-csv.js
 // Usage : node scripts/import-plg-flpt-from-csv.js
 
-import fs from 'fs';
-import path from 'path';
-import { parse } from 'csv-parse';
-import { fileURLToPath } from 'url';
+const fs = require('fs');
+const path = require('path');
+const { parse } = require('csv-parse');
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// chemins
+// chemins (CommonJS __dirname available)
 const csvDir = path.join(__dirname, '..', 'csv');
 const csvPath = path.join(csvDir, 'PLG-FLPT.csv');
 const jsonOutPath = path.join(csvDir, 'PLG-FLPT-expenses.json');

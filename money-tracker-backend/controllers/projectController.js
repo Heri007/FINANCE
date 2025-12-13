@@ -38,9 +38,6 @@ exports.getProjects = async (req, res) => {
     
     // ✅ Log pour debugging
     console.log('📊 Projets récupérés:', result.rows.length);
-    if (result.rows.length > 0) {
-    }
-    
     res.json(result.rows);
   } catch (error) {
     console.error('❌ getProjects:', error.message);
@@ -134,6 +131,9 @@ exports.createProject = async (req, res) => {
         JSON.stringify(finalRevenueAllocation || {}),
       ]
     );
+
+    // Retourner le projet créé
+    return res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('❌ CREATE project:', error);
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
@@ -249,72 +249,9 @@ exports.updateProjectStatus = async (req, res) => {
     }
 
     const result = await pool.query(
-  `UPDATE projects 
-   SET 
-     name               = $1,
-     description        = $2,
-     type               = $3,
-     status             = $4,
-     start_date         = $5,
-     end_date           = $6,
-     frequency          = $7,
-     occurrences_count  = $8,
-     total_cost         = $9,
-     total_revenues     = $10,
-     net_profit         = $11,
-     roi                = $12,
-     remaining_budget   = $13,
-     total_available    = $14,
-     expenses           = $15::jsonb,
-     revenues           = $16::jsonb,
-     allocation         = $17::jsonb,
-     revenue_allocation = $18::jsonb,
-     updated_at         = NOW()
-   WHERE id = $19
-   RETURNING 
-     id,
-     name,
-     description,
-     type,
-     status,
-     start_date AS "startDate",
-     end_date AS "endDate",
-     frequency,
-     occurrences_count AS "occurrencesCount",
-     total_cost AS "totalCost",
-     total_revenues AS "totalRevenues",
-     net_profit AS "netProfit",
-     roi,
-     remaining_budget AS "remainingBudget",
-     total_available AS "totalAvailable",
-     expenses,
-     revenues,
-     allocation,
-     revenue_allocation AS "revenueAllocation",
-     created_at AS "createdAt",
-     updated_at AS "updatedAt"`,
-  [
-    name,
-    description,
-    type,
-    finalStatus,
-    startDate || null,
-    endDate || null,
-    frequency || null,
-    occCount,
-    parseFloat(totalCost || 0),
-    parseFloat(totalRevenues || 0),
-    parseFloat(netProfit || 0),
-    parseFloat(roi || 0),
-    parseFloat(remainingBudget || 0),
-    parseFloat(totalAvailable || 0),
-    JSON.stringify(expenses || []),
-    JSON.stringify(revenues || []),
-    JSON.stringify(allocation || {}),
-    JSON.stringify(finalRevenueAllocation || {}),
-    id,
-  ]
-);
+      'UPDATE projects SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, id]
+    );
 
     if (!result.rows[0]) {
       return res.status(404).json({ error: 'Projet non trouvé' });
@@ -336,6 +273,7 @@ exports.deleteProject = async (req, res) => {
       'DELETE FROM projects WHERE id=$1 RETURNING id',
       [req.params.id]
     );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Projet non trouvé' });
     res.json({ success: true });
   } catch (error) {
     console.error('❌ DELETE:', error);

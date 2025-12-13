@@ -53,11 +53,13 @@ async function main() {
 
     await pool.end();
     process.exit(0);
-  } catch (err) {
+    } catch (err) {
     console.error('❌ Erreur lors de l’extraction:', err);
     try {
       await pool.end();
-    } catch {}
+    } catch (e) {
+      console.warn('Erreur lors de pool.end():', e.message);
+    }
     process.exit(1);
   }
 }

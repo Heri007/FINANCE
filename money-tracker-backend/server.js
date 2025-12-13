@@ -12,7 +12,6 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const { loadAccountIds } = require('./config/accounts');
 
 // Imports Config & Middleware
@@ -24,6 +23,14 @@ const authenticateToken = require('./middleware/auth').authenticateToken || requ
 const app = express();
 const PORT = process.env.PORT || 5002;
 
+// -----------------------------------------------------------------------------
+// Sécurité : Exiger la présence de JWT_SECRET au démarrage
+// -----------------------------------------------------------------------------
+if (!process.env.JWT_SECRET) {
+  logger.error('FATAL: JWT_SECRET is not set. Aborting startup.');
+  console.error('FATAL: JWT_SECRET is not set. Set it in environment and restart.');
+  process.exit(1);
+}
 // -----------------------------------------------------------------------------
 // MIDDLEWARE GLOBAL
 // -----------------------------------------------------------------------------
@@ -111,7 +118,7 @@ app.listen(PORT, () => {
   logger.info(`✅ Serveur démarré sur http://localhost:${PORT}`);
   
   // Test de connexion à la base
-  pool.query('SELECT NOW()', async (err, result) => {
+  pool.query('SELECT NOW()', async (err, _result) => {
     if (err) {
       logger.error('❌ Erreur critique de connexion à PostgreSQL:', { error: err.message });
     } else {

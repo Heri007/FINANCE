@@ -1,5 +1,5 @@
 // middleware/errorHandler.js
-const errorHandler = (err, req, res, next) => {
+const errorHandler = (err, req, res, _next) => {
   console.error('Erreur globale:', err);
   
   // Erreur PostgreSQL
