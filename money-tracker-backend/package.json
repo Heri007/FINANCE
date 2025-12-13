@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "lint": "eslint . --ext .js"
   },
   "keywords": [],
   "author": "",
@@ -21,12 +22,13 @@
     "express-rate-limit": "^8.2.1",
     "express-validator": "^7.3.1",
     "joi": "^18.0.2",
-    "jsonwebtoken": "^9.0.2",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.16.3",
     "rate-limiter-flexible": "^9.0.0",
     "winston": "^3.18.3"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
     "nodemon": "^3.0.1"
   }
 }
