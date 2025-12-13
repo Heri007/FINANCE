@@ -1,26 +1,20 @@
-// ProjectPlannerModal.jsx - Version complète avec Bois + PLG 3 phases
-import React, { useState, useMemo, useEffect } from 'react';
+// src/ProjectPlannerModal.jsx - VERSION FUSIONNÉE (Finance + Operator)
+
+import React, { useState, useEffect, useMemo } from 'react';
 import {
-  X,
-  Plus,
-  Trash2,
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Calculator,
-  Repeat,
-  Save,
-  Download,
-  Flame,
-  Anchor,
-  AlertCircle,
-  CheckCircle,
-  Copy,
+  X, Plus, Trash2, DollarSign, TrendingUp, TrendingDown,
+  Save, FileText, CheckCircle, Zap, Copy, Flame, Anchor, Download
 } from 'lucide-react';
-import { formatCurrency } from './utils/formatters';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
+import { v4 as uuidv4 } from 'uuid';
+
+// Services & Utils
 import { projectsService } from './services/projectsService';
-import { CalculatorInput } from './components/common/CalculatorInput';
+import { operatorService } from './services/operatorService';
 import { transactionsService } from './services/transactionsService';
+import { formatCurrency } from './utils/formatters';
+import { CalculatorInput } from './components/common/CalculatorInput';
 import { normalizeDate } from './utils/transactionUtils';
 
 export function ProjectPlannerModal({
@@ -29,1035 +23,595 @@ export function ProjectPlannerModal({
   accounts = [],
   project = null,
   onProjectSaved = null,
-  onProjectUpdated = null,
-  existingTransactions = []
+  onProjectUpdated = null
 }) {
   // --- ÉTATS DU FORMULAIRE ---
   const [projectName, setProjectName] = useState('');
-  const [projectDescription, setProjectDescription] = useState('');
-  const [projectType, setProjectType] = useState('ponctuel');
-  const [startDate, setStartDate] = useState(
-    new Date().toISOString().split('T')[0]
-  );
-  const [endDate, setEndDate] = useState('');
-  const [frequency, setFrequency] = useState('weekly');
-  const [occurrencesCount, setOccurrencesCount] = useState(12);
+  const [description, setDescription] = useState('');
+  const [projectType, setProjectType] = useState('PRODUCTFLIP');
+  const [status, setStatus] = useState('active');
+  const [startDate, setStartDate] = useState(new Date());
+  const [endDate, setEndDate] = useState(null);
+  
+  // Financier (Lignes détaillées)
+  const [expenses, setExpenses] = useState([]);
+  const [revenues, setRevenues] = useState([]);
+  
+  // États Operator
+  const [relatedSOPs, setRelatedSOPs] = useState([]);
+  const [relatedTasks, setRelatedTasks] = useState([]);
+  const [showSOPSection, setShowSOPSection] = useState(true);
+  const [showTaskSection, setShowTaskSection] = useState(true);
+  
+  const [loading, setLoading] = useState(false);
+  const [loadingOperational, setLoadingOperational] = useState(false);
 
-  const [expenses, setExpenses] = useState([
-    { category: '', amount: 0, account: '', isRecurring: false, description: '' },
-  ]);
-
-  const [revenues, setRevenues] = useState([
-    { description: '', amount: 0, date: '', account: '', isRecurring: false, volume: 0 },
-  ]);
-
-  // Phases (pour PLG seulement, sans impacter Bois)
-  const [currentPhase, setCurrentPhase] = useState('investissement');
-  const phases = ['investissement', 'logistique', 'ventes'];
-
-  const phaseLabels = {
-    investissement: 'Investissement (Payé)',
-    logistique: 'Logistique Future',
-    ventes: 'Ventes Prévisionnelles',
-  };
-
-  // --- CHARGEMENT INITIAL (édition projet) ---
+  // --- CHARGEMENT INITIAL ---
   useEffect(() => {
-    if (project && project.id) {
+    if (project) {
       setProjectName(project.name || '');
-      setProjectDescription(project.description || '');
-      setProjectType(project.type || 'ponctuel');
-      setStartDate(
-        project.startDate ||
-          project.start_date ||
-          new Date().toISOString().split('T')[0]
-      );
-      setEndDate(project.endDate || project.end_date || '');
-      setFrequency(project.frequency || 'weekly');
-      setOccurrencesCount(
-        project.occurrencesCount || project.occurrences_count || 12
-      );
-
-      const parseData = (data) => {
+      setDescription(project.description || '');
+      setProjectType(project.type || 'PRODUCTFLIP');
+      setStatus(project.status || 'active');
+      setStartDate(project.startDate ? new Date(project.startDate) : new Date());
+      setEndDate(project.endDate ? new Date(project.endDate) : null);
+      
+      const parseList = (data) => {
         if (!data) return [];
-        if (typeof data === 'string') {
-          try {
-            return JSON.parse(data);
-          } catch {
-            return [];
-          }
-        }
         if (Array.isArray(data)) return data;
-        return [];
+        try { return JSON.parse(data); } catch { return []; }
       };
 
-      const loadedExpenses = parseData(project.expenses);
-      const loadedRevenues = parseData(project.revenues);
+      // Restauration des lignes avec ID et Dates
+      const loadedExpenses = parseList(project.expenses).map(e => ({
+        ...e, 
+        id: e.id || uuidv4(),
+        date: e.date ? new Date(e.date) : new Date(),
+        amount: parseFloat(e.amount) || 0
+      }));
+      
+      const loadedRevenues = parseList(project.revenues).map(r => ({
+        ...r,
+        id: r.id || uuidv4(),
+        date: r.date ? new Date(r.date) : new Date(),
+        amount: parseFloat(r.amount) || 0
+      }));
 
-      setExpenses(
-        loadedExpenses.length > 0
-          ? loadedExpenses
-          : [{ category: '', amount: 0, account: '', description: '' }]
-      );
-      setRevenues(
-        loadedRevenues.length > 0
-          ? loadedRevenues
-          : [{ description: '', amount: 0, account: '', volume: 0 }]
-      );
+      setExpenses(loadedExpenses);
+      setRevenues(loadedRevenues);
+
+      // Chargement Operator
+      loadOperationalData(project.id);
     } else {
-      // Nouveau projet : reset simple
+      // Reset
       setProjectName('');
-      setProjectDescription('');
-      setProjectType('ponctuel');
-      setStartDate(new Date().toISOString().split('T')[0]);
-      setEndDate('');
-      setFrequency('weekly');
-      setOccurrencesCount(12);
-      setExpenses([
-        { category: '', amount: 0, account: '', isRecurring: false, description: '' },
-      ]);
-      setRevenues([
-        { description: '', amount: 0, date: '', account: '', isRecurring: false, volume: 0 },
-      ]);
-      setCurrentPhase('investissement');
+      setDescription('');
+      setProjectType('PRODUCTFLIP');
+      setStatus('active');
+      setStartDate(new Date());
+      setExpenses([]);
+      setRevenues([]);
+      setRelatedSOPs([]);
+      setRelatedTasks([]);
     }
-  }, [project]);
+  }, [project, isOpen]);
 
-  // --- CALCULS GLOBAUX (Basés UNIQUEMENT sur le COFFRE) ---
-const totalAvailable = useMemo(() => {
-  // On cherche le compte "Coffre" par nom (insensible à la casse) ou par ID si connu (5)
-  const coffreAccount = accounts.find(acc => 
-    (acc.name && acc.name.toLowerCase().includes('coffre')) || acc.id === 5
-  );
-  
-  return coffreAccount ? parseFloat(coffreAccount.balance || 0) : 0;
-}, [accounts]);
+  // ✅ CHARGEMENT ROBUSTE DES SOPs ET TÂCHES
+  const loadOperationalData = async (projectId) => {
+      setLoadingOperational(true);
+      try {
+        const [allSOPs, allTasks] = await Promise.all([
+          operatorService.getSOPs(),
+          operatorService.getTasks()
+        ]);
 
+        console.log("📥 Données brutes chargées :", allSOPs.length, "SOPs,", allTasks.length, "Tâches");
 
-  const totalProjectCost = useMemo(() => {
-    return expenses.reduce((sum, exp) => {
-      const multiplier =
-        projectType === 'recurrent' && exp.isRecurring
-          ? occurrencesCount
-          : 1;
-      return sum + (parseFloat(exp.amount || 0) * multiplier);
-    }, 0);
-  }, [expenses, occurrencesCount, projectType]);
+        // 1. Filtrer les Tâches
+        // On convertit tout en String pour éviter les erreurs de type (24 vs "24")
+        const linkedTasks = allTasks.filter(
+          task => String(task.projectid || task.projectId) === String(projectId)
+        );
+        setRelatedTasks(linkedTasks);
 
-  const totalRevenues = useMemo(() => {
-    return revenues.reduce((sum, rev) => {
-      const multiplier =
-        projectType === 'recurrent' && rev.isRecurring
-          ? occurrencesCount
-          : 1;
-      return sum + (parseFloat(rev.amount || 0) * multiplier);
-    }, 0);
-  }, [revenues, occurrencesCount, projectType]);
+        // 2. Filtrer les SOPs
+        // ASTUCE : Si le projet contient "Natiora" ou "Élevage", on affiche TOUTES les SOPs d'élevage
+        // Cela force l'affichage même si les liens sont cassés
+        const isLivestockProject = 
+            (project?.type === 'LIVESTOCK') || 
+            (project?.name || '').toLowerCase().includes('élevage') ||
+            (project?.name || '').toLowerCase().includes('natiora');
 
-  const netProfit = totalRevenues - totalProjectCost;
-  const roi =
-    totalProjectCost > 0 ? (netProfit / totalProjectCost) * 100 : 0;
-  const remainingBudget = totalAvailable - totalProjectCost;
-  const isFeasible = remainingBudget >= 0;
+        let linkedSOPs = [];
 
-  // --- GESTION LIGNES DÉPENSES ---
-  const addExpense = () =>
-    setExpenses([
-      ...expenses,
-      {
-        category: '',
-        amount: 0,
-        account: '',
-        isRecurring: false,
-        description: '',
-      },
-    ]);
+        if (isLivestockProject) {
+            // On prend tout ce qui ressemble à de l'élevage ou de l'infra
+            linkedSOPs = allSOPs.filter(s => 
+                s.category === 'Élevage' || 
+                s.category === 'Infrastructure' || 
+                s.category === 'Logistique' ||
+                s.category === 'Vente'
+            );
+        } else {
+            // Sinon filtre classique par tâche
+            const sopsUsedInTasks = new Set(linkedTasks.map(t => t.sopid).filter(Boolean));
+            linkedSOPs = allSOPs.filter(s => sopsUsedInTasks.has(s.id));
+        }
 
-  const duplicateExpense = (index) =>
-    setExpenses([...expenses, { ...expenses[index] }]);
+        console.log(`🎯 Résultat pour projet ${projectId}: ${linkedTasks.length} tâches, ${linkedSOPs.length} SOPs`);
+        
+        setRelatedSOPs(linkedSOPs);
 
-  const removeExpense = (index) =>
-    setExpenses(expenses.filter((_, i) => i !== index));
+        // Forcer l'affichage des sections
+        if (linkedSOPs.length > 0) setShowSOPSection(true);
+        if (linkedTasks.length > 0) setShowTaskSection(true);
 
-  const updateExpense = (index, field, value) => {
-    const updated = [...expenses];
-    updated[index][field] = value;
-    setExpenses(updated);
+      } catch (error) {
+        console.error('Erreur chargement données opérationnelles', error);
+      } finally {
+        setLoadingOperational(false);
+      }
   };
 
-  const finalTotalIfCompleted = totalAvailable + (totalRevenues - totalProjectCost);
+  // Modifier aussi le useEffect pour appeler cette fonction correctement
+  useEffect(() => {
+    if (isOpen && project?.id) {
+      loadOperationalData(project.id);
+    }
+  }, [isOpen, project]);
 
-  // --- GESTION LIGNES REVENUS ---
-  const addRevenue = () =>
-    setRevenues([
-      ...revenues,
-      {
-        description: '',
-        amount: 0,
-        date: '',
-        account: '',
-        isRecurring: false,
-        volume: 0,
-      },
-    ]);
+  // --- ACTIONS FINANCIÈRES (Payer / Encaisser) ---
 
-  const removeRevenue = (index) =>
-    setRevenues(revenues.filter((_, i) => i !== index));
+  const handlePayerDepense = async (exp, index) => {
+    try {
+      if (!exp.account) return alert('Choisis un compte pour cette dépense');
+      
+      const accountObj = accounts.find(a => a.name === exp.account);
+      if (!accountObj) return alert('Compte introuvable');
 
-  const updateRevenue = (index, field, value) => {
-    const updated = [...revenues];
-    updated[index][field] = value;
-    setRevenues(updated);
+      if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) return;
+
+      // 1. Créer la transaction réelle
+      await transactionsService.createTransaction({
+        type: 'expense',
+        amount: parseFloat(exp.amount),
+        category: exp.category || 'Projet',
+        description: `${projectName} - ${exp.description}`,
+        date: new Date().toISOString().split('T')[0],
+        account_id: accountObj.id,
+        project_id: project?.id || null,
+        is_posted: true,   // ✅ IMPORTANT: Marquer comme payé
+        is_planned: false  // ✅ Ce n'est plus une prévision
+      });
+
+      // 2. Mettre à jour la ligne dans le projet (isPaid = true)
+      const updated = [...expenses];
+      updated[index] = { ...updated[index], isPaid: true };
+      setExpenses(updated);
+
+      // 3. Sauvegarder le projet silencieusement pour persister l'état "Payé"
+      await saveProjectState(updated, revenues);
+
+      if (onProjectUpdated) onProjectUpdated();
+      alert('Dépense payée et enregistrée !');
+
+    } catch (error) {
+      console.error(error);
+      alert('Erreur paiement: ' + error.message);
+    }
   };
 
   const handleEncaisser = async (rev, index) => {
-  try {
-    if (!rev.account) {
-      alert('Choisis un compte pour encaisser ce revenu');
-      return;
-    }
-
-    const confirmMsg = `Encaisser maintenant ${rev.amount} Ar sur le compte "${rev.account}" ?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    const accountObj = accounts.find(a => a.name === rev.account);
-    if (!accountObj) {
-      alert('Compte introuvable pour ce revenu');
-      return;
-    }
-
-    const txPayload = {
-      type: 'income',
-      amount: parseFloat(rev.amount || 0),
-      category: 'PLG FLPT - Revenus',
-      description: rev.description || `Encaissement projet ${projectName}`,
-      date: normalizeDate(rev.date) || new Date().toISOString().split('T')[0],
-      accountId: accountObj.id,
-      projectId: project?.id ?? null,
-      is_posted: true, // ✅ AJOUTER CETTE LIGNE
-      is_planned: false // ✅ ET CELLE-CI POUR ÊTRE SÛR
-    };
-
-    await transactionsService.createTransaction(txPayload);
-
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: true };
-    setRevenues(updated);
-
-    if (onProjectUpdated) onProjectUpdated(project?.id);
-    alert('Revenu encaissé avec succès.');
-  } catch (error) {
-    console.error('Erreur encaissement:', error);
-    alert('Erreur lors de l’encaissement: ' + (error.message || ''));
-  }
-};
-
-  const handlePayerDepense = async (exp, index) => {
-  try {
-    if (!exp.account) {
-      alert('Choisis un compte pour cette dépense');
-      return;
-    }
-
-    const confirmMsg = `Payer maintenant ${exp.amount} Ar depuis le compte "${exp.account}" ?`;
-    if (!window.confirm(confirmMsg)) return;
-
-    const accountObj = accounts.find(a => a.name === exp.account);
-if (!accountObj) {
-  alert('Compte introuvable pour cette dépense');
-  return;
-}
-
-const txPayload = {
-  type: 'expense',
-  amount: parseFloat(exp.amount || 0),
-  category: exp.category || 'Autres',
-  description: exp.description || `Dépense projet ${projectName}`,
-  date: new Date().toISOString().split('T')[0],
-  accountId: accountObj.id,
-  projectId: project?.id ?? null,
-  is_posted: true, // ✅ AJOUTER CETTE LIGNE
-  is_planned: false // ✅ ET CELLE-CI POUR ÊTRE SÛR
-};
-
-console.log('📤 TX PAYLOAD DEPENSE:', txPayload);
-await transactionsService.createTransaction(txPayload);
-
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: true };
-    setExpenses(updated);
-
-    if (onProjectUpdated) onProjectUpdated(project?.id);
-    alert('Dépense enregistrée comme payée.');
-  } catch (error) {
-    console.error('Erreur paiement dépense:', error);
-    alert('Erreur lors de l’enregistrement de la dépense: ' + (error.message || ''));
-  }
-};
-
-
-  // 👇 ICI, DANS LE CORPS DU COMPOSANT
-  const loadPLGFromJson = async () => {
     try {
-      const res = await fetch('/plg/PLG-FLPT-expenses.json', {
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-      });
-      if (!res.ok) throw new Error('Impossible de charger le JSON PLG');
-      const data = await res.json();
+      if (!rev.account) return alert('Choisis un compte pour encaisser');
+      
+      const accountObj = accounts.find(a => a.name === rev.account);
+      if (!accountObj) return alert('Compte introuvable');
 
-      if (!Array.isArray(data) || data.length === 0) {
-        alert('JSON PLG vide ou invalide');
-        return;
+      if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) return;
+
+      await transactionsService.createTransaction({
+        type: 'income',
+        amount: parseFloat(rev.amount),
+        category: 'Projet - Revenu',
+        description: `${projectName} - ${rev.description}`,
+        date: new Date().toISOString().split('T')[0],
+        account_id: accountObj.id,
+        project_id: project?.id || null,
+        is_posted: true,
+        is_planned: false
+      });
+
+      const updated = [...revenues];
+      updated[index] = { ...updated[index], isPaid: true };
+      setRevenues(updated);
+
+      await saveProjectState(expenses, updated);
+
+      if (onProjectUpdated) onProjectUpdated();
+      alert('Revenu encaissé !');
+
+    } catch (error) {
+      console.error(error);
+      alert('Erreur encaissement: ' + error.message);
+    }
+  };
+
+  // Fonction utilitaire pour sauvegarder l'état sans fermer le modal
+  const saveProjectState = async (currentExpenses, currentRevenues) => {
+    if (!project?.id) return; // Ne marche que si le projet existe déjà
+    const payload = {
+      expenses: JSON.stringify(currentExpenses),
+      revenues: JSON.stringify(currentRevenues)
+    };
+    await projectsService.updateProject(project.id, payload);
+  };
+
+  // --- GESTION LIGNES ---
+  const updateExpense = (id, field, value) => {
+    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+  const updateRevenue = (id, field, value) => {
+    setRevenues(revenues.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+  const removeExpense = (id) => setExpenses(expenses.filter(e => e.id !== id));
+  const removeRevenue = (id) => setRevenues(revenues.filter(r => r.id !== id));
+  
+  const duplicateExpense = (idx) => {
+    const item = expenses[idx];
+    setExpenses([...expenses, { ...item, id: uuidv4(), isPaid: false }]);
+  };
+
+  // --- TEMPLATES ---
+  const applyTemplate = (template) => {
+    if (expenses.length > 0 && !window.confirm("Écraser les données actuelles ?")) return;
+    setProjectName(template.name);
+    setProjectType(template.type);
+    setDescription(template.description);
+    setExpenses(template.expenses);
+    setRevenues(template.revenues);
+  };
+
+  const templates = {
+    productFlip: {
+      name: "Achat/Revente Rapide",
+      type: "PRODUCTFLIP",
+      description: "Achat de stock pour revente immédiate.",
+      expenses: [{ id: uuidv4(), description: "Achat Stock", amount: 500000, category: "Achat", date: new Date(), account: "Coffre" }],
+      revenues: [{ id: uuidv4(), description: "Vente Client", amount: 750000, category: "Vente", date: new Date(), account: "Coffre" }]
+    },
+    // ... ajoutez vos autres templates ici (PLG, Bois, etc.)
+  };
+
+  // --- CALCULS ---
+  const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+  const netProfit = totalRevenues - totalExpenses;
+  const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : 0;
+  
+  const totalAvailable = useMemo(() => {
+    return accounts.reduce((sum, acc) => sum + parseFloat(acc.balance || 0), 0);
+  }, [accounts]);
+  
+  const remainingBudget = totalAvailable - totalExpenses;
+
+  // --- SAUVEGARDE FINALE ---
+  const handleSave = async () => {
+    if (!projectName) return alert("Le nom est obligatoire");
+    
+    setLoading(true);
+    try {
+      const payload = {
+        name: projectName,
+        description,
+        type: projectType,
+        status,
+        startDate: startDate.toISOString(),
+        endDate: endDate ? endDate.toISOString() : null,
+        totalCost: totalExpenses,
+        totalRevenues: totalRevenues,
+        netProfit,
+        roi,
+        remainingBudget,
+        totalAvailable,
+        expenses: JSON.stringify(expenses),
+        revenues: JSON.stringify(revenues)
+      };
+
+      if (project?.id) {
+        await projectsService.updateProject(project.id, payload);
+      } else {
+        await projectsService.createProject(payload);
       }
 
-      setProjectName('PLG FLPT - Campagne Pêche Complete');
-      setProjectDescription(
-        'Investissements déjà réalisés + logistique future + ventes prévues.'
-      );
-      setProjectType('ponctuel');
-      setFrequency('weekly');
-      setOccurrencesCount(1);
-      setCurrentPhase('logistique');
-
-      setExpenses(data);
-
-      setRevenues([
-        { description: 'Concombres Mer Total', amount: 15000000, phase: 'ventes' },
-        { description: 'Poissons Total', amount: 25000000, phase: 'ventes' },
-      ]);
-    } catch (err) {
-      console.error('Erreur chargement JSON PLG:', err);
-      alert('Erreur chargement JSON PLG: ' + err.message);
+      if (onProjectSaved) onProjectSaved();
+      onClose();
+    } catch (e) {
+      alert("Erreur sauvegarde: " + e.message);
+    } finally {
+      setLoading(false);
     }
   };
-
-  // --- TEMPLATE ACHAT / REVENTE PRODUIT ---
-  const loadProductFlipTemplate = () => {
-    if (!window.confirm('Remplacer les données actuelles ?')) return;
-
-    setProjectName('Flip Voiture / Marchandises');
-    setProjectDescription(
-      "Projet d'achat puis revente d'un produit (voiture, marchandises...) avec calcul du bénéfice."
-    );
-    setProjectType('ponctuel');
-    setFrequency('weekly');
-    setOccurrencesCount(1);
-
-    // Exemple générique : à adapter selon ton cas réel
-    setExpenses([
-      {
-        category: 'Achat Produit',
-        amount: 15000000,
-        account: 'Coffre',
-        isRecurring: false,
-        description: 'Prix d’achat du produit',
-      },
-      {
-        category: 'Frais Annexes',
-        amount: 500000,
-        account: '',
-        isRecurring: false,
-        description: 'Frais de dossier / carte grise / transport',
-      },
-    ]);
-
-    setRevenues([
-      {
-        description: 'Revente du produit',
-        amount: 19000000,
-        date: '',
-        account: '',
-        isRecurring: false,
-        volume: 1,
-      },
-    ]);
-  };
-
-  // --- TEMPLATE BOIS (inchangé) ---
-  const loadFirewoodTemplate = () => {
-    if (!window.confirm('Remplacer les données actuelles ?')) return;
-
-    setProjectName('Business Bois de Chauffage');
-    setProjectDescription(
-      'Ventes hebdomadaires de bois de chauffage avec stock initial.'
-    );
-    setProjectType('recurrent');
-    setFrequency('weekly');
-    setOccurrencesCount(12);
-
-    setExpenses([
-      {
-        category: 'Stock',
-        amount: 10000000,
-        account: 'Coffre',
-        isRecurring: false,
-        description: 'Achat Stock Initial',
-      },
-      {
-        category: 'Logistique',
-        amount: 105000,
-        account: '',
-        isRecurring: true,
-        description: 'Manutention',
-      },
-      {
-        category: 'Carburant',
-        amount: 50000,
-        account: '',
-        isRecurring: true,
-        description: 'Gasoil',
-      },
-      {
-        category: "Main d'œuvre",
-        amount: 30000,
-        account: '',
-        isRecurring: true,
-        description: 'Chargement',
-      },
-    ]);
-
-    setRevenues([
-      {
-        description: 'Vente bois 30 m³',
-        amount: 1800000,
-        isRecurring: true,
-        volume: 30,
-      },
-    ]);
-  };
-
-  // --- IMPORT DES TRANSACTIONS EXISTANTES (PLG déjà payées) ---
-  const importExistingTransactions = () => {
-    const txs =
-      existingTransactions.length > 0
-        ? existingTransactions
-        : [
-            {
-              description: '@DELAH',
-              amount: 72000,
-              category: 'PLG FLPT',
-              date: '2025-11-13',
-            },
-            {
-              description: 'Frais M/va -> T/ve @DELAH @ZOKINY',
-              amount: 143600,
-              category: 'PLG FLPT',
-              date: '2025-11-24',
-            },
-            {
-              description: '@TSIKIVY @DELAH',
-              amount: 178600,
-              category: 'PLG FLPT',
-              date: '2025-11-29',
-            },
-            {
-              description: '@DELAH',
-              amount: 2150,
-              category: 'PLG FLPT',
-              date: '2025-12-01',
-            },
-            {
-              description: 'DEPART @DELAH',
-              amount: 608200,
-              category: 'PLG FLPT',
-              date: '2025-12-02',
-            },
-          ];
-
-    const newExpenses = txs.map((tx) => ({
-      category: 'Dépense Réelle',
-      description: `${tx.description} (${tx.date})`,
-      amount: parseFloat(tx.amount),
-      account: 'Déjà Payé',
-      isRecurring: false,
-      phase: 'investissement',
-    }));
-
-    setExpenses((prev) => [...prev, ...newExpenses]);
-  };
-
-  // --- SAUVEGARDE ---
-  const handleSaveProject = async () => {
-  try {
-    if (!projectName.trim()) {
-      return alert("Nom du projet requis");
-    }
-
-    if (expenses.length === 0) {
-      return alert("Aucune dépense définie");
-    }
-
-    // Allocation dépenses par compte
-    const allocation = {};
-    expenses.forEach((exp) => {
-      const acc = exp.account || "Non spécifié";
-      allocation[acc] = (allocation[acc] || 0) + (parseFloat(exp.amount) || 0);
-    });
-
-    // Allocation revenus par compte
-    const revenueAllocation = {};
-    revenues.forEach((rev) => {
-      const acc = rev.account || "Non spécifié";
-      revenueAllocation[acc] =
-        (revenueAllocation[acc] || 0) + (parseFloat(rev.amount) || 0);
-    });
-
-    const startISO = startDate || new Date().toISOString().split("T")[0];
-    const endISO = endDate || null;
-
-    const payload = {
-      // ⚠️ Utiliser les BONNES variables d’état
-      name: projectName,
-      description: projectDescription,      // ✅ pas `description`
-      type: projectType,
-      status: "active",
-
-      // dates (double nommage si tu dois gérer legacy)
-      startDate: startISO,
-      start_date: startISO,
-      endDate: endISO,
-      end_date: endISO,
-
-      frequency,
-      occurrencesCount,
-      occurrences_count: occurrencesCount,
-
-      totalCost: totalProjectCost,
-      total_cost: totalProjectCost,
-      totalRevenues,
-      total_revenues: totalRevenues,
-      netProfit,
-      net_profit: netProfit,
-      roi,
-      remainingBudget,
-      remaining_budget: remainingBudget,
-      totalAvailable,
-      total_available: totalAvailable,
-
-      // ✅ envoyer des arrays / objets natifs, pas des strings
-      expenses,           // tableau d’objets
-      revenues,           // tableau d’objets
-      allocation,         // objet { compte: montant }
-      revenueAllocation,  // idem
-      revenue_allocation: revenueAllocation,
-    };
-
-    console.log("📤 ENVOI DONNÉES:", payload);
-
-    if (project && project.id) {
-      await projectsService.updateProject(project.id, payload);
-    } else {
-      await projectsService.createProject(payload);
-    }
-
-    if (onProjectSaved) onProjectSaved();
-    onClose();
-  } catch (error) {
-    console.error("ERREUR SAUVEGARDE:", error);
-    alert("Erreur sauvegarde: " + (error.message || "Inconnue"));
-  }
-};
-
 
   if (!isOpen) return null;
 
-  // --- RENDER ---
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl flex flex-col max-h-[95vh]">
-        {/* HEADER */}
-        <div className="p-4 border-b flex items-center justify-between bg-gray-50 rounded-t-2xl">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-bold text-gray-800">
-                Planificateur de Projet
-              </h2>
-              {project && project.id && (
-                <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                  Mode édition
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500">
-              Simule tes investissements, dépenses réelles, logistique et
-              revenus, sans toucher Bois de Chauffage.
-            </p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-y-auto flex flex-col">
+        
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-700 to-pink-600 p-6 flex justify-between items-center sticky top-0 z-10">
+          <div>
+            <h2 className="text-2xl font-bold text-white">
+              {project ? `Édition : ${project.name}` : "Nouveau Projet"}
+            </h2>
+            <p className="text-purple-100 text-sm">Planification Financière & Opérationnelle</p>
           </div>
-
           <div className="flex items-center gap-2">
-            {/* Boutons templates */}
-            <button
-              onClick={loadProductFlipTemplate}
-              className="text-xs px-3 py-2 bg-sky-50 text-sky-700 border border-sky-200 rounded-lg hover:bg-sky-100 flex items-center gap-1"
-            >
-              <TrendingUp className="w-3 h-3" />
-              Flip Produit
+            <button onClick={() => applyTemplate(templates.productFlip)} className="bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded text-xs transition">
+              Template Flip
             </button>
-
-            <button
-              onClick={loadFirewoodTemplate}
-              className="text-xs px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 flex items-center gap-1"
-            >
-              <Flame className="w-3 h-3" />
-              Bois Hebdo
-            </button>
-
-            <button
-              onClick={loadPLGFromJson}
-              className="text-xs px-3 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-0 rounded-lg hover:shadow-lg flex items-center gap-1"
-            >
-              <Anchor className="w-3 h-3" />
-              PLG 3 Phases
-            </button>
-
-            <button
-              onClick={importExistingTransactions}
-              className="text-xs px-3 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 flex items-center gap-1"
-            >
-              <Download className="w-3 h-3" />
-              Import Transac.
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-full hover:bg-gray-200"
-            >
-              <X className="w-5 h-5 text-gray-500" />
+            <button onClick={onClose} className="text-white/80 hover:text-white p-2 rounded-full hover:bg-white/10 transition">
+              <X size={24} />
             </button>
           </div>
         </div>
 
-        {/* BODY */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Ligne titre + type + dates */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">
-                Nom du projet
-              </label>
-              <input
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Ex: PLG FLPT - Campagne Pêche Complete"
+        <div className="p-6 space-y-6 flex-1">
+          
+          {/* Info Principales */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <input 
+                type="text" 
+                value={projectName} 
+                onChange={e => setProjectName(e.target.value)} 
+                className="w-full border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-purple-500 font-bold text-lg"
+                placeholder="Nom du Projet"
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">
-                Type
-              </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setProjectType('ponctuel')}
-                  className={`flex-1 px-3 py-2 text-xs rounded-lg border ${
-                    projectType === 'ponctuel'
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700'
-                  }`}
-                >
-                  Ponctuel
-                </button>
-                <button
-                  onClick={() => setProjectType('recurrent')}
-                  className={`flex-1 px-3 py-2 text-xs rounded-lg border ${
-                    projectType === 'recurrent'
-                      ? 'bg-purple-600 text-white border-purple-600'
-                      : 'bg-white text-gray-700'
-                  }`}
-                >
-                  Récurrent
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">
-                Période
-              </label>
-              <div className="flex gap-2">
-                <input
-  type="date"
-  value={normalizeDate(startDate) || ''}
-  onChange={(e) => setStartDate(e.target.value)}
-  className="flex-1 border rounded-lg px-2 py-2 text-xs"
-/>
-
-<input
-  type="date"
-  className="flex-1 border rounded-lg px-2 py-2 text-xs"
-  value={normalizeDate(endDate) || ''}
-  onChange={(e) => setEndDate(e.target.value)}
-/>
-              </div>
-            </div>
-          </div>
-
-          {/* Description + récurrence */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
-            <div className="md:col-span-2 space-y-2">
-              <label className="text-xs font-medium text-gray-600">
-                Description
-              </label>
-              <textarea
-                className="w-full border rounded-lg px-3 py-2 text-sm min-h-[60px]"
-                value={projectDescription}
-                onChange={(e) => setProjectDescription(e.target.value)}
-                placeholder="Détaille rapidement l'objectif du projet..."
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-600">
-                Récurrence
-              </label>
-              <div className="flex items-center gap-2">
-                <select
-                  className="flex-1 border rounded-lg px-2 py-2 text-xs"
-                  value={frequency}
-                  onChange={(e) => setFrequency(e.target.value)}
-                  disabled={projectType !== 'recurrent'}
-                >
-                  <option value="daily">Quotidienne</option>
-                  <option value="weekly">Hebdomadaire</option>
-                  <option value="monthly">Mensuelle</option>
-                  <option value="yearly">Annuelle</option>
+              <div className="grid grid-cols-2 gap-4">
+                <select value={projectType} onChange={e => setProjectType(e.target.value)} className="w-full border-gray-300 rounded-lg p-2.5">
+                  <option value="PRODUCTFLIP">Achat/Revente</option>
+                  <option value="LIVESTOCK">Élevage</option>
+                  <option value="FISHING">Pêche</option>
+                  <option value="REALESTATE">Immobilier</option>
                 </select>
-                <input
-                  type="number"
-                  min={1}
-                  className="w-16 border rounded-lg px-2 py-2 text-xs text-right"
-                  value={occurrencesCount}
-                  onChange={(e) =>
-                    setOccurrencesCount(parseInt(e.target.value || 0))
-                  }
-                  disabled={projectType !== 'recurrent'}
-                />
+                <select value={status} onChange={e => setStatus(e.target.value)} className="w-full border-gray-300 rounded-lg p-2.5">
+                  <option value="active">Actif</option>
+                  <option value="draft">Brouillon</option>
+                  <option value="completed">Terminé</option>
+                </select>
               </div>
-              <p className="text-[11px] text-gray-400">
-                Nombre d&apos;occurrences si récurrent (ex: 12 semaines).
-              </p>
+              <textarea 
+                value={description} 
+                onChange={e => setDescription(e.target.value)} 
+                rows={2}
+                className="w-full border-gray-300 rounded-lg p-2.5 text-sm"
+                placeholder="Description..."
+              />
+            </div>
+
+            {/* KPI Live */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+                <div className="text-xs text-red-600 font-bold uppercase">Coût Total</div>
+                <div className="text-xl font-bold text-red-700">{formatCurrency(totalExpenses)}</div>
+              </div>
+              <div className="p-3 bg-green-50 rounded-xl border border-green-100">
+                <div className="text-xs text-green-600 font-bold uppercase">Revenus</div>
+                <div className="text-xl font-bold text-green-700">{formatCurrency(totalRevenues)}</div>
+              </div>
+              <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                <div className="text-xs text-indigo-600 font-bold uppercase">Marge Nette</div>
+                <div className={`text-xl font-bold ${netProfit >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>
+                  {formatCurrency(netProfit)}
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="text-xs text-slate-500 font-bold uppercase">Solde après projet</div>
+                <div className="text-xl font-bold text-slate-700">
+                  {formatCurrency(totalAvailable + netProfit)}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* KPI */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="text-[11px] text-slate-500">
-                Solde Actuel (COFFRE)
-              </div>
-              <div className="text-sm font-bold text-slate-800">
-                {formatCurrency(totalAvailable)}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-red-50 border border-red-200">
-              <div className="text-[11px] text-red-600">
-                Coût Projet (Total)
-              </div>
-              <div className="text-sm font-bold text-red-700">
-                {formatCurrency(totalProjectCost)}
-              </div>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-              <div className="text-[11px] text-emerald-600">
-                Revenus Prévisionnels
-              </div>
-              <div className="text-sm font-bold text-emerald-700">
-                {formatCurrency(totalRevenues)}
-              </div>
-            </div>
-  <div className="p-3 rounded-xl bg-indigo-50 border border-indigo-200">
-    <div className="text-[11px] text-indigo-600">
-      Solde total si projet fini (COFFRE)
-    </div>
-    <div className="text-sm font-bold text-indigo-700">
-      {formatCurrency(finalTotalIfCompleted)}
-    </div>
-  </div>
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
-              <div className="text-[11px] text-blue-600">ROI Estimé</div>
-              <div className="text-sm font-bold text-blue-700">
-                {totalProjectCost > 0 ? `${roi.toFixed(1)}%` : '–'}
-              </div>
-
-            </div>
-          </div>
-
-          {/* DÉPENSES + REVENUS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* DEPENSES */}
-            <div className="border rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                  Dépenses ({expenses.length})
+          {/* Section Operator (SOPs/Tasks) */}
+          {project && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div>
+                <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <FileText size={16} /> Procédures ({relatedSOPs.length})
                 </h3>
-                <button
-                  onClick={addExpense}
-                  className="text-[11px] px-2 py-1 rounded-lg border bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  Ligne
-                </button>
+                <ul className="text-sm space-y-1">
+                  {relatedSOPs.map(s => <li key={s.id} className="bg-white px-2 py-1 rounded border">• {s.title}</li>)}
+                  {relatedSOPs.length === 0 && <li className="text-slate-400 italic">Aucune SOP liée</li>}
+                </ul>
               </div>
-
-              <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1">
-                {expenses.map((exp, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-lg p-2 bg-white flex flex-col gap-1 text-[11px]"
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 border rounded px-2 py-1"
-                        placeholder="Description"
-                        value={exp.description || ''}
-                        onChange={(e) =>
-                          updateExpense(index, 'description', e.target.value)
-                        }
-                      />
-                      <input
-                        className="w-24 border rounded px-2 py-1"
-                        placeholder="Catégorie"
-                        value={exp.category || ''}
-                        onChange={(e) =>
-                          updateExpense(index, 'category', e.target.value)
-                        }
-                      />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <CalculatorInput
-                        value={exp.amount}
-                        onChange={(val) =>
-                          updateExpense(index, 'amount', val)
-                        }
-                        className="flex-1"
-                        placeholder="Montant"
-                      />
-                      <select
-                        className="w-32 border rounded px-2 py-1"
-                        value={exp.account || ''}
-                        onChange={(e) =>
-                          updateExpense(index, 'account', e.target.value)
-                        }
-                      >
-                        <option value="">Compte ?</option>
-                        <option value="Déjà Payé">Déjà Payé</option>
-                        <option value="Futur">Futur</option>
-                        {accounts.map((acc) => (
-                          <option key={acc.id} value={acc.name}>
-                            {acc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 text-[11px] text-gray-500">
-                          <input
-                            type="checkbox"
-                            checked={!!exp.isRecurring}
-                            onChange={(e) =>
-                              updateExpense(
-                                index,
-                                'isRecurring',
-                                e.target.checked
-                              )
-                            }
-                          />
-                          <span>Récurrent</span>
-                        </label>
-                        {exp.phase && (
-                          <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px]">
-                            {phaseLabels[exp.phase] || exp.phase}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1">
-  <button
-  onClick={() => handlePayerDepense(exp, index)}
-  disabled={!exp.account || !exp.amount || exp.isPaid}
-  className={`text-[11px] px-2 py-1 rounded-lg ${
-    exp.isPaid
-      ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-      : 'bg-red-600 text-white hover:bg-red-700'
-  }`}
->
-  {exp.isPaid ? 'Payée' : 'Payer'}
-</button>
-  <button
-    onClick={() => duplicateExpense(index)}
-    className="p-1 rounded hover:bg-gray-100"
-    title="Dupliquer"
-  >
-    <Copy className="w-3 h-3" />
-  </button>
-  <button
-    onClick={() => removeExpense(index)}
-    className="p-1 rounded hover:bg-red-50 text-red-500"
-    title="Supprimer"
-  >
-    <Trash2 className="w-3 h-3" />
-  </button>
-</div>
-
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* REVENUS */}
-            <div className="border rounded-xl p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                  Revenus ({revenues.length})
+              <div>
+                <h3 className="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <CheckCircle size={16} /> Tâches ({relatedTasks.length})
                 </h3>
-                <button
-                  onClick={addRevenue}
-                  className="text-[11px] px-2 py-1 rounded-lg border bg-gray-50 hover:bg-gray-100 flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  Ligne
-                </button>
-              </div>
-
-              <div className="max-h-[260px] overflow-y-auto space-y-2 pr-1">
-                {revenues.map((rev, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-lg p-2 bg-white flex flex-col gap-1 text-[11px]"
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 border rounded px-2 py-1"
-                        placeholder="Description"
-                        value={rev.description || ''}
-                        onChange={(e) =>
-                          updateRevenue(index, 'description', e.target.value)
-                        }
-                      />
-                      <CalculatorInput
-                        value={rev.amount}
-                        onChange={(val) =>
-                          updateRevenue(index, 'amount', val)
-                        }
-                        className="w-28"
-                        placeholder="Montant"
-                      />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                     <input
-  type="date"
-  className="flex-1 border rounded px-2 py-1"
-  value={normalizeDate(rev.date) || ''}
-  onChange={(e) =>
-    updateRevenue(index, 'date', e.target.value)
-  }
-/>
-                      <select
-                        className="w-32 border rounded px-2 py-1"
-                        value={rev.account || ''}
-                        onChange={(e) =>
-                          updateRevenue(index, 'account', e.target.value)
-                        }
-                      >
-                        <option value="">Compte ?</option>
-                        {accounts.map((acc) => (
-                          <option key={acc.id} value={acc.name}>
-                            {acc.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <label className="flex items-center gap-1 text-[11px] text-gray-500">
-                        <input
-                          type="checkbox"
-                          checked={!!rev.isRecurring}
-                          onChange={(e) =>
-                            updateRevenue(
-                              index,
-                              'isRecurring',
-                              e.target.checked
-                            )
-                          }
-                        />
-                        <span>Récurrent</span>
-                      </label>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleEncaisser(rev, index)}
-                          disabled={!rev.account || !rev.amount || rev.isPaid}
-                          className={`text-[11px] px-2 py-1 rounded-lg ${
-                            rev.isPaid
-                              ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                              : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                          }`}
-                        >
-                          {rev.isPaid ? 'Encaissé' : 'Encaisser'}
-                        </button>
-
-                        <button
-                          onClick={() => removeRevenue(index)}
-                          className="p-1 rounded hover:bg-red-50 text-red-500"
-                          title="Supprimer"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <ul className="text-sm space-y-1">
+                  {relatedTasks.map(t => <li key={t.id} className="bg-white px-2 py-1 rounded border">• {t.title}</li>)}
+                  {relatedTasks.length === 0 && <li className="text-slate-400 italic">Aucune tâche liée</li>}
+                </ul>
               </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* FOOTER */}
-        <div className="p-3 border-t bg-gray-50 rounded-b-2xl flex items-center justify-between">
-          <div className="text-[11px] text-gray-500 flex flex-col">
-            <span>
-              Coût projet :{' '}
-              <strong>{formatCurrency(totalProjectCost)}</strong> | Revenus :{' '}
-              <strong>{formatCurrency(totalRevenues)}</strong>
-            </span>
-            <span>
-              Résultat net :{' '}
-              <strong
-                className={
-                  netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'
-                }
+          {/* TABLEAU DES DÉPENSES (LE CŒUR DU SYSTÈME) */}
+          <div className="border rounded-xl p-4 bg-white shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-red-800 flex items-center gap-2">
+                <TrendingDown size={20} /> Dépenses & Investissements
+              </h3>
+              <button 
+                onClick={() => setExpenses([...expenses, { id: uuidv4(), description: '', amount: 0, date: new Date(), account: '', isPaid: false }])}
+                className="bg-red-50 text-red-700 px-3 py-1 rounded-lg text-sm hover:bg-red-100 transition flex items-center gap-1"
               >
-                {formatCurrency(netProfit)}
-              </strong>{' '}
-              | Reste sur comptes :{' '}
-              <strong className={isFeasible ? '' : 'text-red-600'}>
-                {formatCurrency(remainingBudget)}
-              </strong>
-            </span>
+                <Plus size={16} /> Ajouter une ligne
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {expenses.map((exp, idx) => (
+                <div key={exp.id} className={`grid grid-cols-12 gap-2 items-center p-3 rounded-lg border ${exp.isPaid ? 'bg-gray-50 border-gray-200' : 'bg-white border-red-100'}`}>
+                  {/* Description */}
+                  <div className="col-span-4">
+                    <input 
+                      type="text" 
+                      value={exp.description} 
+                      onChange={e => updateExpense(exp.id, 'description', e.target.value)}
+                      placeholder="Description de la dépense"
+                      className="w-full text-sm border-gray-300 rounded focus:ring-red-500"
+                      disabled={exp.isPaid}
+                    />
+                  </div>
+                  
+                  {/* Montant */}
+                  <div className="col-span-3">
+                    <CalculatorInput 
+                      value={exp.amount} 
+                      onChange={val => updateExpense(exp.id, 'amount', val)}
+                      className="w-full text-sm border-gray-300 rounded text-right font-mono"
+                      placeholder="0 Ar"
+                      disabled={exp.isPaid}
+                    />
+                  </div>
+
+                  {/* Compte */}
+                  <div className="col-span-3">
+                    <select 
+                      value={exp.account || ''} 
+                      onChange={e => updateExpense(exp.id, 'account', e.target.value)}
+                      className="w-full text-sm border-gray-300 rounded"
+                      disabled={exp.isPaid}
+                    >
+                      <option value="">-- Compte --</option>
+                      {accounts.map(acc => <option key={acc.id} value={acc.name}>{acc.name}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-2 flex justify-end gap-1">
+                    {exp.isPaid ? (
+                      <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded flex items-center">
+                        <CheckCircle size={12} className="mr-1"/> Payé
+                      </span>
+                    ) : (
+                      <button 
+                        onClick={() => handlePayerDepense(exp, idx)}
+                        disabled={!exp.account || !exp.amount}
+                        className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 disabled:opacity-50 transition"
+                      >
+                        Payer
+                      </button>
+                    )}
+                    
+                    {!exp.isPaid && (
+                      <button onClick={() => removeExpense(exp.id)} className="text-gray-400 hover:text-red-500 p-1">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-2 text-xs rounded-lg border bg-white hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              onClick={handleSaveProject}
-              className="px-4 py-2 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"
-            >
-              <Save className="w-3 h-3" />
-              Enregistrer le projet
-            </button>
+          {/* TABLEAU DES REVENUS */}
+          <div className="border rounded-xl p-4 bg-white shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-green-800 flex items-center gap-2">
+                <TrendingUp size={20} /> Revenus Prévisionnels
+              </h3>
+              <button 
+                onClick={() => setRevenues([...revenues, { id: uuidv4(), description: '', amount: 0, date: new Date(), account: '', isPaid: false }])}
+                className="bg-green-50 text-green-700 px-3 py-1 rounded-lg text-sm hover:bg-green-100 transition flex items-center gap-1"
+              >
+                <Plus size={16} /> Ajouter une ligne
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {revenues.map((rev, idx) => (
+                <div key={rev.id} className={`grid grid-cols-12 gap-2 items-center p-3 rounded-lg border ${rev.isPaid ? 'bg-gray-50 border-gray-200' : 'bg-white border-green-100'}`}>
+                  <div className="col-span-4">
+                    <input 
+                      type="text" 
+                      value={rev.description} 
+                      onChange={e => updateRevenue(rev.id, 'description', e.target.value)}
+                      placeholder="Source du revenu"
+                      className="w-full text-sm border-gray-300 rounded focus:ring-green-500"
+                      disabled={rev.isPaid}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <CalculatorInput 
+                      value={rev.amount} 
+                      onChange={val => updateRevenue(rev.id, 'amount', val)}
+                      className="w-full text-sm border-gray-300 rounded text-right font-mono"
+                      placeholder="0 Ar"
+                      disabled={rev.isPaid}
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <select 
+                      value={rev.account || ''} 
+                      onChange={e => updateRevenue(rev.id, 'account', e.target.value)}
+                      className="w-full text-sm border-gray-300 rounded"
+                      disabled={rev.isPaid}
+                    >
+                      <option value="">-- Compte --</option>
+                      {accounts.map(acc => <option key={acc.id} value={acc.name}>{acc.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2 flex justify-end gap-1">
+                    {rev.isPaid ? (
+                      <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded flex items-center">
+                        <CheckCircle size={12} className="mr-1"/> Reçu
+                      </span>
+                    ) : (
+                      <button 
+                        onClick={() => handleEncaisser(rev, idx)}
+                        disabled={!rev.account || !rev.amount}
+                        className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50 transition"
+                      >
+                        Encaisser
+                      </button>
+                    )}
+                    {!rev.isPaid && (
+                      <button onClick={() => removeRevenue(rev.id)} className="text-gray-400 hover:text-red-500 p-1">
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+
         </div>
+
+        {/* Footer Actions */}
+        <div className="sticky bottom-0 bg-white p-6 border-t border-gray-200 flex justify-between items-center rounded-b-2xl">
+          <button onClick={onClose} className="px-6 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition">
+            Annuler
+          </button>
+          <button 
+            onClick={handleSave} 
+            disabled={loading}
+            className="bg-purple-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-purple-700 shadow-lg hover:shadow-purple-200 transition flex items-center gap-2 disabled:opacity-70"
+          >
+            <Save size={18} />
+            {loading ? 'Enregistrement...' : 'Enregistrer le Projet'}
+          </button>
+        </div>
+
       </div>
     </div>
   );
 }
+
+export default ProjectPlannerModal;

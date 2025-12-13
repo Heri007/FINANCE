@@ -90,25 +90,46 @@ const schemas = {
     remarks: Joi.string().max(1000).allow('').optional()
   }).or('date', 'transaction_date'), // ✅ Au moins un des deux requis
 
-  // ✅ 3. PROJETS
+  // ✅ 3. PROJETS (Version Souple)
   project: Joi.object({
     name: Joi.string().trim().min(3).max(255).required(),
-    type: Joi.string().valid('ponctuel', 'recurrent').required(),
-    description: Joi.string().allow('').optional(),
-    status: Joi.string().valid('draft', 'active', 'completed', 'archived').optional(),
-    startDate: Joi.date().iso().allow(null).optional(),
-    endDate: Joi.date().iso().allow(null).optional(),
-    frequency: Joi.string().allow(null).optional(),
+    
+    // Accepter tous les types définis dans le frontend
+    type: Joi.string().valid(
+      'ponctuel', 'recurrent', 
+      'PRODUCTFLIP', 'LIVESTOCK', 'FISHING', 'REALESTATE', 'VEHICLE', 'OTHER'
+    ).required(),
+    
+    description: Joi.string().allow('', null).optional(),
+    
+    // Accepter tous les statuts possibles
+    status: Joi.string().valid(
+      'draft', 'active', 'completed', 'archived', 'paused', 'cancelled'
+    ).default('draft'),
+    
+    // Dates : accepter null ou string ISO
+    startDate: Joi.alternatives().try(Joi.date().iso(), Joi.string().allow('', null)).optional(),
+    endDate: Joi.alternatives().try(Joi.date().iso(), Joi.string().allow('', null)).optional(),
+    
+    frequency: Joi.string().allow(null, '').optional(),
     occurrencesCount: Joi.number().integer().min(1).optional(),
-    expenses: Joi.array().optional(),
-    revenues: Joi.array().optional(),
-    totalCost: Joi.number().optional(),
-    totalRevenues: Joi.number().optional(),
-    netProfit: Joi.number().optional(),
-    roi: Joi.number().optional(),
-    allocation: Joi.object().optional(),
-    revenueAllocation: Joi.object().optional(),
-    revenue_allocation: Joi.object().optional(),
+    
+    // ✅ CORRECTION MAJEURE : Accepter Array OU String (JSON stringifié)
+    expenses: Joi.alternatives().try(Joi.array(), Joi.string().allow('')).optional(),
+    revenues: Joi.alternatives().try(Joi.array(), Joi.string().allow('')).optional(),
+    
+    // ✅ Accepter les montants comme nombres (même s'ils viennent en string)
+    totalCost: Joi.number().allow(null).optional(),
+    totalRevenues: Joi.number().allow(null).optional(),
+    netProfit: Joi.number().allow(null).optional(),
+    roi: Joi.number().allow(null).optional(),
+    remainingBudget: Joi.number().allow(null).optional(),
+    totalAvailable: Joi.number().allow(null).optional(),
+    
+    // Objets JSON
+    allocation: Joi.alternatives().try(Joi.object(), Joi.string()).allow(null).optional(),
+    revenueAllocation: Joi.alternatives().try(Joi.object(), Joi.string()).allow(null).optional(),
+    revenue_allocation: Joi.alternatives().try(Joi.object(), Joi.string()).allow(null).optional(),
   }),
 
   // ✅ 4. AUTH (PIN)

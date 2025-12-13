@@ -1,3 +1,4 @@
+// controllers/projectController.js - VERSION FINALE CORRIGÉE
 const pool = require('../config/database');
 console.log('🔍 POOL IMPORT:', !!pool, typeof pool);
 
@@ -17,8 +18,8 @@ exports.getProjects = async (req, res) => {
         end_date AS "endDate",
         frequency,
         occurrences_count AS "occurrencesCount",
-        CAST(total_cost AS DOUBLE PRECISION) AS "totalCost",              -- ✅ Convertir en nombre
-        CAST(total_revenues AS DOUBLE PRECISION) AS "totalRevenues",      -- ✅ Convertir en nombre
+        CAST(total_cost AS DOUBLE PRECISION) AS "totalCost",
+        CAST(total_revenues AS DOUBLE PRECISION) AS "totalRevenues",
         net_profit AS "netProfit",
         roi,
         remaining_budget AS "remainingBudget",
@@ -27,24 +28,30 @@ exports.getProjects = async (req, res) => {
         revenues,
         allocation,
         revenue_allocation AS "revenueAllocation",
-        accounts_snapshot AS "accountsSnapshot",
-        activated_at AS "activatedAt",
-        activated_transactions AS "activatedTransactions",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM projects 
       ORDER BY created_at DESC
     `);
     
-    // ✅ Log pour debugging
-    console.log('📊 Projets récupérés:', result.rows.length);
-    if (result.rows.length > 0) {
-    }
-    
+    //console.log('📊 Projets récupérés:', result.rows.length);
     res.json(result.rows);
   } catch (error) {
     console.error('❌ getProjects:', error.message);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+};
+
+// ============================================================================
+// HELPER : Sécuriser le format JSON pour la DB
+// ============================================================================
+const safeJson = (data) => {
+  if (!data) return '[]'; // Défaut
+  if (typeof data === 'string') return data; // Déjà stringifié
+  try {
+    return JSON.stringify(data); // Convertir Array/Object -> String
+  } catch {
+    return '[]';
   }
 };
 
@@ -54,30 +61,22 @@ exports.getProjects = async (req, res) => {
 exports.createProject = async (req, res) => {
   try {
     const {
-      name,
-      description,
-      type,
-      status,
-      startDate,
-      endDate,
-      frequency,
-      occurrencesCount,
-      totalCost,
-      totalRevenues,
-      netProfit,
-      roi,
-      expenses,
-      revenues,
-      allocation,
-      revenueAllocation,
-      revenue_allocation,
-      remainingBudget,
-      totalAvailable,
+      name, description, type, status, startDate, endDate, frequency, occurrencesCount,
+      totalCost, totalRevenues, netProfit, roi,
+      expenses, revenues, allocation, revenueAllocation, revenue_allocation,
+      remainingBudget, totalAvailable
     } = req.body;
 
     const finalStatus = status || 'draft';
     const occCount = parseInt(occurrencesCount || 1, 10);
     const finalRevenueAllocation = revenue_allocation || revenueAllocation || {};
+
+    // Sécurisation des JSON
+    const expensesJson = safeJson(expenses);
+    const revenuesJson = safeJson(revenues);
+    const allocationJson = safeJson(allocation);
+    const revAllocationJson = safeJson(finalRevenueAllocation);
+
     const result = await pool.query(
       `INSERT INTO projects 
         (name, description, type, status,
@@ -92,27 +91,14 @@ exports.createProject = async (req, res) => {
          $13, $14,
          $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb)
        RETURNING 
-         id,
-         name,
-         description,
-         type,
-         status,
-         start_date AS "startDate",
-         end_date AS "endDate",
-         frequency,
-         occurrences_count AS "occurrencesCount",
-         total_cost AS "totalCost",
-         total_revenues AS "totalRevenues",
-         net_profit AS "netProfit",
-         roi,
-         remaining_budget AS "remainingBudget",
-         total_available AS "totalAvailable",
-         expenses,
-         revenues,
-         allocation,
-         revenue_allocation AS "revenueAllocation",
-         created_at AS "createdAt",
-         updated_at AS "updatedAt"`,
+         id, name, description, type, status,
+         start_date AS "startDate", end_date AS "endDate",
+         frequency, occurrences_count AS "occurrencesCount",
+         total_cost AS "totalCost", total_revenues AS "totalRevenues",
+         net_profit AS "netProfit", roi,
+         remaining_budget AS "remainingBudget", total_available AS "totalAvailable",
+         expenses, revenues, allocation, revenue_allocation AS "revenueAllocation",
+         created_at AS "createdAt", updated_at AS "updatedAt"`,
       [
         name,
         description,
@@ -128,12 +114,13 @@ exports.createProject = async (req, res) => {
         parseFloat(roi || 0),
         parseFloat(remainingBudget || 0),
         parseFloat(totalAvailable || 0),
-        JSON.stringify(expenses || []),
-        JSON.stringify(revenues || []),
-        JSON.stringify(allocation || {}),
-        JSON.stringify(finalRevenueAllocation || {}),
+        expensesJson,
+        revenuesJson,
+        allocationJson,
+        revAllocationJson
       ]
     );
+    res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('❌ CREATE project:', error);
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
@@ -141,37 +128,28 @@ exports.createProject = async (req, res) => {
 };
 
 // ============================================================================
-// 3. PUT - Mettre à jour un projet complet (avec validation)
+// 3. PUT - Mettre à jour un projet
 // ============================================================================
 exports.updateProject = async (req, res) => {
   try {
     const id = Number(req.params.id);
 
     const {
-      name,
-      description,
-      type,
-      status,
-      startDate,
-      endDate,
-      frequency,
-      occurrencesCount,
-      totalCost,
-      totalRevenues,
-      netProfit,
-      roi,
-      expenses,
-      revenues,
-      allocation,
-      revenueAllocation,
-      revenue_allocation,
-      remainingBudget,
-      totalAvailable,
+      name, description, type, status, startDate, endDate, frequency, occurrencesCount,
+      totalCost, totalRevenues, netProfit, roi,
+      expenses, revenues, allocation, revenueAllocation, revenue_allocation,
+      remainingBudget, totalAvailable
     } = req.body;
 
     const finalStatus = status || 'active';
     const occCount = parseInt(occurrencesCount || 1, 10);
     const finalRevenueAllocation = revenue_allocation || revenueAllocation || {};
+
+    // Sécurisation des JSON
+    const expensesJson = safeJson(expenses);
+    const revenuesJson = safeJson(revenues);
+    const allocationJson = safeJson(allocation);
+    const revAllocationJson = safeJson(finalRevenueAllocation);
 
     const result = await pool.query(
       `UPDATE projects 
@@ -212,11 +190,11 @@ exports.updateProject = async (req, res) => {
         parseFloat(roi || 0),
         parseFloat(remainingBudget || 0),
         parseFloat(totalAvailable || 0),
-        JSON.stringify(expenses || []),
-        JSON.stringify(revenues || []),
-        JSON.stringify(allocation || {}),
-        JSON.stringify(finalRevenueAllocation || {}),
-        id,
+        expensesJson,
+        revenuesJson,
+        allocationJson,
+        revAllocationJson,
+        id
       ]
     );
 

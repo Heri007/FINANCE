@@ -1223,10 +1223,10 @@ return (
             </div>
 
             {/* PRÉVISIONS COMPLÈTES */}
-            <section className="mt-6 rounded-2xl border border-blue-800 bg-blue-300 from-slate-50 via-blue-50 to-emerald-50 p-4">
-              <h3 className="text-xs font-black tracking-[0.18em] text-slate-700 mb-3">
-  PRÉVISIONS COMPLÈTES
-</h3>
+            <section className="mt-6 rounded-2xl border-2 border-blue-200 bg-white p-6 shadow-lg">
+  <h3 className="text-sm font-bold text-slate-700 mb-4">
+    Prévisions Complètes
+  </h3>
               <div className="space-y-3">
                 {/* Après règlements */}
                 <div className="rounded-xl bg-white/70 border border-slate-100 shadow-sm px-4 py-3">
@@ -1321,25 +1321,39 @@ return (
               onDeleteAccount={handleDeleteAccount}
               onInitDefaults={handleInitDefaults}
             />
+        {/* NOUVELLE VERSION */}
+<div className="space-y-8">
+  {/* Graphique + Transactions Récentes côte à côte */}
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    {/* Graphique - Occupe 2/3 */}
+    <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-lg">
+      <h3 className="text-lg font-bold text-slate-800 mb-4">
+        Évolution Financière (30 derniers jours)
+      </h3>
+      <div className="w-full h-80">
+        <FinancialChart transactions={transactions} />
+      </div>
+    </div>
 
-            {/* Graphique et Catégories */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-  <div className="lg:col-span-2 h-80 min-w-0">
-    <FinancialChart transactions={transactions} />
+    {/* Transactions Récentes - Occupe 1/3 */}
+    <div className="lg:col-span-1">
+      <TransactionList
+        transactions={transactions.slice(0, 5)}
+        onViewAll={() => setActiveTab("transactions")}
+        onDelete={deleteTransaction}
+        onTransactionClick={handleTransactionClick}
+      />
+    </div>
   </div>
 
-              <div className="space-y-8">
-                <CategoryBreakdown transactions={transactions} />
-                <TransactionList
-                  transactions={transactions.slice(0, 5)}
-                  onViewAll={() => setActiveTab("transactions")}
-                  onDelete={deleteTransaction}
-                  onTransactionClick={handleTransactionClick}
-                />
-              </div>
-            </div>
+  {/* CategoryBreakdown - Pleine largeur en dessous */}
+  <div className="w-full">
+    <CategoryBreakdown transactions={transactions} />
+  </div>
+</div>
           </div>
         )}
+            
 
         {activeTab === "transactions" && (
           <div className="space-y-4">
