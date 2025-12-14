@@ -33,59 +33,122 @@ export function ProjectDetailsModal({
 
   if (!isOpen || !project) return null;
 
+
   // =======================================================================
   // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
   // =======================================================================
-  
   const normalizeData = useMemo(() => {
-    console.log("📥 Normalisation projet:", project.name);
+  console.log("📥 Normalisation projet:", project.name);
 
-    // Fonction pour parser et nettoyer n'importe quelle liste
-    const cleanList = (jsonOrArray, type) => {
-      let list = [];
-      
-      // 1. Essayer de parser si c'est une string
-      if (typeof jsonOrArray === 'string') {
-        try {
-          list = JSON.parse(jsonOrArray);
-        } catch (e) {
-          console.warn(`Erreur parsing ${type}:`, e);
-          list = [];
-        }
-      } else if (Array.isArray(jsonOrArray)) {
-        list = jsonOrArray;
+  // Fonction pour parser et nettoyer n'importe quelle liste
+  const cleanList = (jsonOrArray, type) => {
+    let list = [];
+    if (typeof jsonOrArray === 'string') {
+      try {
+        list = JSON.parse(jsonOrArray);
+      } catch (e) {
+        console.warn(`Erreur parsing ${type}:`, e);
+        list = [];
+      }
+    } else if (Array.isArray(jsonOrArray)) {
+      list = jsonOrArray;
+    }
+
+    return list.map(item => ({
+      id: item.id || item.dbId || Math.random().toString(36),
+      description: item.description || item.category || 'Sans description',
+      category: item.category || 'Autre',
+      amount: parseFloat(item.amount || item.projectedAmount || item.projected_amount || item.actualAmount || item.actual_amount || 0),
+      isPaid: !!(item.isPaid || item.is_paid || item.isReceived || item.is_received),
+      date: item.date || item.transactionDate || item.transaction_date,
+      account: item.account || ''
+    }));
+  };
+
+  const rawExpenses = (project.expenseLines && project.expenseLines.length > 0) 
+    ? project.expenseLines 
+    : project.expenses;
+    
+  const rawRevenues = (project.revenueLines && project.revenueLines.length > 0) 
+    ? project.revenueLines 
+    : project.revenues;
+
+  const expenses = cleanList(rawExpenses, 'expenses');
+  let revenues = cleanList(rawRevenues, 'revenues');
+
+  // --- Génération automatique des revenus mensuels investisseur pour Natiora (ID 24)
+  if (project.id === 24) {
+    const investorShare = 0.85; // 85%
+    const monthlyRevenues = [];
+
+    const projectYears = [
+      { year: 2026, poulets: 96000000, oies: 58900000, kuroiler: 3195000 },
+      { year: 2027, poulets: 103680000, oies: 63790000, kuroiler: 3357000 },
+      { year: 2028, poulets: 112896000, oies: 68950000, kuroiler: 3524850 },
+      { year: 2029, poulets: 146899200, oies: 89600000, kuroiler: 4582753 },
+      { year: 2030, poulets: 194768000, oies: 118400000, kuroiler: 6060000 }
+    ];
+
+    projectYears.forEach(({ year, poulets, oies, kuroiler }) => {
+      // Poulets (8 cycles/an)
+      const pouletsCycles = 8;
+      const pouletsAmountPerCycle = poulets / pouletsCycles;
+      for (let i = 0; i < pouletsCycles; i++) {
+        const month = Math.floor(i * (12 / pouletsCycles));
+        monthlyRevenues.push({
+          id: `poulets-${year}-${i+1}`,
+          description: `Vente poulets - cycle ${i+1}`,
+          amount: pouletsAmountPerCycle * investorShare,
+          date: new Date(year, month, 1),
+          account: "Compte Investisseur",
+          category: "Revenu Investisseur",
+          isPaid: false
+        });
       }
 
-      // 2. Standardiser chaque item
-      return list.map(item => ({
-        id: item.id || item.dbId || Math.random().toString(36),
-        description: item.description || item.category || 'Sans description',
-        category: item.category || 'Autre',
-        // Gérer toutes les variantes de montant
-        amount: parseFloat(item.amount || item.projectedAmount || item.projected_amount || item.actualAmount || item.actual_amount || 0),
-        // Gérer toutes les variantes de statut payé/reçu
-        isPaid: !!(item.isPaid || item.is_paid || item.isReceived || item.is_received),
-        date: item.date || item.transactionDate || item.transaction_date,
-        account: item.account || ''
-      }));
-    };
+      // Oies (4 cycles/an)
+      const oiesCycles = 4;
+      const oiesAmountPerCycle = oies / oiesCycles;
+      for (let i = 0; i < oiesCycles; i++) {
+        const month = Math.floor(i * (12 / oiesCycles));
+        monthlyRevenues.push({
+          id: `oies-${year}-${i+1}`,
+          description: `Vente oies - cycle ${i+1}`,
+          amount: oiesAmountPerCycle * investorShare,
+          date: new Date(year, month, 1),
+          account: "Compte Investisseur",
+          category: "Revenu Investisseur",
+          isPaid: false
+        });
+      }
 
-    // Priorité : Lignes DB (expenseLines) > JSON (expenses)
-    const rawExpenses = (project.expenseLines && project.expenseLines.length > 0) 
-      ? project.expenseLines 
-      : project.expenses;
-      
-    const rawRevenues = (project.revenueLines && project.revenueLines.length > 0) 
-      ? project.revenueLines 
-      : project.revenues;
+      // Marge nette Kuroiler (1 fois/an)
+      monthlyRevenues.push({
+        id: `kuroiler-${year}-1`,
+        description: `Marge nette annuelle Kuroiler`,
+        amount: kuroiler * investorShare,
+        date: new Date(year, 11, 31),
+        account: "Compte Investisseur",
+        category: "Revenu Investisseur",
+        isPaid: false
+      });
+    });
 
-    const expenses = cleanList(rawExpenses, 'expenses');
-    const revenues = cleanList(rawRevenues, 'revenues');
+    // --- FILTRER les anciennes ventes poulets / oies pour éviter doublons
+    revenues = revenues.filter(r => 
+      !r.description.includes('Vente poulets') && 
+      !r.description.includes('Vente oies')
+    );
 
-    console.log(`✅ ${expenses.length} dépenses, ${revenues.length} revenus chargés.`);
+    // Ajouter les revenus mensuels calculés
+    revenues.push(...monthlyRevenues);
+  }
 
-    return { expenses, revenues };
-  }, [project]);
+  const totalCost = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+  console.log(`✅ ${expenses.length} dépenses, ${revenues.length} revenus chargés.`);
+  return { expenses, revenues };
+}, [project]);
 
   const { expenses, revenues } = normalizeData;
 
