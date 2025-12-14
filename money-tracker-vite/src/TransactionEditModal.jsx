@@ -43,7 +43,8 @@ const TransactionEditModal = ({ transaction, onClose, onUpdate, onDelete, accoun
         transaction_date: formData.date, // ✅ snake_case
         is_posted: formData.isPosted, // ✅ snake_case
         is_planned: false, // ✅ Valeur par défaut
-        project_id: transaction.project_id || null, // ✅ Préserver project_id existant
+        project_id: transaction.project_id || null,
+        project_line_id: formData.project_line_id || null  // ✅ Préserver project_id existant
       };
 
       console.log('🔵 PAYLOAD ENVOYÉ:', payload);

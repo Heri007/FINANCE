@@ -174,7 +174,7 @@ exports.createTransaction = async (req, res, next) => {
 };
 
 // ============================================================================
-// 4. PUT - Mettre à jour une transaction (ROBUSTE)
+// 4. PUT - Mettre à jour une transaction (CORRIGÉ)
 // ============================================================================
 exports.updateTransaction = async (req, res, next) => {
   const client = await pool.connect();
@@ -183,11 +183,12 @@ exports.updateTransaction = async (req, res, next) => {
     await client.query('BEGIN');
     
     const { id } = req.params;
+    
+    // ✅ CORRECTION : Inclure project_line_id dans la destructuration
     const { 
       account_id, type, amount, category, description, date,
-      is_posted, is_planned, project_id 
+      is_posted, is_planned, project_id, project_line_id
     } = req.body;
-      project_line_id
 
     // 1. Récupérer l'ancienne transaction
     const beforeResult = await client.query('SELECT * FROM transactions WHERE id = $1', [id]);
@@ -198,16 +199,15 @@ exports.updateTransaction = async (req, res, next) => {
 
     const oldTx = beforeResult.rows[0];
     const oldPosted = oldTx.is_posted;
-    // Si is_posted n'est pas fourni, on garde l'ancien
     const newPosted = is_posted !== undefined ? is_posted : oldPosted; 
 
-    // 2. Update SQL
+    // ✅ CORRECTION : Ajouter project_line_id dans le SET (10 colonnes + WHERE)
     const updateResult = await client.query(
       `UPDATE transactions 
        SET account_id = $1, type = $2, amount = $3, category = $4, 
            description = $5, transaction_date = $6, is_posted = $7, 
-           is_planned = $8, project_id = $9
-       WHERE id = $10
+           is_planned = $8, project_id = $9, project_line_id = $10
+       WHERE id = $11
        RETURNING *`,
       [
         account_id || oldTx.account_id, 
@@ -219,25 +219,21 @@ exports.updateTransaction = async (req, res, next) => {
         newPosted,
         is_planned !== undefined ? is_planned : oldTx.is_planned,
         project_id !== undefined ? project_id : oldTx.project_id,
-          project_line_id !== undefined ? project_line_id : oldTx.project_line_id,
+        project_line_id !== undefined ? project_line_id : oldTx.project_line_id,
         id
       ]
     );
 
     const updatedTx = updateResult.rows[0];
 
-    // 3. LOGIQUE DE SOLDE (La méthode "Reverse & Replay")
-    // C'est la seule méthode qui gère tous les cas (changement montant, compte, type, statut)
-    
-    // A. Si l'ancienne était postée, on ANNULE son effet (Remboursement)
+    // 3. LOGIQUE DE SOLDE (Reverse & Replay)
     if (oldPosted) {
         const reverseQuery = oldTx.type === 'income' 
-          ? 'UPDATE accounts SET balance = balance - $1 WHERE id = $2' // On enlève le revenu
-          : 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'; // On remet la dépense
+          ? 'UPDATE accounts SET balance = balance - $1 WHERE id = $2'
+          : 'UPDATE accounts SET balance = balance + $1 WHERE id = $2';
         await client.query(reverseQuery, [oldTx.amount, oldTx.account_id]);
     }
 
-    // B. Si la nouvelle est postée, on APPLIQUE son effet
     if (newPosted) {
         const applyQuery = updatedTx.type === 'income'
           ? 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'
@@ -256,6 +252,7 @@ exports.updateTransaction = async (req, res, next) => {
     client.release();
   }
 };
+
 
 // ============================================================================
 // 5. DELETE - Supprimer
