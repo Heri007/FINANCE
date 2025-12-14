@@ -66,7 +66,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     };
 
     // ⚠️ Idéalement: injecter CUTOFF_DATE par compte depuis le backend
-    const CUTOFF_DATE = '2025-12-09';
+    const CUTOFF_DATE = '2025-12-10';
 
     // 1) Mapping fichiers → comptes
     const fileMappings = {};

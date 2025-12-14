@@ -25,7 +25,7 @@ export function Header({
              <Wallet className="text-amber-500" /> 
             </div>
             <div>
-              <h1 className="text-3xl font-bold">MONEY 🏦💰</h1>
+              <h1 className="text-3xl font-bold">MONEY 💰</h1>
               <p className="text-indigo-100 text-sm">GESTION DE PORTE-FEUILLE</p>
             </div>
           </div>

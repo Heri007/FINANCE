@@ -80,19 +80,21 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
   return (
     <section
       className="
-        mt-6 rounded-xl border-2 border-slate-400 p-4 shadow-xl
+        mt-6 rounded-xl border-2 border-[#B68D40] p-4 
+        shadow-[0_10px_30px_-10px_rgba(218,165,32,0.6)]
         relative overflow-hidden
-        bg-[radial-gradient(120%_140%_at_18%_18%,rgba(255,255,255,0.85)_0%,rgba(255,255,255,0)_45%),
-            radial-gradient(120%_140%_at_82%_85%,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0)_52%),
-            radial-gradient(circle_at_center,#f7e7a6_0%,#d7b24a_38%,#b7891e_55%,#f1d36a_72%,#caa33a_100%),
-            radial-gradient(circle_at_center,rgba(230,230,230,0.90)_0%,rgba(190,190,190,0.55)_42%,rgba(120,120,120,0.25)_65%,rgba(255,255,255,0.12)_100%)]
+        /* Empilement de dégradés pour l'effet Or 3D */
+        bg-[radial-gradient(120%_140%_at_18%_18%,rgba(255,255,255,0.95)_0%,rgba(255,255,220,0)_57%),
+            radial-gradient(120%_140%_at_82%_85%,rgba(255,248,220,0.6)_0%,rgba(255,255,255,0)_72%),
+            radial-gradient(circle_at_center,#FFF8DC_0%,#FCD34D_38%,#D4AF37_55%,#B8860B_72%,#785310_100%)]
       "
     >
-      {/* Texture métal (très légère) */}
+      {/* Texture métal brossé (ajustée en brun/or foncé pour le réalisme) */}
       <div
         className="
-          pointer-events-none absolute inset-0 opacity-[0.10]
-          [background:repeating-linear-gradient(115deg,rgba(0,0,0,0.35)_0px,rgba(0,0,0,0.35)_1px,transparent_1px,transparent_7px)]
+          pointer-events-none absolute inset-0 opacity-[0.55]
+          [background:repeating-linear-gradient(115deg,transparent_0px,transparent_2px,rgba(101,67,33,0.3)_2px,rgba(101,67,33,0.3)_4px)]
+          mix-blend-overlay
         "
       />
 
@@ -106,9 +108,10 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
             Prévisions Complètes
           </h3>
         </div>
-        <span className="text-xs text-slate-800 font-medium bg-white/40 px-2 py-1 rounded-full">
-          {activeProjects.length} projet{activeProjects.length > 1 ? 's' : ''} actif
-          {activeProjects.length > 1 ? 's' : ''}
+        
+        {/* ✅ MODIFICATION ICI : Style rectangle vert discret et font-extrabold */}
+        <span className="text-xs font-extrabold text-green-900 bg-green-100/90 border border-green-200/60 px-3 py-1.5 rounded-md shadow-sm backdrop-blur-sm">
+          {activeProjects.length} PROJET{activeProjects.length > 1 ? 'S' : ''} ACTIF{activeProjects.length > 1 ? 'S' : ''}
         </span>
       </div>
 
