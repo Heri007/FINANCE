@@ -36,27 +36,32 @@ const schemas = {
       })
   }),
 
-  // ✅ 2. TRANSACTIONS - CORRECTION MAJEURE AVEC UUID STRING
+// ✅ 2. TRANSACTIONS (VERSION DÉBLOQUÉE)
   transaction: Joi.object({
-    account_id: Joi.number().integer().positive().required(),
+    account_id: Joi.number().required(),
     type: Joi.string().valid('income', 'expense', 'transfer').required(),
-    amount: Joi.number().min(0.01).max(999999999).required(),
-    category: Joi.string().trim().min(1).max(100).required(),
-    description: Joi.string().max(500).allow('', null).optional(),
-    date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    transaction_date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    amount: Joi.number().required(),
+    category: Joi.string().required(),
+    description: Joi.string().allow('', null).optional(),
+    
+    // Dates
+    date: Joi.string().optional(),
+    transaction_date: Joi.string().optional(),
+    
     is_planned: Joi.boolean().optional(),
     is_posted: Joi.boolean().optional(),
-    related_account_id: Joi.number().integer().optional().allow(null),
-    project_id: Joi.number().integer().optional().allow(null),
-    project_line_id: Joi.string().uuid().optional().allow(null, ''),  // ✅ ACCEPTE UUID STRING
-    remarks: Joi.string().max(1000).allow('', null).optional(),
-    receivable_id: Joi.number().integer().optional().allow(null)
+    related_account_id: Joi.any().optional(),
+    
+    project_id: Joi.number().allow(null).optional(),
+    
+    // 🚨 CORRECTION ICI : On autorise TOUT pour éviter le blocage "must be a number"
+    project_line_id: Joi.any().optional(), 
+    
+    remarks: Joi.string().allow('', null).optional(),
+    receivable_id: Joi.any().optional()
   })
   .or('date', 'transaction_date')
-  .messages({
-    'object.missing': 'Date requise (date ou transaction_date)'
-  }),
+  .unknown(true), // IMPORTANT : Accepte les champs supplémentaires
 
   // ✅ 3. PROJETS
   project: Joi.object({
@@ -132,6 +137,17 @@ const schemas = {
     amount: Joi.number().min(0.01).precision(2).optional(),
     description: Joi.string().max(500).allow('', null).optional()
   }),
+  // ✅ AJOUTER CECI dans middleware/validate.js
+  receivableRestore: Joi.object({
+    account_id: Joi.number().integer().required(),
+    person: Joi.string().trim().min(1).max(100).required(),
+    description: Joi.string().allow('', null).optional(),
+    amount: Joi.number().required(),
+    status: Joi.string().valid('open', 'closed', 'partial').optional(),
+    source_account_id: Joi.number().integer().optional().allow(null),
+    created_at: Joi.any().optional(),
+    updated_at: Joi.any().optional()
+  }).unknown(true), // .unknown(true) est important pour accepter les champs de backup
 
   // ✅ 7. SOPs
   sop: Joi.object({

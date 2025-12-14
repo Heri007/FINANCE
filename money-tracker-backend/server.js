@@ -20,6 +20,7 @@ const logger = require('./config/logger'); // ✅ Import du Logger
 const errorHandler = require('./middleware/errorHandler'); // ✅ Import du Error Handler
 const pool = require('./config/database');
 const authenticateToken = require('./middleware/auth').authenticateToken || require('./middleware/auth');
+const transactionLinkingRoutes = require('./routes/transactionLinking');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -52,6 +53,8 @@ app.use('/api/content', require('./routes/content'));
 app.use('/api/backup', require('./routes/backup'));
 app.use('/api/receivables', require('./routes/receivables'));
 app.use('/api/notes', require('./routes/notes'));
+app.use('/api/transaction-linking', transactionLinkingRoutes);
+console.log('✅ Transaction linking routes mounted');
 
 
 // -----------------------------------------------------------------------------

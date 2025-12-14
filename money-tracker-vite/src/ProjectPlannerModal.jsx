@@ -53,114 +53,136 @@ export function ProjectPlannerModal({
   const [loadingOperational, setLoadingOperational] = useState(false);
 
   // --- CHARGEMENT INITIAL (CORRIGÉ & ROBUSTE) ---
+  // --- CHARGEMENT INITIAL (AVEC RÉCUPÉRATION DES TRANSACTIONS RÉELLES) ---
   useEffect(() => {
-    if (project) {
-      console.log("📂 Chargement projet pour édition:", project);
-
-      setProjectName(project.name || '');
-      setDescription(project.description || '');
-      setProjectType(project.type || 'PRODUCTFLIP');
-      setStatus(project.status || 'active');
-      
-      // Gestion des dates sécurisée
-      const start = project.startDate || project.start_date;
-      const end = project.endDate || project.end_date;
-      setStartDate(start ? new Date(start) : new Date());
-      setEndDate(end ? new Date(end) : null);
-
-      // --- FONCTION DE PARSING UNIFIÉE ---
-      // Cette fonction regarde d'abord les lignes normalisées (DB), sinon le JSON
-      const getItems = (jsonField, dbLinesField) => {
-        // 1. Priorité : Lignes normalisées venant de la DB (expenseLines / revenueLines)
-        if (dbLinesField && Array.isArray(dbLinesField) && dbLinesField.length > 0) {
-          return dbLinesField.map(item => ({
-            id: item.id, // ID Int de la base de données
-            dbId: item.id, // On garde une trace explicite
-            description: item.description,
-            category: item.category,
-            amount: parseFloat(item.actualAmount || item.projectedAmount || item.amount || 0),
-            date: item.transactionDate ? new Date(item.transactionDate) : new Date(),
-            account: "", // Info souvent manquante dans les lignes DB pures, à voir selon votre besoin
-            isPaid: !!(item.isPaid || item.isReceived)
-          }));
-        }
-
-        // 2. Fallback : Parsing du champ JSON (Ancienne méthode)
-        if (!jsonField) return [];
-        try {
-          const parsed = typeof jsonField === 'string' ? JSON.parse(jsonField) : jsonField;
-          return Array.isArray(parsed) ? parsed.map(item => ({
-            ...item,
-            id: item.id || uuidv4(), // Si pas d'ID, on en met un temporaire
-            date: item.date ? new Date(item.date) : new Date(),
-            amount: parseFloat(item.amount || 0)
-          })) : [];
-        } catch (e) {
-          console.warn("Erreur parsing JSON projet:", e);
-          return [];
-        }
-      };
-
-      // Chargement des tableaux
-      // On vérifie project.expenseLines (nouveau backend) ET project.expenses (ancien)
-      const loadedExpenses = getItems(project.expenses, project.expenseLines);
-      const loadedRevenues = getItems(project.revenues, project.revenueLines);
-
-      setExpenses(loadedExpenses);
-      setRevenues(loadedRevenues);
-
-      // --- RECONSTRUCTION LOGIQUE EXPORT ---
-      // Si c'est un projet EXPORT, on essaie de retrouver le prix et le nombre de containers
-      if (project.type === 'EXPORT') {
-        // 1. Chercher la ligne de revenu global
-        const globalRev = loadedRevenues.find(r => r.category === 'Vente Export Global' || r.description.includes('Export Global'));
+    const loadProjectData = async () => {
+      if (project) {
+        setProjectName(project.name || '');
+        setDescription(project.description || '');
+        setProjectType(project.type || 'PRODUCTFLIP');
+        setStatus(project.status || 'active');
         
-        if (globalRev) {
-           // On essaie d'extraire les infos depuis la description ou le montant
-           // Format attendu: "Export Global (3 Containers à 5 000 000 Ar)"
-           const matchCount = globalRev.description.match(/(\d+)\s+Containers/i);
-           
-           if (matchCount && matchCount[1]) {
-             const count = parseInt(matchCount[1], 10);
-             setContainerCount(count);
-             // Prix unitaire = Total / Nombre
-             if (count > 0) setPricePerContainer(globalRev.amount / count);
-           } else {
-             // Fallback si la description ne matche pas
-             setContainerCount(1);
-             setPricePerContainer(globalRev.amount);
-           }
-        } else {
-            // Cas legacy : plusieurs lignes de containers
-            const containers = loadedRevenues.filter(r => r.category === 'Export Container');
-            if (containers.length > 0) {
-                setContainerCount(containers.length);
-                setPricePerContainer(parseFloat(containers[0].amount));
+        // Gestion des dates
+        const start = project.startDate || project.start_date;
+        const end = project.endDate || project.end_date;
+        setStartDate(start ? new Date(start) : new Date());
+        setEndDate(end ? new Date(end) : null);
+
+        // 1. Charger les lignes enregistrées dans le projet
+        const parseList = (data) => {
+          if (!data) return [];
+          if (Array.isArray(data)) return data;
+          try { return JSON.parse(data); } catch { return []; }
+        };
+
+        let currentExpenses = parseList(project.expenses).map(e => ({
+          ...e, 
+          id: e.id || uuidv4(),
+          date: e.date ? new Date(e.date) : new Date(),
+          amount: parseFloat(e.amount) || 0
+        }));
+        
+        let currentRevenues = parseList(project.revenues).map(r => ({
+          ...r,
+          id: r.id || uuidv4(),
+          date: r.date ? new Date(r.date) : new Date(),
+          amount: parseFloat(r.amount) || 0
+        }));
+
+        // 2. RECUPÉRER LES TRANSACTIONS RÉELLES (Ce qui a été lié par SQL)
+        if (project.id) {
+            try {
+                const allTx = await transactionsService.getAll();
+                const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
+                
+                console.log("📥 Transactions récupérées pour le projet:", projectTx.length);
+
+                // Fonction pour fusionner/ajouter les transactions réelles
+                const mergeTransactions = (lines, type) => {
+                    const newLines = [...lines];
+                    
+                    projectTx.filter(t => t.type === type).forEach(tx => {
+                        // On cherche si cette transaction correspond déjà à une ligne (par ID ou similarité)
+                        const existingIdx = newLines.findIndex(l => 
+                            String(l.id) === String(tx.project_line_id) || // Match par ID précis
+                            (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid) // Match flou
+                        );
+
+                        // Trouver le nom du compte
+                        const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+
+                        if (existingIdx >= 0) {
+                            // On met à jour la ligne existante pour dire "C'est payé !"
+                            console.log(`✅ Ligne validée par transaction: ${tx.description}`);
+                            newLines[existingIdx] = {
+                                ...newLines[existingIdx],
+                                isPaid: true,
+                                account: accName,
+                                date: new Date(tx.transaction_date || tx.date) // On met la date réelle
+                            };
+                        } else {
+                            // La ligne n'existait pas dans le budget ? ON L'AJOUTE !
+                            console.log(`➕ Nouvelle ligne ajoutée depuis transaction: ${tx.description}`);
+                            newLines.push({
+                                id: tx.project_line_id || uuidv4(), // On garde l'ID si dispo
+                                description: tx.description,
+                                amount: parseFloat(tx.amount),
+                                category: tx.category,
+                                date: new Date(tx.transaction_date || tx.date),
+                                account: accName,
+                                isPaid: true, // C'est une transaction réelle, donc c'est payé
+                                isRecurring: false
+                            });
+                        }
+                    });
+                    return newLines;
+                };
+
+                currentExpenses = mergeTransactions(currentExpenses, 'expense');
+                currentRevenues = mergeTransactions(currentRevenues, 'income');
+
+            } catch (err) {
+                console.error("Erreur lors de la synchronisation des transactions:", err);
             }
         }
-      }
 
-      // Chargement Operator
-      if (project.id) {
-        loadOperationalData(project.id);
-      }
+        setExpenses(currentExpenses);
+        setRevenues(currentRevenues);
 
-    } else {
-      // RESET FORMULAIRE (Nouveau Projet)
-      setProjectName('');
-      setDescription('');
-      setProjectType('PRODUCTFLIP');
-      setStatus('active');
-      setStartDate(new Date());
-      setEndDate(null);
-      setExpenses([]);
-      setRevenues([]);
-      setPricePerContainer(0);
-      setContainerCount(0);
-      setRelatedSOPs([]);
-      setRelatedTasks([]);
-    }
-  }, [project, isOpen]);
+        // Logique Export (inchangée)
+        if (project.type === 'EXPORT') {
+          const containers = currentRevenues.filter(r => r.category === 'Vente Export Global' || r.description.includes('Export Global'));
+          if (containers.length > 0) {
+             const matchCount = containers[0].description.match(/(\d+)\s+Containers/i);
+             if (matchCount && matchCount[1]) {
+               const count = parseInt(matchCount[1], 10);
+               setContainerCount(count);
+               if (count > 0) setPricePerContainer(containers[0].amount / count);
+             }
+          }
+        }
+
+        if (project.id) loadOperationalData(project.id);
+
+      } else {
+        // Reset (Nouveau projet)
+        setProjectName('');
+        setDescription('');
+        setProjectType('PRODUCTFLIP');
+        setStatus('active');
+        setStartDate(new Date());
+        setEndDate(null);
+        setExpenses([]);
+        setRevenues([]);
+        setPricePerContainer(0);
+        setContainerCount(0);
+        setRelatedSOPs([]);
+        setRelatedTasks([]);
+      }
+    };
+
+    loadProjectData();
+  }, [project, isOpen]); // Retirez 'accounts' des dépendances si cela crée une boucle, sinon laissez-le
 
   // ✅ LOGIQUE AUTOMATIQUE EXPORT (COMMISSIONS SEULEMENT)
   // Met à jour les commissions quand le CA théorique change
@@ -305,39 +327,71 @@ export function ProjectPlannerModal({
   const removeRevenue = (id) => setRevenues(revenues.filter(r => r.id !== id));
 
   // --- ACTIONS FINANCIÈRES ---
-  const handlePayerDepense = async (exp, index) => {
-    try {
-      if (!exp.account) return alert('Choisis un compte');
-      const accountObj = accounts.find(a => a.name === exp.account);
-      if (!accountObj) return alert('Compte introuvable');
-      if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) return;
+const handlePayerDepense = async (exp, index) => {
+    console.log("🟢 Début Paiement pour:", exp);
 
+    try {
+      // 1. Vérifications de base
+      if (!exp.account) return alert('Veuillez choisir un compte (Source) pour cette dépense.');
+      
+      const accountObj = accounts.find(a => a.name === exp.account);
+      if (!accountObj) return alert(`Compte introuvable : ${exp.account}`);
+
+      const amountVal = parseFloat(exp.amount);
+      if (!amountVal || amountVal <= 0) return alert('Le montant doit être supérieur à 0.');
+
+      if (!window.confirm(`Confirmer le paiement de ${formatCurrency(amountVal)} depuis ${exp.account} ?`)) return;
+
+      setLoading(true);
+
+      // 2. Préparation de la Transaction
+      // Note : On envoie project_line_id (UUID ou Int) pour lier la transaction à cette ligne
       const txPayload = {
         type: 'expense',
-        amount: parseFloat(exp.amount), 
-        category: (exp.category && exp.category.trim() !== '') ? exp.category : 'Projet', 
+        amount: amountVal,
+        category: (exp.category && exp.category.trim() !== '') ? exp.category : 'Projet',
         description: `${projectName} - ${exp.description || 'Dépense'}`,
-        date: new Date().toISOString().split('T')[0], 
-        account_id: parseInt(accountObj.id, 10), 
+        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+        account_id: parseInt(accountObj.id, 10),
         project_id: project?.id ? parseInt(project.id, 10) : null,
-        project_line_id: exp.id,
-        is_posted: true,
-        is_planned: false
+        project_line_id: exp.id, // On envoie l'ID de la ligne (String UUID ou Int)
+        is_posted: true,   // IMPORTANT : On valide la transaction tout de suite
+        is_planned: false  // Ce n'est plus du prévisionnel
       };
 
-      await transactionsService.createTransaction(txPayload);
+      console.log('📤 Envoi Transaction:', txPayload);
 
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: true };
-      setExpenses(updated);
-      await saveProjectState(updated, revenues);
+      // 3. Création de la transaction (Point critique)
+      try {
+        await transactionsService.createTransaction(txPayload);
+      } catch (txError) {
+        console.error("❌ Erreur Transaction:", txError);
+        // On affiche l'erreur exacte venue du backend pour comprendre
+        const errorMsg = txError.details ? JSON.stringify(txError.details) : txError.message;
+        throw new Error(`Échec création transaction : ${errorMsg}`);
+      }
 
-      if (onProjectUpdated) onProjectUpdated();
-      alert('Dépense payée !');
+      // 4. Mise à jour de l'interface locale (Ligne devient verte)
+      const updatedExpenses = [...expenses];
+      updatedExpenses[index] = { ...updatedExpenses[index], isPaid: true };
+      setExpenses(updatedExpenses);
+
+      // 5. Sauvegarde du Projet (Pour mémoriser que c'est payé)
+      console.log('💾 Sauvegarde état projet...');
+      await saveProjectState(updatedExpenses, revenues);
+
+      // 6. Rafraîchissement global
+      if (onProjectUpdated) {
+        await onProjectUpdated(); 
+      }
+      
+      alert('✅ Dépense payée avec succès !');
+
     } catch (error) {
-      console.error('Erreur handlePayerDepense:', error);
-      const msg = error?.message || error?.raw?.message || 'Erreur paiement';
-      alert(msg);
+      console.error('💥 ERREUR CRITIQUE:', error);
+      alert(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -356,7 +410,7 @@ export function ProjectPlannerModal({
         date: new Date().toISOString().split('T')[0],
         account_id: parseInt(accountObj.id, 10),
         project_id: project?.id ? parseInt(project.id, 10) : null,
-        project_line_id: rev.id,
+        project_line_id: exp.id,
         is_posted: true,
         is_planned: false
       };
@@ -377,18 +431,20 @@ export function ProjectPlannerModal({
     }
   };
 
+  // --- ANNULATION PAIEMENT DÉPENSE ---
   const handleCancelPaymentExpense = async (exp, index) => {
     try {
       if (!project?.id) return alert('Projet non enregistré');
       if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
       const allTx = await transactionsService.getAll();
-      // On cherche par project_line_id (si dispo) ou par correspondance exacte
+      
+      // 1. Chercher la transaction liée
       let matches = allTx.filter(t => 
-        (String(t.project_line_id) === String(exp.id)) && t.is_posted === true
+        String(t.project_line_id) === String(exp.id) && t.is_posted === true
       );
       
-      // Fallback
+      // Fallback si pas de project_line_id
       if (matches.length === 0) {
         matches = allTx.filter(t =>
           String(t.project_id) === String(project.id) &&
@@ -398,20 +454,75 @@ export function ProjectPlannerModal({
         );
       }
 
+      // 2. Supprimer les transactions trouvées
       for (const tx of matches) {
-        await transactionsService.deleteTransaction(tx.id);
+        try {
+          await transactionsService.deleteTransaction(tx.id);
+        } catch (e) {
+          console.warn('Impossible de supprimer transaction', tx.id, e);
+        }
       }
 
+      // 3. Mettre à jour l'état local
       const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: false };
+      updated[index] = { ...updated[index], isPaid: false }; // On repasse à non payé
       setExpenses(updated);
+
+      // 4. SAUVEGARDER L'ÉTAT DU PROJET (CRUCIAL)
+      // C'est ici que ça manquait : il faut dire à la DB que la ligne n'est plus payée
       await saveProjectState(updated, revenues);
 
+      // 5. Rafraîchir l'app globale
       if (onProjectUpdated) onProjectUpdated();
+      
       alert('Paiement annulé.');
+
     } catch (err) {
-      console.error('Erreur annulation:', err);
-      alert('Erreur annulation: ' + err.message);
+      console.error('Erreur handleCancelPaymentExpense:', err);
+      alert('Erreur annulation paiement: ' + (err.message || err));
+    }
+  };
+
+  // --- ANNULATION PAIEMENT REVENU ---
+  const handleCancelPaymentRevenue = async (rev, index) => {
+    try {
+      if (!project?.id) return alert('Projet non enregistré');
+      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+
+      const allTx = await transactionsService.getAll();
+      let matches = allTx.filter(t => 
+        String(t.project_line_id) === String(rev.id) && t.is_posted === true
+      );
+
+      if (matches.length === 0) {
+        matches = allTx.filter(t =>
+          String(t.project_id) === String(project.id) &&
+          t.type === 'income' &&
+          Number(t.amount) === Number(rev.amount)
+        );
+      }
+
+      for (const tx of matches) {
+        try {
+          await transactionsService.deleteTransaction(tx.id);
+        } catch (e) {
+          console.warn('Impossible de supprimer transaction', tx.id, e);
+        }
+      }
+
+      const updated = [...revenues];
+      updated[index] = { ...updated[index], isPaid: false };
+      setRevenues(updated);
+
+      // SAUVEGARDE DB
+      await saveProjectState(expenses, updated);
+
+      if (onProjectUpdated) onProjectUpdated();
+      alert('Encaissement annulé.');
+
+    } catch (err) {
+      console.error('Erreur handleCancelPaymentRevenue:', err);
+      alert(`Erreur annulation encaissement: ${err.message || err}`);
     }
   };
 

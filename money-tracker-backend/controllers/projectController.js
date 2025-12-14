@@ -319,10 +319,20 @@ exports.createProject = async (req, res) => {
 // ============================================================================
 // 3. PUT - Mettre à jour un projet
 // ============================================================================
-exports.updateProject = async (req, res) => {
-  try {
-    const id = Number(req.params.id);
+// controllers/projectController.js
 
+// ... (le début du fichier reste identique)
+
+// ============================================================================
+// 3. PUT - Mettre à jour un projet (AVEC SUPPRESSION DES LIGNES SUPPRIMÉES)
+// ============================================================================
+exports.updateProject = async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    const id = Number(req.params.id);
     const {
       name, description, type, status, startDate, endDate, frequency, occurrencesCount,
       totalCost, totalRevenues, netProfit, roi,
@@ -334,70 +344,150 @@ exports.updateProject = async (req, res) => {
     const occCount = parseInt(occurrencesCount || 1, 10);
     const finalRevenueAllocation = revenue_allocation || revenueAllocation || {};
 
-    // Sécurisation des JSON
     const expensesJson = safeJson(expenses);
     const revenuesJson = safeJson(revenues);
     const allocationJson = safeJson(allocation);
     const revAllocationJson = safeJson(finalRevenueAllocation);
 
-    const result = await pool.query(
+    // 1. Mise à jour Projet principal
+    const result = await client.query(
       `UPDATE projects 
-       SET 
-         name               = $1,
-         description        = $2,
-         type               = $3,
-         status             = $4,
-         start_date         = $5,
-         end_date           = $6,
-         frequency          = $7,
-         occurrences_count  = $8,
-         total_cost         = $9,
-         total_revenues     = $10,
-         net_profit         = $11,
-         roi                = $12,
-         remaining_budget   = $13,
-         total_available    = $14,
-         expenses           = $15::jsonb,
-         revenues           = $16::jsonb,
-         allocation         = $17::jsonb,
-         revenue_allocation = $18::jsonb,
-         updated_at         = NOW()
-       WHERE id = $19
+       SET name=$1, description=$2, type=$3, status=$4, start_date=$5, end_date=$6,
+           frequency=$7, occurrences_count=$8, total_cost=$9, total_revenues=$10,
+           net_profit=$11, roi=$12, remaining_budget=$13, total_available=$14,
+           expenses=$15::jsonb, revenues=$16::jsonb, allocation=$17::jsonb, 
+           revenue_allocation=$18::jsonb, updated_at=NOW()
+       WHERE id=$19
        RETURNING *`,
       [
-        name,
-        description,
-        type,
-        finalStatus,
-        startDate || null,
-        endDate || null,
-        frequency || null,
-        occCount,
-        parseFloat(totalCost || 0),
-        parseFloat(totalRevenues || 0),
-        parseFloat(netProfit || 0),
-        parseFloat(roi || 0),
-        parseFloat(remainingBudget || 0),
-        parseFloat(totalAvailable || 0),
-        expensesJson,
-        revenuesJson,
-        allocationJson,
-        revAllocationJson,
-        id
+        name, description, type, finalStatus, startDate || null, endDate || null,
+        frequency || null, occCount, parseFloat(totalCost || 0), parseFloat(totalRevenues || 0),
+        parseFloat(netProfit || 0), parseFloat(roi || 0), parseFloat(remainingBudget || 0),
+        parseFloat(totalAvailable || 0), expensesJson, revenuesJson, allocationJson, revAllocationJson, id
       ]
     );
 
-    if (!result.rows[0]) {
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Projet non trouvé' });
     }
 
-    res.json(result.rows[0]);
+    // --- GESTION DES LIGNES (CRUD INTELLIGENT) ---
+
+    // A. DÉPENSES
+    const expensesList = Array.isArray(expenses) ? expenses : JSON.parse(expenses || '[]');
+    
+    // Récupérer les IDs valides (entiers) qu'on veut GARDER
+    const validExpenseIds = expensesList
+      .map(e => e.id)
+      .filter(id => Number.isInteger(id) || (typeof id === 'string' && /^\d+$/.test(id)));
+
+    // 🗑️ SUPPRESSION : On efface tout ce qui n'est pas dans la liste des IDs valides
+    if (validExpenseIds.length > 0) {
+      await client.query(
+        `DELETE FROM project_expense_lines 
+         WHERE project_id = $1 AND id != ALL($2::int[])`,
+        [id, validExpenseIds]
+      );
+    } else {
+      // Si la liste est vide (ou ne contient que des nouveaux UUIDs), on supprime tout l'ancien
+      await client.query('DELETE FROM project_expense_lines WHERE project_id = $1', [id]);
+    }
+
+    // UPSERT (Mise à jour ou Création)
+    for (const item of expensesList) {
+      // Si l'ID est un entier (existant en base)
+      if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
+        await client.query(
+          `UPDATE project_expense_lines 
+           SET description=$1, category=$2, projected_amount=$3, is_paid=$4
+           WHERE id=$5`,
+          [
+            item.description || '', 
+            item.category || 'Autre', 
+            parseFloat(item.amount || 0), 
+            item.isPaid || false,
+            parseInt(item.id)
+          ]
+        );
+      } else {
+        // Si l'ID est un UUID (nouveau du frontend)
+        await client.query(
+          `INSERT INTO project_expense_lines 
+           (project_id, description, category, projected_amount, actual_amount, is_paid)
+           VALUES ($1, $2, $3, $4, 0, $5)`,
+          [
+            id, 
+            item.description || '', 
+            item.category || 'Autre', 
+            parseFloat(item.amount || 0),
+            item.isPaid || false
+          ]
+        );
+      }
+    }
+
+    // B. REVENUS (Même logique)
+    const revenuesList = Array.isArray(revenues) ? revenues : JSON.parse(revenues || '[]');
+    
+    const validRevenueIds = revenuesList
+      .map(r => r.id)
+      .filter(id => Number.isInteger(id) || (typeof id === 'string' && /^\d+$/.test(id)));
+
+    if (validRevenueIds.length > 0) {
+      await client.query(
+        `DELETE FROM project_revenue_lines 
+         WHERE project_id = $1 AND id != ALL($2::int[])`,
+        [id, validRevenueIds]
+      );
+    } else {
+      await client.query('DELETE FROM project_revenue_lines WHERE project_id = $1', [id]);
+    }
+
+    for (const item of revenuesList) {
+      if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
+        await client.query(
+          `UPDATE project_revenue_lines 
+           SET description=$1, category=$2, projected_amount=$3, is_received=$4
+           WHERE id=$5`,
+          [
+            item.description || '', 
+            item.category || 'Autre', 
+            parseFloat(item.amount || 0), 
+            item.isPaid || item.isReceived || false,
+            parseInt(item.id)
+          ]
+        );
+      } else {
+        await client.query(
+          `INSERT INTO project_revenue_lines 
+           (project_id, description, category, projected_amount, actual_amount, is_received)
+           VALUES ($1, $2, $3, $4, 0, $5)`,
+          [
+            id, 
+            item.description || '', 
+            item.category || 'Autre', 
+            parseFloat(item.amount || 0),
+            item.isPaid || item.isReceived || false
+          ]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    
+    // On renvoie le projet mis à jour
+    const updatedProject = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
+    res.json(updatedProject.rows[0]);
+
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('💥 UPDATE project:', error);
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  } finally {
+    client.release();
   }
 };
-
 // ============================================================================
 // 4. PATCH - Changer uniquement le statut (sans validation complète)
 // ============================================================================

@@ -99,7 +99,7 @@ exports.createTransaction = async (req, res, next) => {
         is_planned || false, 
         shouldPost, 
         project_id || null,
-        project_line_id || null // ✅ Enregistrement en base
+        project_line_id || null // $10 : On passe la valeur brute (String ou Int)
       ]
     );
 
