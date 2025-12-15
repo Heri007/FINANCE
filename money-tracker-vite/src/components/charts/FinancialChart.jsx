@@ -65,19 +65,25 @@ export default function FinancialChart({ transactions }) {
     return null;
   };
 
-  if (!mounted) {
-    return (
-      <div className="w-full h-80 flex items-center justify-center bg-slate-50 rounded-lg">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-      </div>
-    );
-  }
+  // FinancialChart.jsx - REMPLACEZ le return final (à partir de la ligne 84)
 
-  const data = processData();
-
+if (!mounted) {
   return (
-    <div className="w-full" style={{ height: '320px', minHeight: '320px' }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="w-full h-80 flex items-center justify-center bg-slate-50 rounded-lg">
+      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+    </div>
+  );
+}
+
+const data = processData();
+
+return (
+  <div className="w-full h-[400px] min-h-[400px] bg-white rounded-xl shadow-lg p-4">
+    <h3 className="text-lg font-semibold text-gray-700 mb-4">
+      Évolution financière (30 derniers jours)
+    </h3>
+    <div className="w-full h-[calc(100%-3rem)]"> {/* 100% moins la hauteur du titre */}
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
         <AreaChart
           data={data}
           margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
@@ -130,5 +136,6 @@ export default function FinancialChart({ transactions }) {
         </AreaChart>
       </ResponsiveContainer>
     </div>
-  );
+  </div>
+);
 }

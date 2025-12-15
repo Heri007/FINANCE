@@ -33,120 +33,114 @@ export function ProjectDetailsModal({
 
   if (!isOpen || !project) return null;
 
+  useEffect(() => {
+  console.log('🔍 DEBUG ProjectDetailsModal:', {
+    projectId: project?.id,
+    projectName: project?.name,
+    expenseLines: project?.expenseLines?.length,
+    revenueLines: project?.revenueLines?.length,
+    expenses: typeof project?.expenses,
+    revenues: typeof project?.revenues
+  });
+}, [project]);
+
 
   // =======================================================================
   // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
   // =======================================================================
   const normalizeData = useMemo(() => {
-  console.log("📥 Normalisation projet:", project.name);
+  console.log("📥 Normalisation projet:", project.name, {
+    hasExpenseLines: !!project.expenseLines,
+    hasExpenses: !!project.expenses,
+    expenseLinesCount: project.expenseLines?.length,
+    expensesCount: project.expenses?.length
+  });
 
   // Fonction pour parser et nettoyer n'importe quelle liste
   const cleanList = (jsonOrArray, type) => {
     let list = [];
-    if (typeof jsonOrArray === 'string') {
+    
+    // Si c'est déjà un tableau
+    if (Array.isArray(jsonOrArray)) {
+      list = jsonOrArray;
+    }
+    // Si c'est une chaîne JSON
+    else if (typeof jsonOrArray === 'string') {
       try {
         list = JSON.parse(jsonOrArray);
       } catch (e) {
         console.warn(`Erreur parsing ${type}:`, e);
         list = [];
       }
-    } else if (Array.isArray(jsonOrArray)) {
-      list = jsonOrArray;
     }
 
-    return list.map(item => ({
-      id: item.id || item.dbId || Math.random().toString(36),
-      description: item.description || item.category || 'Sans description',
-      category: item.category || 'Autre',
-      amount: parseFloat(item.amount || item.projectedAmount || item.projected_amount || item.actualAmount || item.actual_amount || 0),
-      isPaid: !!(item.isPaid || item.is_paid || item.isReceived || item.is_received),
-      date: item.date || item.transactionDate || item.transaction_date,
-      account: item.account || ''
-    }));
+    console.log(`🔧 ${type} raw:`, list.length, 'items');
+
+    return list.map(item => {
+      // Déterminer si c'est une ligne normalisée (avec ID entier) ou ancien format
+      const isNormalizedLine = item.id && Number.isInteger(item.id);
+      
+      return {
+        // ID: priorité à l'ID normalisé, sinon UUID
+        id: isNormalizedLine ? item.id : (item.id || Math.random().toString(36)),
+        
+        description: item.description || item.category || 'Sans description',
+        category: item.category || 'Autre',
+        
+        // Montant: chercher dans différents champs
+        amount: parseFloat(
+          item.amount || 
+          item.projectedAmount || 
+          item.projected_amount || 
+          item.actualAmount || 
+          item.actual_amount || 
+          0
+        ),
+        
+        // État de paiement: chercher dans différents champs
+        isPaid: !!(
+          item.isPaid || 
+          item.is_paid || 
+          item.isReceived || 
+          item.is_received
+        ),
+        
+        // Date: chercher dans différents champs
+        date: item.date || 
+              item.transactionDate || 
+              item.transaction_date || 
+              new Date(),
+        
+        // Compte: chercher dans différents champs (important pour le frontend)
+        account: item.account || 'Coffre', // Valeur par défaut
+        
+        // Phase: seulement dans l'ancien format
+        phase: item.phase || ''
+      };
+    });
   };
 
-  const rawExpenses = (project.expenseLines && project.expenseLines.length > 0) 
-    ? project.expenseLines 
-    : project.expenses;
-    
-  const rawRevenues = (project.revenueLines && project.revenueLines.length > 0) 
-    ? project.revenueLines 
-    : project.revenues;
+  // Sinon, fallback sur expenses/revenues
+  let expenses = [];
+  let revenues = [];
 
-  const expenses = cleanList(rawExpenses, 'expenses');
-  let revenues = cleanList(rawRevenues, 'revenues');
-
-  // --- Génération automatique des revenus mensuels investisseur pour Natiora (ID 24)
-  if (project.id === 24) {
-    const investorShare = 0.85; // 85%
-    const monthlyRevenues = [];
-
-    const projectYears = [
-      { year: 2026, poulets: 96000000, oies: 58900000, kuroiler: 3195000 },
-      { year: 2027, poulets: 103680000, oies: 63790000, kuroiler: 3357000 },
-      { year: 2028, poulets: 112896000, oies: 68950000, kuroiler: 3524850 },
-      { year: 2029, poulets: 146899200, oies: 89600000, kuroiler: 4582753 },
-      { year: 2030, poulets: 194768000, oies: 118400000, kuroiler: 6060000 }
-    ];
-
-    projectYears.forEach(({ year, poulets, oies, kuroiler }) => {
-      // Poulets (8 cycles/an)
-      const pouletsCycles = 8;
-      const pouletsAmountPerCycle = poulets / pouletsCycles;
-      for (let i = 0; i < pouletsCycles; i++) {
-        const month = Math.floor(i * (12 / pouletsCycles));
-        monthlyRevenues.push({
-          id: `poulets-${year}-${i+1}`,
-          description: `Vente poulets - cycle ${i+1}`,
-          amount: pouletsAmountPerCycle * investorShare,
-          date: new Date(year, month, 1),
-          account: "Compte Investisseur",
-          category: "Revenu Investisseur",
-          isPaid: false
-        });
-      }
-
-      // Oies (4 cycles/an)
-      const oiesCycles = 4;
-      const oiesAmountPerCycle = oies / oiesCycles;
-      for (let i = 0; i < oiesCycles; i++) {
-        const month = Math.floor(i * (12 / oiesCycles));
-        monthlyRevenues.push({
-          id: `oies-${year}-${i+1}`,
-          description: `Vente oies - cycle ${i+1}`,
-          amount: oiesAmountPerCycle * investorShare,
-          date: new Date(year, month, 1),
-          account: "Compte Investisseur",
-          category: "Revenu Investisseur",
-          isPaid: false
-        });
-      }
-
-      // Marge nette Kuroiler (1 fois/an)
-      monthlyRevenues.push({
-        id: `kuroiler-${year}-1`,
-        description: `Marge nette annuelle Kuroiler`,
-        amount: kuroiler * investorShare,
-        date: new Date(year, 11, 31),
-        account: "Compte Investisseur",
-        category: "Revenu Investisseur",
-        isPaid: false
-      });
-    });
-
-    // --- FILTRER les anciennes ventes poulets / oies pour éviter doublons
-    revenues = revenues.filter(r => 
-      !r.description.includes('Vente poulets') && 
-      !r.description.includes('Vente oies')
-    );
-
-    // Ajouter les revenus mensuels calculés
-    revenues.push(...monthlyRevenues);
+  if (project.expenseLines && project.expenseLines.length > 0) {
+    console.log('✅ Utilisation de expenseLines');
+    expenses = cleanList(project.expenseLines, 'expenseLines');
+  } else if (project.expenses) {
+    console.log('⚠️ Fallback sur expenses (ancien format)');
+    expenses = cleanList(project.expenses, 'expenses');
   }
 
-  const totalCost = expenses.reduce((sum, e) => sum + e.amount, 0);
+  if (project.revenueLines && project.revenueLines.length > 0) {
+    console.log('✅ Utilisation de revenueLines');
+    revenues = cleanList(project.revenueLines, 'revenueLines');
+  } else if (project.revenues) {
+    console.log('⚠️ Fallback sur revenues (ancien format)');
+    revenues = cleanList(project.revenues, 'revenues');
+  }
 
-  console.log(`✅ ${expenses.length} dépenses, ${revenues.length} revenus chargés.`);
+  console.log(`✅ ${expenses.length} dépenses, ${revenues.length} revenus normalisés.`);
   return { expenses, revenues };
 }, [project]);
 
@@ -197,6 +191,16 @@ export function ProjectDetailsModal({
   const totalRevenuePrev = totalReceived + totalPending;
   const netProfit = totalRevenuePrev - totalBudget;
   const roi = totalBudget > 0 ? ((netProfit / totalBudget) * 100).toFixed(1) : 0;
+
+  // Après le calcul des totaux dans normalizeData
+console.log('💰 TOTAUX CALCULÉS:', {
+  totalPaidExpenses,
+  totalUnpaidExpenses,
+  totalReceived,
+  totalPending,
+  netProfit,
+  roi
+});
   
   // Dates
   const startDate = project.start_date || project.startDate;
@@ -274,6 +278,16 @@ export function ProjectDetailsModal({
     navigator.clipboard.writeText(text).then(() => alert('Résumé copié !'));
   };
 
+  // Juste avant le return
+console.log('🎯 RENDU Modal avec:', {
+  expensesCount: expenses?.length,
+  revenuesCount: revenues?.length,
+  paidExpenses: paidExpenses?.length,
+  unpaidExpenses: unpaidExpenses?.length,
+  receivedRevenues: receivedRevenues?.length,
+  pendingRevenues: pendingRevenues?.length
+});
+
   // =======================================================================
   // 4. RENDER
   // =======================================================================
@@ -281,11 +295,13 @@ export function ProjectDetailsModal({
   return (
     <>
       <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-          
-          {/* HEADER */}
-          <div className="p-6 border-b flex justify-between items-start bg-gradient-to-r from-gray-50 to-slate-50 rounded-t-2xl">
-            <div>
+  <div 
+    className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col" 
+    style={{ maxHeight: 'calc(100vh - 2rem)', minHeight: '500px' }}
+  >
+    
+    {/* HEADER */}
+    <div className="p-6 border-b flex justify-between items-start bg-gradient-to-r from-gray-50 to-slate-50 rounded-t-2xl">            <div>
               <h2 className="text-xl font-bold text-gray-800 mb-1">{project.name}</h2>
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 text-xs font-medium">
@@ -318,8 +334,9 @@ export function ProjectDetailsModal({
             </button>
           </div>
 
-          {/* BODY SCROLLABLE */}
-          <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/30">
+          {/* BODY CORRIGÉ : Structure flex à deux niveaux */}
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/30">
             
             {/* --- VUE GÉNÉRALE --- */}
             {activeTab === 'overview' && (
@@ -388,8 +405,24 @@ export function ProjectDetailsModal({
                 <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                   <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wider flex items-center gap-2">
                     <PieChart className="w-4 h-4 text-red-500" /> Dépenses ({progressExp}%)
+                    {/* DEBUG */}
+    <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
+      {expenses.length} total / {paidExpenses.length} payées
+    </span>
                   </h3>
-                  
+                    {/* DEBUG VISIBLE */}
+  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+    <div className="text-xs font-bold text-yellow-800 mb-1">DEBUG : Dépenses normalisées</div>
+    <div className="text-sm text-yellow-700">
+      Total: {expenses.length} | Payées: {paidExpenses.length} | À payer: {unpaidExpenses.length}
+    </div>
+    {expenses.slice(0, 2).map((e, i) => (
+      <div key={i} className="text-xs mt-1 pl-2 border-l-2 border-yellow-400">
+        {e.description}: {e.amount} Ar ({e.isPaid ? '✅ payé' : '⏳ à payer'})
+      </div>
+    ))}
+  </div>
+
                   <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
                     <div className="bg-red-500 h-2 rounded-full" style={{ width: `${progressExp}%` }}></div>
                   </div>
@@ -569,7 +602,7 @@ export function ProjectDetailsModal({
               </div>
             )}
           </div>
-
+</div>
           {/* FOOTER */}
           <div className="p-4 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
             <button onClick={handleCopyToClipboard} className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-200 rounded-xl hover:shadow-sm">

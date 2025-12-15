@@ -1,6 +1,13 @@
+/* index.css - VERSION CORRIGÉE */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* RESET MINIMAL */
+:root {
+  font-size: 16px;
+  letter-spacing: normal;
+}
 
 body {
   margin: 0;
@@ -9,6 +16,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-size: 1rem !important;
+  letter-spacing: normal !important;
 }
 
 code {
@@ -16,16 +25,19 @@ code {
     monospace;
 }
 
-/* Force full width */
-#root {
+/* SUPPRIMEZ toutes les règles suivantes OU gardez-les UNIQUEMENT si nécessaires */
+
+/* #root {
   width: 100vw !important;
   max-width: 100vw !important;
   overflow-x: hidden;
-}
+} */
 
-.min-h-screen {
+/* .min-h-screen {
   width: 100% !important;
-}
+} */
+
+/* Si vous avez besoin des styles modaux, gardez-les */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -49,73 +61,4 @@ code {
   overflow-y: auto;
 }
 
-.form-group {
-  margin-bottom: 20px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-
-.form-group input,
-.form-group select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-}
-
-.checkbox-group {
-  display: flex;
-  align-items: center;
-  padding: 15px;
-  background: #f0f9ff;
-  border-radius: 8px;
-  border: 2px solid #3b82f6;
-}
-
-.checkbox-group label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  margin: 0;
-}
-
-.checkbox-group input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
-  margin-right: 10px;
-  cursor: pointer;
-}
-
-.checkbox-group span {
-  font-weight: 500;
-  color: #1e40af;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.modal-actions button {
-  padding: 10px 20px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.modal-actions button[type="button"] {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-.modal-actions button[type="submit"] {
-  background: #3b82f6;
-  color: white;
-}
+/* Les autres styles (.form-group, .checkbox-group, etc.) gardez-les si vous en avez besoin */

@@ -205,11 +205,58 @@ const updateTransactionsTable = async () => {
       CREATE INDEX IF NOT EXISTS idx_transactions_is_planned ON transactions(is_planned);
     `);
 
+    await pool.query(`
+  DO $$ 
+  BEGIN
+    -- Ajouter project_line_id si manquant
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'transactions' AND column_name = 'project_line_id'
+    ) THEN
+      ALTER TABLE transactions ADD COLUMN project_line_id INTEGER;
+    END IF;
+  END $$;
+
+  -- Index pour project_line_id
+  CREATE INDEX IF NOT EXISTS idx_transactions_project_line_id 
+  ON transactions(project_line_id);
+`);
+
     console.log('✅ Table transactions mise à jour (is_planned, project_id)');
   } catch (error) {
     console.error('❌ Erreur mise à jour transactions:', error);
   }
 };
+
+
+// Ajouter après la création de la table projects dans init-db.js
+await client.query(`
+  CREATE TABLE IF NOT EXISTS project_expense_lines (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    category VARCHAR(100) DEFAULT 'Autre',
+    projected_amount DECIMAL(15, 2) DEFAULT 0,
+    actual_amount DECIMAL(15, 2) DEFAULT 0,
+    transaction_date DATE,
+    is_paid BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`);
+
+await client.query(`
+  CREATE TABLE IF NOT EXISTS project_revenue_lines (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    category VARCHAR(100) DEFAULT 'Autre',
+    projected_amount DECIMAL(15, 2) DEFAULT 0,
+    actual_amount DECIMAL(15, 2) DEFAULT 0,
+    transaction_date DATE,
+    is_received BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`);
 
 // Appel automatique au démarrage du serveur (migration douce)
 updateTransactionsTable();

@@ -106,6 +106,7 @@ app.post('/api/reset-data', authenticateToken, async (req, res, next) => {
 // GESTIONNAIRE D'ERREURS GLOBAL (DOIT ÊTRE À LA FIN)
 // -----------------------------------------------------------------------------
 app.use(errorHandler);
+app.use('/api/project-migration', require('./routes/projectMigration'));
 
 // -----------------------------------------------------------------------------
 // DÉMARRAGE DU SERVEUR + TEST DB

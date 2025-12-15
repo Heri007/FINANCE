@@ -84,24 +84,24 @@ exports.createTransaction = async (req, res, next) => {
 
     // ✅ REQUÊTE SQL MISE À JOUR (Ajout de project_line_id)
     const insertResult = await client.query(
-      `INSERT INTO transactions 
-       (account_id, type, amount, category, description, transaction_date, 
-        is_planned, is_posted, project_id, project_line_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING *`,
-      [
-        account_id, 
-        type, 
-        finalAmount, 
-        category, 
-        description, 
-        finalDate, 
-        is_planned || false, 
-        shouldPost, 
-        project_id || null,
-        project_line_id || null // $10 : On passe la valeur brute (String ou Int)
-      ]
-    );
+  `INSERT INTO transactions 
+   (account_id, type, amount, category, description, transaction_date, 
+    is_planned, is_posted, project_id, project_line_id)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+   RETURNING *`,
+  [
+    account_id, 
+    type, 
+    finalAmount, 
+    category, 
+    description, 
+    finalDate, 
+    is_planned || false, 
+    shouldPost, 
+    project_id || null,
+    project_line_id || null // ✅ Accepte null ou entier
+  ]
+);
 
     const transaction = insertResult.rows[0];
 

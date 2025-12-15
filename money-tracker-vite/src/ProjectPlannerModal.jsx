@@ -343,7 +343,16 @@ const handlePayerDepense = async (exp, index) => {
       if (!window.confirm(`Confirmer le paiement de ${formatCurrency(amountVal)} depuis ${exp.account} ?`)) return;
 
       setLoading(true);
-
+  // Avant création transaction, s'assurer que la ligne existe en base
+  if (!exp.dbId && exp.id && typeof exp.id === 'string' && exp.id.includes('-')) {
+    // C'est un UUID frontend, besoin de créer la ligne en base d'abord
+    const lineResult = await projectsService.createExpenseLine(project.id, {
+      description: exp.description,
+      amount: exp.amount,
+      category: exp.category
+    });
+    exp.dbId = lineResult.id; // ID réel de la base
+  }
       // 2. Préparation de la Transaction
       // Note : On envoie project_line_id (UUID ou Int) pour lier la transaction à cette ligne
       const txPayload = {
@@ -354,7 +363,7 @@ const handlePayerDepense = async (exp, index) => {
         date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
         account_id: parseInt(accountObj.id, 10),
         project_id: project?.id ? parseInt(project.id, 10) : null,
-        project_line_id: exp.id, // On envoie l'ID de la ligne (String UUID ou Int)
+        project_line_id: exp.dbId || exp.id, // Peut être UUID ou Int
         is_posted: true,   // IMPORTANT : On valide la transaction tout de suite
         is_planned: false  // Ce n'est plus du prévisionnel
       };

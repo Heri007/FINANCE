@@ -9,5 +9,20 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    // Capture les erreurs CSS
+    const originalConsoleError = console.error;
+    console.error = function(...args) {
+      if (args[0] && args[0].includes && 
+          (args[0].includes('font-size') || args[0].includes('letter-spacing'))) {
+        console.warn('Erreur CSS détectée:', args);
+        // Affiche l'élément problématique
+        debugger;
+      }
+      originalConsoleError.apply(console, args);
+    };
+  });
+</script>
   </body>
 </html>

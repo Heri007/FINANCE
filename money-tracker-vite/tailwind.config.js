@@ -5,11 +5,19 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
-    extend: {},
+    extend: {
+      // Ajoutez des valeurs par défaut pour éviter les erreurs
+      fontSize: {
+        DEFAULT: '1rem',
+      },
+      letterSpacing: {
+        DEFAULT: '0em',
+      },
+    },
   },
   plugins: [],
-  corePlugins: {
-    // Désactive les propriétés CSS qui causent problème
-    preflight: true,
-  },
+  // Ne désactivez pas preflight, c'est important pour Tailwind
+  // corePlugins: {
+  //   preflight: true,
+  // },
 }

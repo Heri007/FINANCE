@@ -135,29 +135,30 @@ exports.getProjectById = async (req, res) => {
 
     // Attempt to load normalized project lines if tables exist
     try {
-      const expLines = await pool.query(`
-        SELECT id, description, category, projected_amount, actual_amount, transaction_date, is_paid, created_at
-        FROM project_expense_lines
-        WHERE project_id = $1
-        ORDER BY id ASC
-      `, [id]);
+  const expLines = await pool.query(`
+    SELECT id, description, category, projected_amount, actual_amount, transaction_date, is_paid, created_at
+    FROM project_expense_lines
+    WHERE project_id = $1
+    ORDER BY id ASC
+  `, [id]);
 
-      if (expLines.rows && expLines.rows.length > 0) {
-        project.expenseLines = expLines.rows.map(r => ({
-          id: r.id,
-          description: r.description,
-          category: r.category,
-          projectedAmount: parseFloat(r.projected_amount || 0),
-          actualAmount: parseFloat(r.actual_amount || 0),
-          transactionDate: r.transaction_date,
-          isPaid: !!r.is_paid,
-          createdAt: r.created_at
-        }));
-      }
+  if (expLines.rows && expLines.rows.length > 0) {
+    project.expenseLines = expLines.rows.map(r => ({
+      id: r.id,
+      description: r.description,
+      category: r.category,
+      projectedAmount: parseFloat(r.projected_amount || 0),
+      actualAmount: parseFloat(r.actual_amount || 0),
+      transactionDate: r.transaction_date,
+      isPaid: !!r.is_paid,
+      createdAt: r.created_at
+    }));
+  }
 
       const revLines = await pool.query(`
-        SELECT id, description, category, projected_amount, actual_amount, transaction_date, is_received, created_at
-        FROM project_revenue_lines
+        SELECT id, description, category, projected_amount, actual_amount, 
+       transaction_date, is_received, created_at
+      FROM project_revenue_lines
         WHERE project_id = $1
         ORDER BY id ASC
       `, [id]);
