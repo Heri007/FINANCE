@@ -1,141 +1,111 @@
-import React, { useState, useEffect } from 'react';
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, 
-  Tooltip, ResponsiveContainer, Legend
+// src/components/charts/FinancialChart.jsx
+import React, { useMemo } from 'react';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer 
 } from 'recharts';
 
-export default function FinancialChart({ transactions }) {
-  const [mounted, setMounted] = useState(false);
+const FinancialChart = ({ transactions = [] }) => {
+  console.log('🔵 FinancialChart chargé !', new Date().toISOString());
+  // Préparer les données pour le graphique
+  const chartData = useMemo(() => {
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return [];
+    }
 
-  useEffect(() => {
-    const timer = setTimeout(() => setMounted(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const processData = () => {
-    const last30Days = new Array(30).fill(0).map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (29 - i));
-      return d.toISOString().split('T')[0];
-    });
-
-    const dataMap = last30Days.reduce((acc, date) => {
-      acc[date] = { date, income: 0, expense: 0 };
-      return acc;
-    }, {});
-
+    // Grouper par date
+    const grouped = {};
     transactions.forEach(t => {
-      const dateKey = typeof t.date === 'string' ? t.date.substring(0, 10) : '';
-      if (!dataMap[dateKey]) return;
+      const date = t.date?.split('T')[0] || t.transaction_date?.split('T')[0];
+      if (!date) return;
+
+      if (!grouped[date]) {
+        grouped[date] = { date, income: 0, expense: 0 };
+      }
 
       const amount = parseFloat(t.amount) || 0;
       if (t.type === 'income') {
-        dataMap[dateKey].income += amount;
-      } else if (t.type === 'expense') {
-        dataMap[dateKey].expense += amount;
+        grouped[date].income += amount;
+      } else {
+        grouped[date].expense += amount;
       }
     });
 
-    return Object.values(dataMap).map(item => ({
-      ...item,
-      shortDate: new Date(item.date).toLocaleDateString('fr-FR', { 
-        day: '2-digit', 
-        month: '2-digit' 
-      })
-    }));
-  };
+    // Trier par date et prendre les 30 derniers jours
+    return Object.values(grouped)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(-30);
+  }, [transactions]);
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 border border-slate-200 rounded-lg shadow-lg">
-          <p className="font-semibold text-slate-700 mb-2">{label}</p>
-          {payload.map((entry, index) => (
-            <p
-              key={index}
-              style={{ color: entry.color }}
-              className="text-sm font-medium"
-            >
-              {entry.name}: {Number(entry.value).toLocaleString('fr-FR')} Ar
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
-  };
+  // Afficher un message si pas de données
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-96 text-gray-500">
+        Aucune transaction à afficher
+      </div>
+    );
+  }
 
-  // FinancialChart.jsx - REMPLACEZ le return final (à partir de la ligne 84)
-
-if (!mounted) {
   return (
-    <div className="w-full h-80 flex items-center justify-center bg-slate-50 rounded-lg">
-      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-    </div>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart
+        data={chartData}
+        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        <XAxis 
+          dataKey="date" 
+          tick={{ fill: '#6b7280', fontSize: '12px' }}  // ✅ CORRIGÉ
+          tickFormatter={(date) => {
+            const d = new Date(date);
+            return `${d.getDate()}/${d.getMonth() + 1}`;
+          }}
+        />
+        <YAxis 
+          tick={{ fill: '#6b7280', fontSize: '12px' }}  // ✅ CORRIGÉ
+          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+        />
+        <Tooltip 
+          contentStyle={{ 
+            backgroundColor: 'white', 
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+          }}
+          formatter={(value) => `${parseFloat(value).toLocaleString('fr-FR')} Ar`}
+          labelFormatter={(label) => `Date: ${label}`}
+        />
+        <Legend 
+          wrapperStyle={{ paddingTop: '10px' }}
+          iconType="line"
+        />
+        <Line 
+          type="monotone" 
+          dataKey="income" 
+          stroke="#10b981" 
+          strokeWidth={2}
+          dot={{ fill: '#10b981', r: 4 }}
+          activeDot={{ r: 6 }}
+          name="Revenus"
+        />
+        <Line 
+          type="monotone" 
+          dataKey="expense" 
+          stroke="#ef4444" 
+          strokeWidth={2}
+          dot={{ fill: '#ef4444', r: 4 }}
+          activeDot={{ r: 6 }}
+          name="Dépenses"
+        />
+      </LineChart>
+    </ResponsiveContainer>
   );
-}
+};
 
-const data = processData();
-
-return (
-  <div className="w-full h-[400px] min-h-[400px] bg-white rounded-xl shadow-lg p-4">
-    <h3 className="text-lg font-semibold text-gray-700 mb-4">
-      Évolution financière (30 derniers jours)
-    </h3>
-    <div className="w-full h-[calc(100%-3rem)]"> {/* 100% moins la hauteur du titre */}
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <AreaChart
-          data={data}
-          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-        >
-          <defs>
-            <linearGradient id="incomeColor" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="expenseColor" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis 
-            dataKey="shortDate" 
-            tick={{ fontSize: 11, fill: '#64748b' }} 
-            stroke="#cbd5e1"
-          />
-          <YAxis 
-            tick={{ fontSize: 11, fill: '#64748b' }} 
-            stroke="#cbd5e1"
-            tickFormatter={(value) =>
-              value >= 1000000
-                ? `${(value / 1000000).toFixed(1)}M`
-                : value >= 1000
-                ? `${(value / 1000).toFixed(0)}K`
-                : value
-            }
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-          <Area
-            type="monotone"
-            dataKey="income"
-            name="Encaissements"
-            stroke="#10b981"
-            strokeWidth={2}
-            fill="url(#incomeColor)"
-          />
-          <Area
-            type="monotone"
-            dataKey="expense"
-            name="Dépenses"
-            stroke="#ef4444"
-            strokeWidth={2}
-            fill="url(#expenseColor)"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  </div>
-);
-}
+export default FinancialChart;

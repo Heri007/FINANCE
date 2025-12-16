@@ -4,34 +4,34 @@ import { apiRequest } from './api';
 export const projectsService = {
   // ✅ Ajouter guard array
   async getAll() {
-    const data = await apiRequest('/projects');
+    const data = await apiRequest('api/projects');
     return Array.isArray(data) ? data : [];
   },
 
   // Alias
   getAllProjects: () => projectsService.getAll(),
 
-  getById: (id) => apiRequest(`/projects/${id}`),
+  getById: (id) => apiRequest(`api/projects/${id}`),
 
-  create: (project) => apiRequest('/projects', {
+  create: (project) => apiRequest('api/projects', {
     method: 'POST',
     body: JSON.stringify(project),
   }),
 
   createProject: (project) => projectsService.create(project),
 
-  update: (id, project) => apiRequest(`/projects/${id}`, {
+  update: (id, project) => apiRequest(`api/projects/${id}`, {
     method: 'PUT',
     body: JSON.stringify(project),
   }),
 
   updateProject: (id, project) => projectsService.update(id, project),
 
-  delete: (id) => apiRequest(`/projects/${id}`, { method: 'DELETE' }),
+  delete: (id) => apiRequest(`api/projects/${id}`, { method: 'DELETE' }),
 
   deleteProject: (id) => projectsService.delete(id),
 
-  activate: (id) => apiRequest(`/projects/${id}/activate`, { method: 'POST' }),
+  activate: (id) => apiRequest(`api/projects/${id}/activate`, { method: 'POST' }),
 
   // Migration localStorage (optionnel, peut être gardé)
   migrateFromLocalStorage: async () => {

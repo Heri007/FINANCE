@@ -3,30 +3,30 @@ import React, { useMemo } from 'react';
 import { formatCurrency } from '../../utils/formatters';
 import { categoryIcons } from '../../utils/constants';
 
-export function CategoryBreakdown({ transactions, type = 'expense' }) {
+export default function CategoryBreakdown({ transactions = [], type = 'expense' }) {
+  // ✅ Ajout de type = 'expense' dans les props
+  
   const breakdown = useMemo(() => {
-    const filtered = transactions.filter(t => t.type === type);
-    
-    const byCategory = filtered.reduce((acc, t) => {
-      const cat = t.category || 'Autres';
-      if (!acc[cat]) {
-        acc[cat] = { total: 0, count: 0 };
-      }
-      acc[cat].total += parseFloat(t.amount);
-      acc[cat].count++;
-      return acc;
-    }, {});
+    // Vérification de sécurité
+    if (!transactions || !Array.isArray(transactions)) {
+      return [];
+    }
 
-    const total = Object.values(byCategory).reduce((sum, c) => sum + c.total, 0);
+    const filteredTransactions = transactions.filter(t => t.type === type);
+    const byCategory = {};
+
+    filteredTransactions.forEach(t => {
+      const cat = t.category || 'Non catégorisé';
+      if (!byCategory[cat]) {
+        byCategory[cat] = 0;
+      }
+      byCategory[cat] += parseFloat(t.amount) || 0;
+    });
 
     return Object.entries(byCategory)
-      .map(([category, data]) => ({
-        category,
-        ...data,
-        percentage: total > 0 ? (data.total / total * 100).toFixed(1) : 0
-      }))
+      .map(([category, total]) => ({ category, total }))
       .sort((a, b) => b.total - a.total);
-  }, [transactions, type]);
+  }, [transactions, type]); // ✅ Ajouter type dans les dépendances
 
   const total = breakdown.reduce((sum, c) => sum + c.total, 0);
 
@@ -40,38 +40,36 @@ export function CategoryBreakdown({ transactions, type = 'expense' }) {
 
   return (
     <div className="space-y-3">
-      {breakdown.map(item => (
-        <div key={item.category} className="bg-gray-50 rounded-xl p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-xl">{categoryIcons[item.category] || '📝'}</span>
-              <span className="font-medium text-gray-800">{item.category}</span>
-              <span className="text-sm text-gray-500">({item.count})</span>
+      {breakdown.map(item => {
+        const percentage = total > 0 ? ((item.total / total) * 100).toFixed(1) : 0;
+        
+        return (
+          <div key={item.category} className="bg-gray-50 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-xl">{categoryIcons[item.category]}</span>
+                <span className="font-medium text-gray-800">{item.category}</span>
+              </div>
+              <div className="text-right">
+                <span className={`font-bold ${type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {formatCurrency(item.total)}
+                </span>
+                <span className="text-sm text-gray-500 ml-2">
+                  {percentage}%
+                </span>
+              </div>
             </div>
-            <div className="text-right">
-              <span className={`font-bold ${
-                type === 'income' ? 'text-emerald-600' : 'text-rose-600'
-              }`}>
-                {formatCurrency(item.total)}
-              </span>
-              <span className="text-sm text-gray-500 ml-2">
-                ({item.percentage}%)
-              </span>
+            {/* Barre de progression */}
+            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div 
+                className={`h-full ${type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                style={{ width: `${percentage}%` }}
+              />
             </div>
           </div>
-          
-          {/* Barre de progression */}
-          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full ${
-                type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'
-              }`}
-              style={{ width: `${item.percentage}%` }}
-            />
-          </div>
-        </div>
-      ))}
-      
+        );
+      })}
+
       {/* Total */}
       <div className="border-t pt-3 mt-3">
         <div className="flex justify-between items-center font-bold">
@@ -84,5 +82,3 @@ export function CategoryBreakdown({ transactions, type = 'expense' }) {
     </div>
   );
 }
-
-export default CategoryBreakdown;

@@ -55,13 +55,14 @@ export function ProjectsListModal({
   onDeleteProject,
   onCompleteProject,
   onProjectUpdate,  // ✅ Nouvelle prop
+  onReactivateProject,  // ✅ AJOUTER ICI
   onTransactionClick,
+  onDeactivateProject,
   accounts = [],
   projects = [],
   totalBalance = 0,
   transactions = [],
 }) {
-
 
   const [filter, setFilter] = useState('all');
   const [selectedProject, setSelectedProject] = useState(null);
@@ -86,7 +87,6 @@ export function ProjectsListModal({
   // ---------------------------------------------------------------------------
   // CALCULS DES SOLDES
   // ---------------------------------------------------------------------------
-  
   // 1. Trouver le compte Coffre (ID 5 ou via le nom)
   const coffreAccount = accounts.find(acc => 
     (acc.name && acc.name.toLowerCase().includes('coffre')) || acc.id === 5
@@ -280,50 +280,48 @@ export function ProjectsListModal({
                                    >
                                       <Edit className="w-5 h-5" />
                                    </button>
-                                   {/* ✅ BOUTON DÉSACTIVER (si projet actif) */}
+                                   
+{/* ✅ BOUTON DÉSACTIVER (si projet actif) */}
   {project.status === 'active' && (
-    <button 
-      onClick={async () => {
-        if (!confirm(`Désactiver le projet "${project.name}" ?\n\nLe projet sera exclu des calculs globaux.`)) {
-          return;
-        }
-        
-        try {
-          const token = localStorage.getItem('token');
-          const response = await fetch(`http://localhost:5002/api/projects/${project.id}/status`, {
-  method: 'PATCH',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`
-  },
-  body: JSON.stringify({ status: 'Inactif' })
-});
-
-
-          if (!response.ok) {
-            throw new Error('Erreur lors de la désactivation');
-          }
-
-          alert(`✅ Projet "${project.name}" désactivé avec succès`);
-          if (response.ok) {
-  alert(`✅ Projet "${project.name}" désactivé`);
-  if (onProjectUpdate) {
-    await onProjectUpdate();
-  }
-}
-
-        } catch (error) {
-          console.error('❌ Erreur désactivation:', error);
-          alert(`❌ Erreur: ${error.message}`);
-        }
+    <button onClick={async () => {
+      if (!confirm(`Désactiver le projet "${project.name}" ? Le projet sera exclu des calculs globaux.`)) return;
+      try {
+        await onDeactivateProject(project.id);
+        alert(`Projet "${project.name}" désactivé avec succès`);
+          } catch (error) {
+      console.error('Erreur désactivation', error);
+      // ✅ AJOUTER CES LOGS
+      console.log('🔴 Objet erreur complet:', error);
+      console.log('🔴 error.details:', error.details);
+      alert('Erreur: ' + error.message);
+       }
       }}
-      className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors" 
+      className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
       title="Désactiver"
-    >
-      <AlertCircle className="w-5 h-5" />
+      >
+  <AlertCircle className="w-5 h-5" />
     </button>
   )}
-  
+  {/* ✅ BOUTON RÉACTIVER (si projet paused) */}
+  {project.status === 'paused' && (
+    <button
+      onClick={async () => {
+        if (!confirm(`Réactiver le projet "${project.name}" ?`)) return;
+        
+        try {
+          await onReactivateProject(project.id);
+          alert(`✅ Projet "${project.name}" réactivé avec succès`);
+        } catch (error) {
+          console.error('Erreur réactivation', error);
+          alert('Erreur: ' + error.message);
+        }
+      }}
+      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+      title="Réactiver"
+    >
+      <CheckCircle className="w-5 h-5" />
+    </button>
+    )}
   <button 
     onClick={() => onDeleteProject(project.id)} 
     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 

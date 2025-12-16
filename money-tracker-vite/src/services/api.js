@@ -1,7 +1,6 @@
 // src/services/api.js
 
-export const API_BASE =
-  import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5002';
 
 export const getAuthHeader = () => {
   const token = localStorage.getItem('token');
@@ -16,14 +15,17 @@ const safeJson = async (response) => {
   }
 };
 
-export const apiRequest = async (endpoint, options) => {
-  const url = `${API_BASE}${endpoint}`;
+export const apiRequest = async (endpoint, options = {}) => {
+  // ✅ Assure que endpoint commence par /
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE}${normalizedEndpoint}`;
+  
   const config = {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeader(),
-      ...options.headers,
+      ...(options.headers || {}),
     },
   };
 
@@ -35,7 +37,7 @@ export const apiRequest = async (endpoint, options) => {
 
       if (response.status === 401) {
         localStorage.removeItem('token');
-        window.dispatchEvent(new Event('auth:logout')); // optionnel
+        window.dispatchEvent(new Event('auth:logout'));
       }
 
       const serverMessage = error.message || error.error || error.msg || null;
@@ -49,11 +51,9 @@ export const apiRequest = async (endpoint, options) => {
       };
     }
 
-    // ✅ Une seule lecture JSON
     return await safeJson(response);
   } catch (error) {
     console.error('API Error:', endpoint, error);
     throw error;
   }
 };
-

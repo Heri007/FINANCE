@@ -1,8 +1,8 @@
 // src/components/ReceivablesScreen.jsx
 import React, { useEffect, useState, useMemo } from "react";
-import { API_BASE } from "../services/api";
+import { receivablesService } from "../services/receivablesService";
 
-const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = [] }) => {
+const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => {
   const [items, setItems] = useState([]);
   const [person, setPerson] = useState("");
   const [amount, setAmount] = useState("");
@@ -13,23 +13,21 @@ const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = []
   const fetchReceivables = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/receivables`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setItems(data);
+      const data = await receivablesService.getAll();
+      setItems(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error(e);
+      console.error('Erreur chargement receivables:', e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (token) fetchReceivables();
-  }, [token]);
+    fetchReceivables();
+  }, []);
 
-  // Total des avoirs ouverts (somme des receivables)
+  // Total des avoirs ouverts
   const totalOpen = useMemo(
     () => items.reduce((sum, i) => sum + Number(i.amount || 0), 0),
     [items]
@@ -44,7 +42,7 @@ const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = []
   const coffreForecast = currentCoffreBalance + totalOpen;
   const totalForecast = currentTotalBalance + totalOpen;
 
-  // Vérification si tous les avoirs sont "récoltés" (couverts par solde actuel Coffre)
+  // Vérification si tous les avoirs sont "récoltés"
   const avoirsTousRecoltes = currentCoffreBalance >= totalOpen;
 
   useEffect(() => {
@@ -53,7 +51,7 @@ const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = []
     }
   }, [totalOpen, onTotalsChange]);
 
-  // comptes possibles pour le déboursement (Argent Liquide / Coffre)
+  // Comptes possibles pour le déboursement
   const sourceAccounts = accounts.filter((a) =>
     ["Argent Liquide", "Coffre"].includes(a.name)
   );
@@ -61,21 +59,15 @@ const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = []
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!person || !amount || !sourceAccountId) return;
+    
     try {
-      const res = await fetch(`${API_BASE}/receivables`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          person,
-          amount: parseFloat(amount),
-          description,
-          source_account_id: Number(sourceAccountId),
-        }),
+      const created = await receivablesService.create({
+        person,
+        amount: parseFloat(amount),
+        description,
+        source_account_id: Number(sourceAccountId),
       });
-      const created = await res.json();
+      
       setItems((prev) => [created, ...prev]);
       setPerson("");
       setAmount("");
@@ -86,30 +78,24 @@ const ReceivablesScreen = ({ token, onAfterChange, onTotalsChange, accounts = []
         await onAfterChange();
       }
     } catch (e) {
-      console.error(e);
+      console.error('Erreur création avoir:', e);
+      alert('Erreur lors de la création de l\'avoir');
     }
   };
 
   const handleClose = async (id) => {
+    if (!confirm('Marquer cet avoir comme payé ?')) return;
+    
     try {
-      const res = await fetch(`${API_BASE}/receivables/${id}/pay`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      const result = await res.json();
-      if (!result.success) {
-        console.error("Erreur pay:", result);
-      }
+      await receivablesService.pay(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
 
       if (onAfterChange) {
         await onAfterChange();
       }
     } catch (e) {
-      console.error(e);
+      console.error('Erreur paiement avoir:', e);
+      alert('Erreur lors du marquage comme payé');
     }
   };
 

@@ -1,22 +1,42 @@
-// routes/receivables.js - VERSION COMPLÈTE + JOI + ACID
+// routes/receivables.js - VERSION COMPLÈTE + user_id
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const authMiddleware = require('../middleware/auth');
-const { validate } = require('../middleware/validate'); // ✅ JOI
+const { validate } = require('../middleware/validate');
 const { getAccountIds } = require('../config/accounts');
 
-router.use(authMiddleware); // ✅ TOUTES LES ROUTES PROTÉGÉES
+router.use(authMiddleware);
 
-// GET sans body = OK
+// GET tous les avoirs ouverts
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT *
-       FROM receivables
-       WHERE status <> 'closed'
-       ORDER BY created_at DESC`
+    const userId = req.user.id;
+    // Test 1 : SANS filtre
+    const testAll = await pool.query('SELECT COUNT(*) FROM receivables');
+
+    // Test 2 : Avec filtre user_id
+    const testUserId = await pool.query(
+      'SELECT COUNT(*) FROM receivables WHERE user_id = $1',
+      [userId]
     );
+    
+    // Test 3 : Avec filtre status
+    const testStatus = await pool.query(
+      'SELECT COUNT(*) FROM receivables WHERE user_id = $1 AND status <> \'closed\'',
+      [userId]
+    );
+    
+    // Requête finale
+    const result = await pool.query(
+      `SELECT * FROM receivables
+       WHERE user_id = $1 AND status <> 'closed'
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+    
+    if (result.rows.length > 0) {
+    }
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Erreur get receivables:', err);
@@ -24,13 +44,14 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ✅ POST créer avoir (CRITIQUE - montants !)
+// POST créer avoir
 router.post('/', validate('receivableCreate'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const { person, description, amount, source_account_id } = req.body;
+    const userId = req.user.id;
     const { AVOIR_ACCOUNT_ID } = getAccountIds();
 
     if (!AVOIR_ACCOUNT_ID) {
@@ -42,22 +63,23 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
 
     // 1) Créer l'avoir
     const insert = await client.query(
-      `INSERT INTO receivables (account_id, person, description, amount, status, source_account_id)
-       VALUES ($1, $2, $3, $4, 'open', $5)
+      `INSERT INTO receivables (account_id, person, description, amount, status, source_account_id, user_id)
+       VALUES ($1, $2, $3, $4, 'open', $5, $6)
        RETURNING *`,
-      [AVOIR_ACCOUNT_ID, person, description || '', amount, source_account_id]
+      [AVOIR_ACCOUNT_ID, person, description || '', amount, source_account_id, userId]
     );
     const receivable = insert.rows[0];
 
     // 2) Transaction de dépense source
     await client.query(
       `INSERT INTO transactions
-       (account_id, type, amount, category, description, transaction_date, is_posted, is_planned)
-       VALUES ($1, 'expense', $2, 'Avoir', $3, NOW()::date, true, false)`,
+       (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
+       VALUES ($1, 'expense', $2, 'Avoir', $3, NOW()::date, true, false, $4)`,
       [
         source_account_id,
         amount,
         `Avoir pour ${person}${description ? ' - ' + description : ''}`,
+        userId
       ]
     );
 
@@ -70,9 +92,9 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
                 ELSE 0 END
          ), 0)
          FROM transactions
-         WHERE account_id = $1 AND (is_posted = true OR is_planned = false)
-       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [source_account_id]
+         WHERE account_id = $1 AND user_id = $2 AND (is_posted = true OR is_planned = false)
+       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+      [source_account_id, userId]
     );
 
     await client.query('COMMIT');
@@ -86,7 +108,7 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
   }
 });
 
-// ✅ PATCH mise à jour (hors paiement)
+// PATCH mise à jour
 router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -94,6 +116,7 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
 
     const { status, amount, description } = req.body;
     const { id } = req.params;
+    const userId = req.user.id;
 
     const result = await client.query(
       `UPDATE receivables
@@ -101,13 +124,13 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
            amount = COALESCE($2, amount),
            description = COALESCE($3, description),
            updated_at = NOW()
-       WHERE id = $4 RETURNING *`,
-      [status || null, amount || null, description || null, id]
+       WHERE id = $4 AND user_id = $5 RETURNING *`,
+      [status || null, amount || null, description || null, id, userId]
     );
 
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Avoir introuvable' });
+      return res.status(404).json({ error: 'Avoir introuvable ou non autorisé' });
     }
 
     const accountId = result.rows[0].account_id;
@@ -116,9 +139,9 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
     await client.query(
       `UPDATE accounts SET balance = (
          SELECT COALESCE(SUM(amount), 0)
-         FROM receivables WHERE account_id = $1 AND status <> 'closed'
-       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [accountId]
+         FROM receivables WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
+       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+      [accountId, userId]
     );
 
     await client.query('COMMIT');
@@ -138,11 +161,16 @@ router.post('/:id/pay', async (req, res) => {
   try {
     await client.query('BEGIN');
     const { id } = req.params;
+    const userId = req.user.id;
 
-    const { rows } = await client.query(`SELECT * FROM receivables WHERE id = $1`, [id]);
+    const { rows } = await client.query(
+      `SELECT * FROM receivables WHERE id = $1 AND user_id = $2`,
+      [id, userId]
+    );
+    
     if (rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Avoir introuvable' });
+      return res.status(404).json({ error: 'Avoir introuvable ou non autorisé' });
     }
     const rec = rows[0];
 
@@ -153,23 +181,28 @@ router.post('/:id/pay', async (req, res) => {
     }
 
     // 1) Marquer payé
-    await client.query(`UPDATE receivables SET status = 'closed', updated_at = NOW() WHERE id = $1`, [id]);
-
-    // 2) Encaisser COFFRE
     await client.query(
-      `INSERT INTO transactions
-       (account_id, type, amount, category, description, transaction_date, is_posted, is_planned)
-       VALUES ($1, 'income', $2, 'Remboursement Avoir', $3, NOW()::date, true, false)`,
-      [COFFRE_ACCOUNT_ID, rec.amount, `Remboursement ${rec.person}${rec.description ? ' - ' + rec.description : ''}`]
+      `UPDATE receivables SET status = 'closed', updated_at = NOW() 
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId]
     );
 
-    // 3) Recalcul AVOIR
+    // 2) Encaisser COFFRE (avec user_id)
+    await client.query(
+      `INSERT INTO transactions
+       (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
+       VALUES ($1, 'income', $2, 'Remboursement Avoir', $3, NOW()::date, true, false, $4)`,
+      [COFFRE_ACCOUNT_ID, rec.amount, `Remboursement ${rec.person}${rec.description ? ' - ' + rec.description : ''}`, userId]
+    );
+
+    // 3) Recalcul AVOIR (avec user_id)
     await client.query(
       `UPDATE accounts SET balance = (
          SELECT COALESCE(SUM(amount), 0)
-         FROM receivables WHERE account_id = $1 AND status <> 'closed'
-       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-      [rec.account_id]
+         FROM receivables WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
+       ), updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND user_id = $2`,
+      [rec.account_id, userId]
     );
 
     await client.query('COMMIT');
@@ -186,12 +219,14 @@ router.post('/:id/pay', async (req, res) => {
 // ✅ POST restore (backup)
 router.post('/restore', validate('receivableRestore'), async (req, res) => {
   try {
+    const userId = req.user.id;
     const { account_id, person, description, amount, status, source_account_id, created_at, updated_at } = req.body;
+    
     const result = await pool.query(
       `INSERT INTO receivables
-       (account_id, person, description, amount, status, source_account_id, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [account_id, person, description || '', amount, status || 'open', source_account_id || null, created_at || new Date(), updated_at || new Date()]
+       (account_id, person, description, amount, status, source_account_id, user_id, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [account_id, person, description || '', amount, status || 'open', source_account_id || null, userId, created_at || new Date(), updated_at || new Date()]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -199,5 +234,6 @@ router.post('/restore', validate('receivableRestore'), async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;

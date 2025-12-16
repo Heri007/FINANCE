@@ -4,12 +4,12 @@ import { apiRequest } from './api';
 export const transactionsService = {
   // ✅ Ajouter guard array
   async getAll() {
-    const data = await apiRequest('/transactions');
+    const data = await apiRequest('api/transactions');
     return Array.isArray(data) ? data : [];
   },
 
   async getLastDates() {
-    const data = await apiRequest('/transactions/last-dates');
+    const data = await apiRequest('api/transactions/last-dates');
     return Array.isArray(data) ? data : [];
   },
 
@@ -28,7 +28,7 @@ export const transactionsService = {
       remarks: transaction.remarks,
     };
 
-    return apiRequest('/transactions', {
+    return apiRequest('api/transactions', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
@@ -57,7 +57,7 @@ export const transactionsService = {
       if (payload[key] === undefined) delete payload[key];
     });
 
-    return apiRequest(`/transactions/${id}`, {
+    return apiRequest(`api/transactions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(payload),
     });
@@ -65,11 +65,11 @@ export const transactionsService = {
 
   updateTransaction: (id, updates) => transactionsService.update(id, updates),
 
-  delete: (id) => apiRequest(`/transactions/${id}`, { method: 'DELETE' }),
+  delete: (id) => apiRequest(`api/transactions/${id}`, { method: 'DELETE' }),
   
   deleteTransaction: (id) => transactionsService.delete(id),
 
-  importTransactions: (transactions) => apiRequest('/transactions/import', {
+  importTransactions: (transactions) => apiRequest('api/transactions/import', {
     method: 'POST',
     body: JSON.stringify({ transactions }),
   }),

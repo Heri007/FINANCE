@@ -45,19 +45,27 @@ const exportSchema = Joi.object({
 
 const restoreSchema = Joi.object({
   backup: Joi.object({
-    accounts: Joi.array().min(1).required(),
-    transactions: Joi.array().min(1).required(),
+    version: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+    date: Joi.string().optional(),
+    accounts: Joi.array().min(1).required().messages({
+      'array.min': 'Au moins 1 compte requis',
+      'any.required': 'accounts est obligatoire'
+    }),
+    transactions: Joi.array().min(1).required().messages({
+      'array.min': 'Au moins 1 transaction requise',
+      'any.required': 'transactions est obligatoire'
+    }),
     receivables: Joi.array().optional(),
     projects: Joi.array().optional(),
     archived_projects: Joi.array().optional()
-  }).required().messages({
+  }).required().unknown(true).messages({ // ✅ .unknown(true) pour accepter les champs supplémentaires
     'any.required': 'Objet backup manquant'
   }),
   options: Joi.object({
     dryRun: Joi.boolean(),
     includeProjects: Joi.boolean()
   }).optional()
-}).unknown(true);
+}).unknown(true); // ✅ Accepter d'autres champs à la racine
 
 // -----------------------------------------------------------------------------
 // POST /api/backup/export - Créer et sauvegarder un backup
@@ -251,6 +259,7 @@ router.get('/:filename', authenticateToken, async (req, res) => {
   }
 });
 
+
 // -----------------------------------------------------------------------------
 // POST /api/backup/restore-full - Restaurer la base depuis un full JSON
 // -----------------------------------------------------------------------------
@@ -267,7 +276,8 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
   try {
     const { backup, options = {} } = req.body;
     const dryRun = options.dryRun === true;
-    const includeProjects = options.includeProjects === true;
+    const includeProjects = options.includeProjects !== false; // ✅ Par défaut true
+    const userId = 1; // ✅ FORCER user_id = 1 (app mono-utilisateur)
 
     const summary = {
       accounts: backup.accounts.length,
@@ -292,38 +302,112 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
 
     await client.query('BEGIN');
 
-    const truncateStatements = [];
-for (const acc of backup.accounts) {
-  await client.query(
-    `INSERT INTO accounts (id, name, balance, type, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6)`, // ✅ Retirer $7
-    [
-      acc.id,
-      acc.name,
-      acc.balance,
-      acc.type,
-      acc.created_at || new Date(),
-      acc.updated_at || new Date(),
-      // ❌ RETIRER: req.user.id
-    ]
-  );
-}
+    // 1) SUPPRIMER les données (SANS filtrer par user_id pour tout effacer)
+    console.log(`🗑️ Suppression de TOUTES les données...`);
+    await client.query('DELETE FROM transactions'); // ✅ Supprimer TOUT
+    await client.query('DELETE FROM receivables');
+    if (includeProjects) {
+      await client.query('DELETE FROM projects');
+    }
+    await client.query('DELETE FROM accounts');
 
-// 5) Restaurer les projets - SANS user_id
-if (includeProjects && Array.isArray(backup.projects)) {
+    // 2) Restaurer les comptes
+    console.log(`📦 Restauration de ${backup.accounts.length} comptes...`);
+    for (const acc of backup.accounts) {
+      await client.query(
+        `INSERT INTO accounts (id, name, balance, type, created_at, updated_at, user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (id) DO NOTHING`, // ✅ Ignorer les doublons
+        [
+          acc.id,
+          acc.name,
+          acc.balance || 0,
+          acc.type,
+          acc.created_at || new Date(),
+          acc.updated_at || new Date(),
+          1, // ✅ Toujours user_id = 1
+        ]
+      );
+    }
+
+    // 3) Restaurer les transactions
+    console.log(`📦 Restauration de ${backup.transactions.length} transactions...`);
+    for (const t of backup.transactions) {
+      await client.query(
+        `INSERT INTO transactions 
+         (id, account_id, type, amount, category, description, transaction_date, created_at, user_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          t.id,
+          t.account_id,
+          t.type,
+          t.amount,
+          t.category || null,
+          t.description || '',
+          t.transaction_date || t.date,
+          t.created_at || new Date(),
+          1, // ✅ Toujours user_id = 1
+        ]
+      );
+    }
+
+    // 4) Restaurer les receivables
+    if (Array.isArray(backup.receivables) && backup.receivables.length > 0) {
+      console.log(`📦 Restauration de ${backup.receivables.length} avoirs...`);
+      for (const r of backup.receivables) {
+await client.query(
+  `INSERT INTO receivables 
+   (id, account_id, person, amount, description, status, created_at, updated_at, source_account_id, user_id)
+   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+   ON CONFLICT (id) DO NOTHING`,
+  [
+    r.id,
+    r.account_id,
+    r.person,
+    r.amount,
+    r.description || '',
+    r.status || 'open', // ✅ Statut par défaut = 'open'
+    r.created_at || new Date(),
+    r.updated_at || new Date(),
+    r.source_account_id || null,
+    1, // user_id
+  ]
+);
+
+      }
+    }
+
+    // 5) Restaurer les projets
+if (includeProjects && Array.isArray(backup.projects) && backup.projects.length > 0) {
+  console.log(`📦 Restauration de ${backup.projects.length} projets...`);
   for (const p of backup.projects) {
+    // ✅ Helper function pour parser les JSON (si string, parser; sinon retourner tel quel)
+    const parseJSON = (value, defaultValue = '{}') => {
+      if (!value) return defaultValue;
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return defaultValue;
+        }
+      }
+      return value; // Déjà un objet
+    };
+
     await client.query(
       `INSERT INTO projects
        (id, name, description, type, status, start_date, end_date,
         frequency, occurrences_count, total_cost, total_revenues, net_profit, roi,
         expenses, revenues, allocation, revenue_allocation,
         accounts_snapshot, activated_at, activated_transactions,
-        created_at, updated_at)
+        created_at, updated_at, user_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,
                $8,$9,$10,$11,$12,$13,
                $14,$15,$16,$17,
                $18,$19,$20,
-               $21,$22)`, // ✅ $23 retiré
+               $21,$22,$23)
+       ON CONFLICT (id) DO NOTHING`,
       [
         p.id,
         p.name,
@@ -338,59 +422,28 @@ if (includeProjects && Array.isArray(backup.projects)) {
         p.total_revenues || 0,
         p.net_profit || 0,
         p.roi || 0,
-        p.expenses || '[]',
-        p.revenues || '[]',
-        p.allocation || '{}',
-        p.revenue_allocation || '{}',
-        p.accounts_snapshot || '{}',
+        JSON.stringify(parseJSON(p.expenses, '[]')),        // ✅ Toujours string JSON
+        JSON.stringify(parseJSON(p.revenues, '[]')),        // ✅ Toujours string JSON
+        JSON.stringify(parseJSON(p.allocation, '{}')),      // ✅ Toujours string JSON
+        JSON.stringify(parseJSON(p.revenue_allocation, '{}')), // ✅ Toujours string JSON
+        JSON.stringify(parseJSON(p.accounts_snapshot, '{}')), // ✅ Toujours string JSON
         p.activated_at || null,
         p.activated_transactions || 0,
         p.created_at || new Date(),
         p.updated_at || new Date(),
-        // ❌ RETIRER: req.user.id
+        1, // user_id
       ]
     );
   }
 }
 
-// 6) Restaurer les projets archivés - SANS user_id
-if (includeProjects && Array.isArray(backup.archived_projects)) {
-  for (const ap of backup.archived_projects) {
-    await client.query(
-      `INSERT INTO archived_projects
-       (id, name, description, type, status, start_date, end_date,
-        total_cost, total_revenues, net_profit, roi,
-        expenses, revenues, allocation, revenue_allocation,
-        occurrences_count, frequency, archived_at, original_project_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,
-               $8,$9,$10,$11,
-               $12,$13,$14,$15,
-               $16,$17,$18,$19)`, // ✅ $20 retiré
-      [
-        ap.id,
-        ap.name,
-        ap.description || '',
-        ap.type || 'ponctuel',
-        ap.status || 'completed',
-        ap.start_date || null,
-        ap.end_date || null,
-        ap.total_cost || 0,
-        ap.total_revenues || 0,
-        ap.net_profit || 0,
-        ap.roi || 0,
-        ap.expenses || '[]',
-        ap.revenues || '[]',
-        ap.allocation || '{}',
-        ap.revenue_allocation || '{}',
-        ap.occurrences_count || 1,
-        ap.frequency || null,
-        ap.archived_at || new Date(),
-        ap.original_project_id || null,
-        // ❌ RETIRER: req.user.id
-      ]
-    );
-  }
-}
+    // 6) Reset des séquences PostgreSQL
+    await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
+    await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
+    await client.query(`SELECT setval('receivables_id_seq', (SELECT MAX(id) FROM receivables))`);
+    if (includeProjects) {
+      await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
+    }
 
     await client.query('COMMIT');
     console.log('✅ Restauration committée avec succès');
@@ -398,7 +451,7 @@ if (includeProjects && Array.isArray(backup.archived_projects)) {
     // 7) Recalculer tous les soldes
     try {
       const accountController = require('../controllers/accountController');
-      const fakeReq = { user: req.user };
+      const fakeReq = { user: { user_id: 1 } };
       const fakeRes = { 
         status: () => fakeRes, 
         json: (data) => {

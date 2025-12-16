@@ -1,11 +1,19 @@
+// src/TransactionEditModal.jsx - VERSION CORRIGÉE
 import React, { useState, useEffect } from 'react';
 import { X, Trash2 } from 'lucide-react';
-import { useFinance } from "./contexts/FinanceContext";
-import transactionsService from './services/transactionsService';
-import { projectsService } from './services/projectsService';
+import { useFinance } from './contexts/FinanceContext';
 
 const TransactionEditModal = ({ transaction, onClose, accounts }) => {
-  const { updateTransaction, deleteTransaction, refreshAccounts, refreshTransactions, refreshProjects } = useFinance();
+  const { 
+    transactions,      // ← Pour lire les transactions du projet
+    projects,          // ← Pour lire les données projet
+    updateTransaction, 
+    deleteTransaction,
+    updateProject,     // ← Ajouter cette action du contexte
+    refreshAccounts, 
+    refreshTransactions, 
+    refreshProjects 
+  } = useFinance();
 
   const [formData, setFormData] = useState({
     type: 'expense',
@@ -13,23 +21,20 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
     category: '',
     description: '',
     date: '',
-    account_id: '',
+    accountid: '',
     isPosted: false,
   });
 
   useEffect(() => {
     if (transaction) {
-      console.log('📄 Transaction chargée:', transaction);
+      console.log('📝 Transaction chargée:', transaction);
       setFormData({
         type: transaction.type || 'expense',
         amount: transaction.amount || '',
         category: transaction.category || '',
         description: transaction.description || '',
-        date:
-          transaction.transaction_date?.split('T')[0] ||
-          transaction.date?.split('T')[0] ||
-          '',
-        account_id: transaction.account_id || '',
+        date: transaction.transactiondate?.split('T')[0] || transaction.date?.split('T')[0] || '',
+        accountid: transaction.account_id || '',
         isPosted: transaction.is_posted === true || transaction.isposted === true,
       });
     }
@@ -37,25 +42,27 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       const payload = {
-        account_id: parseInt(formData.account_id),
+        account_id: parseInt(formData.accountid),
         type: formData.type,
         amount: parseFloat(formData.amount),
         category: formData.category,
         description: formData.description,
-        transaction_date: formData.date,
+        transactiondate: formData.date,
         is_posted: formData.isPosted,
         is_planned: false,
         project_id: transaction.project_id || null,
-        project_line_id: formData.project_line_id || null,
+        project_line_id: formData.projectlineid || null,
       };
 
-      console.log('🔵 PAYLOAD ENVOYÉ:', payload);
+      console.log('📤 PAYLOAD ENVOYÉ:', payload);
 
-      // passer par le contexte
+      // ✅ Utilise la fonction du contexte
       await updateTransaction(transaction.id, payload);
+      
+      // Les refresh sont déjà appelés automatiquement dans updateTransaction du contexte
+      // mais on peut les rappeler explicitement si besoin
       await refreshAccounts?.();
       await refreshTransactions?.();
       await refreshProjects?.();
@@ -64,7 +71,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
       onClose();
     } catch (error) {
       console.error('❌ ERREUR:', error);
-      alert(`Erreur lors de la mise à jour: ${error.message}`);
+      alert('Erreur lors de la mise à jour: ' + error.message);
     }
   };
 
@@ -74,18 +81,26 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
     }
 
     try {
-      // delete via contexte (met à jour les listes)
-      await deleteTransaction(transaction.id);
-      console.log('✅ Transaction supprimée');
+      const projectId = transaction.project_id || transaction.projectId;
 
-      // resync projet optionnelle (tu peux la garder si tu veux ce comportement précis)
-      try {
-        const projectId = transaction.project_id || transaction.projectId;
-        if (projectId) {
-          const proj = await projectsService.getById(projectId);
-          const allTx = await transactionsService.getAll();
-          const projectTx = allTx.filter(
-            (t) => String(t.project_id || t.projectId) === String(projectId)
+      // ✅ Delete via contexte (déjà fait correctement)
+      await deleteTransaction(transaction.id);
+      console.log('🗑️ Transaction supprimée');
+
+      // Resync projet si nécessaire
+      if (projectId) {
+        try {
+          // ✅ Utilise les données du contexte au lieu de refetch
+          const proj = projects.find(p => String(p.id) === String(projectId));
+          
+          if (!proj) {
+            console.warn('⚠️ Projet non trouvé dans le contexte');
+            return;
+          }
+
+          // ✅ Filtre les transactions du projet depuis le contexte
+          const projectTx = transactions.filter(t => 
+            String(t.project_id || t.projectId) === String(projectId)
           );
 
           const parseList = (data) => {
@@ -98,30 +113,29 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             }
           };
 
-          const expenses = parseList(proj.expenses).map((e) => ({ ...e }));
-          const revenues = parseList(proj.revenues).map((r) => ({ ...r }));
+          const expenses = parseList(proj.expenses).map(e => ({ ...e }));
+          const revenues = parseList(proj.revenues).map(r => ({ ...r }));
 
           const matchTx = (line, txs, type) => {
-            return txs.find((t) => {
+            return txs.find(t => {
               const tAmount = parseFloat(t.amount || 0);
               const lAmount = parseFloat(line.amount || 0);
               const sameAmount = Math.abs(tAmount - lAmount) < 0.01;
-              const sameType =
-                (type === 'expense' && t.type === 'expense') ||
-                (type === 'revenue' && t.type === 'income');
-              const descMatch =
-                line.description && t.description
-                  ? t.description.includes(line.description) ||
-                    line.description.includes(t.description)
-                  : true;
+              const sameType = (type === 'expense' && t.type === 'expense') ||
+                              (type === 'revenue' && t.type === 'income');
+              const descMatch = line.description && t.description ?
+                t.description.includes(line.description) ||
+                line.description.includes(t.description) : true;
               return sameAmount && sameType && descMatch;
             });
           };
 
+          // Marquer les lignes payées/non payées
           for (let i = 0; i < expenses.length; i++) {
             const found = matchTx(expenses[i], projectTx, 'expense');
             expenses[i].isPaid = !!found;
           }
+
           for (let i = 0; i < revenues.length; i++) {
             const found = matchTx(revenues[i], projectTx, 'revenue');
             revenues[i].isPaid = !!found;
@@ -132,23 +146,24 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             description: proj.description || proj.description,
             type: proj.type || proj.type,
             status: proj.status || proj.status,
-            startDate: proj.startDate || proj.startDate,
-            endDate: proj.endDate || proj.endDate,
-            totalCost: proj.totalCost || 0,
-            totalRevenues: proj.totalRevenues || 0,
-            netProfit: proj.netProfit || 0,
+            start_date: proj.start_date || proj.startDate,
+            end_date: proj.end_date || proj.endDate,
+            total_cost: proj.total_cost || 0,
+            total_revenues: proj.total_revenues || 0,
+            net_profit: proj.net_profit || 0,
             roi: proj.roi || 0,
-            remainingBudget: proj.remainingBudget || 0,
-            totalAvailable: proj.totalAvailable || 0,
+            remaining_budget: proj.remaining_budget || 0,
+            total_available: proj.total_available || 0,
             expenses: JSON.stringify(expenses),
             revenues: JSON.stringify(revenues),
           };
 
-          await projectsService.updateProject(projectId, payload);
-          console.log('🔁 Projet resynchronisé après suppression de transaction');
+          // ✅ Utilise updateProject du contexte
+          await updateProject(projectId, payload);
+          console.log('🔄 Projet resynchronisé après suppression de transaction');
+        } catch (syncErr) {
+          console.warn('⚠️ Erreur lors de la resynchronisation du projet:', syncErr);
         }
-      } catch (syncErr) {
-        console.warn('⚠️ Erreur lors de la resynchronisation du projet:', syncErr);
       }
 
       await refreshAccounts?.();
@@ -158,14 +173,14 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
       onClose();
     } catch (error) {
       console.error('❌ Erreur suppression:', error);
-      alert(`Erreur lors de la suppression: ${error.message}`);
+      alert('Erreur lors de la suppression: ' + error.message);
     }
   };
 
   const handleCheckboxChange = (e) => {
     const checked = e.target.checked;
-    console.log('✅ Checkbox changé:', checked);
-    setFormData((prev) => ({ ...prev, isPosted: checked }));
+    console.log('☑️ Checkbox changé:', checked);
+    setFormData(prev => ({ ...prev, isPosted: checked }));
   };
 
   return (
