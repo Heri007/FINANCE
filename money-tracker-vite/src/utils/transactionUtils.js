@@ -40,31 +40,45 @@ export function normalizeDate(d) {
 
 /**
  * Créer une signature unique pour une transaction (Deduplication)
+ * ⚠️ ALIGNÉ À 100% AVEC LE BACKEND (importController.createSig)
+ * 
+ * Règles strictes pour correspondre au backend:
+ * - Date au format YYYY-MM-DD (tronqué si ISO)
+ * - Montant: Math.abs().toFixed(2)
+ * - Description: accents supprimés, espaces compressés en UN espace (pas supprimés),
+ *   ponctuation [.,;:!?@#$%^&*()] retirée, tronqué à 40 caractères
+ * - PAS de catégorie dans la signature
  */
 export function createSignature(accountId, date, amount, type, description) {
   const cleanAccId = accountId ? String(accountId).trim() : null;
-  const cleanDate = normalizeDate(date);
   
-  // On utilise toFixed(2) pour gérer "1000" vs "1000.00"
+  // Date normalisée puis tronquée (si ISO complet type "2024-12-15T12:00:00")
+  let cleanDate = normalizeDate(date);
+  if (cleanDate && cleanDate.includes('T')) {
+    cleanDate = cleanDate.split('T')[0];
+  }
+  
+  // Montant absolu avec 2 décimales
   const cleanAmount = amount !== null && amount !== undefined 
     ? Math.abs(parseFloat(amount)).toFixed(2) 
     : null;
     
   const cleanType = type ? String(type).trim().toLowerCase() : null;
   
-  // Nettoyage agressif de la description pour maximiser les correspondances
+  // ⚠️ IMPORTANT: Nettoyage IDENTIQUE au backend
   const cleanDesc = description 
     ? String(description)
         .trim()
         .toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Enlève les accents
-        .replace(/[^\w\s]/g, '') // Enlève tout sauf lettres/chiffres/espaces
-        .replace(/\s+/g, '') // Enlève tous les espaces
-        .substring(0, 40) // Tronque pour éviter les petites variations de fin
-    : 'nodesc';
+        .replace(/\s+/g, ' ')                              // Compresse espaces multiples en UN espace
+        .replace(/[.,;:!?@#$%^&*()]/g, '')                // Retire ponctuation spécifique
+        .substring(0, 40)                                  // Tronque à 40 caractères
+    : '';
   
   if (!cleanAccId || !cleanDate || !cleanAmount || !cleanType) return null;
   
+  // Format: accountId|date|amount|type|description (PAS de catégorie)
   return `${cleanAccId}|${cleanDate}|${cleanAmount}|${cleanType}|${cleanDesc}`;
 }
 

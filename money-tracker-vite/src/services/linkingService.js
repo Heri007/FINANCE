@@ -1,44 +1,25 @@
-import { API_BASE } from './api';
-
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${localStorage.getItem('token')}`
-});
+import { apiRequest } from './api';
 
 export const linkingService = {
   // Récupérer les transactions "orphelines" (non liées)
-  getUnlinked: async (projectId) => {
-    const res = await fetch(`${API_BASE}/transaction-linking/unlinked?projectId=${projectId}`, {
-      headers: getHeaders()
-    });
-    return res.json();
-  },
+  getUnlinked: (projectId) =>
+    apiRequest(`/transaction-linking/unlinked?projectId=${projectId}`),
 
   // Récupérer les lignes du budget (Dépenses prévues / Revenus prévus)
-  getProjectLines: async (projectId) => {
-    const res = await fetch(`${API_BASE}/transaction-linking/project-lines/${projectId}`, {
-      headers: getHeaders()
-    });
-    return res.json();
-  },
+  getProjectLines: (projectId) =>
+    apiRequest(`/transaction-linking/project-lines/${projectId}`),
 
   // Effectuer la liaison
-  linkTransaction: async (transactionId, lineId) => {
-    const res = await fetch(`${API_BASE}/transaction-linking/link`, {
+  linkTransaction: (transactionId, lineId) =>
+    apiRequest('/transaction-linking/link', {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ transactionId, lineId })
-    });
-    return res.json();
-  },
+      body: JSON.stringify({ transactionId, lineId }),
+    }),
 
   // Lancer l'auto-match (Magie !)
-  autoLink: async (projectId) => {
-    const res = await fetch(`${API_BASE}/transaction-linking/auto-link/${projectId}`, {
+  autoLink: (projectId) =>
+    apiRequest(`/transaction-linking/auto-link/${projectId}`, {
       method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({})
-    });
-    return res.json();
-  }
+      body: JSON.stringify({}),
+    }),
 };

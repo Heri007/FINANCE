@@ -1,7 +1,11 @@
+// src/services/accountsService.js
 import { apiRequest } from './api';
 
 export const accountsService = {
-  getAll: () => apiRequest('/accounts'),
+  async getAll() {
+    const data = await apiRequest('/accounts');
+    return Array.isArray(data) ? data : [];
+  },
 
   create: (data) => apiRequest('/accounts', {
     method: 'POST',

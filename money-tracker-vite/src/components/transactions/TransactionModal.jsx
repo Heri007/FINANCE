@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Calculator } from 'lucide-react';
 
-// 👇 CORRECTION ICI : "export function" au lieu de "export default function"
-export function TransactionModal({ onClose, onSave, accounts }) {
+export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
   const [formData, setFormData] = useState({
     type: "expense", 
     amount: "", 
@@ -10,6 +9,7 @@ export function TransactionModal({ onClose, onSave, accounts }) {
     description: "", 
     date: new Date().toISOString().split("T")[0], 
     accountId: accounts[0]?.id || "",
+    projectId: null,  // ✅ Ajout du champ projet
     is_posted: true 
   });
 
@@ -32,7 +32,6 @@ export function TransactionModal({ onClose, onSave, accounts }) {
   const safeCalculate = (expression) => {
     try {
       if (!expression) return '';
-      // Nettoyage strict
       const cleanExpr = expression.toString().replace(/,/g, '.').replace(/x/g, '*').replace(/[^-()\d/*+.]/g, '');
       if (!cleanExpr) return '';
       
@@ -130,7 +129,6 @@ export function TransactionModal({ onClose, onSave, accounts }) {
           <div className="relative" ref={calculatorRef}>
             <label className="block text-sm font-semibold text-gray-700 mb-2">Montant (Ar)</label>
             <div className="flex items-center gap-2">
-              {/* INPUT TYPE TEXT pour autoriser les calculs */}
               <input
                 type="text" 
                 inputMode="decimal"
@@ -200,6 +198,25 @@ export function TransactionModal({ onClose, onSave, accounts }) {
               <option value="">Sélectionner...</option>
               {categories.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* ✅ Projet (optionnel) */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Projet <span className="text-gray-400 text-xs">(optionnel)</span>
+            </label>
+            <select
+              value={formData.projectId || ""}
+              onChange={(e) => setFormData({ ...formData, projectId: e.target.value || null })}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring focus:ring-indigo-200 transition-all"
+            >
+              <option value="">Aucun projet</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </div>

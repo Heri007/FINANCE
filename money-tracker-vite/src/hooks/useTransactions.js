@@ -17,9 +17,6 @@ export const useTransactions = (isAuthenticated) => {
     } catch (err) {
       setError(err.message);
       console.error('Failed to fetch transactions:', err);
-      if (err.status === 401) {
-        localStorage.removeItem('token');
-      }
     } finally {
       setLoading(false);
     }

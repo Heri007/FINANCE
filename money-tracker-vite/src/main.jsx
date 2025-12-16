@@ -1,12 +1,19 @@
-// main.jsx - Vérifiez l'ordre des imports
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';  // ⚠️ IMPORTANT : Doit venir avant App.jsx
-import App from './App';
+// src/main.jsx
+import React from "react";
+import ReactDOM from "react-dom/client";
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
+import "./index.css";
+import App from "./App.jsx";
+
+import { UserProvider } from "./contexts/UserContext";
+import { FinanceProvider } from "./contexts/FinanceContext";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <UserProvider>
+      <FinanceProvider>
+        <App />
+      </FinanceProvider>
+    </UserProvider>
   </React.StrictMode>
 );

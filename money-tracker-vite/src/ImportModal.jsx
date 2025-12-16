@@ -30,9 +30,8 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     const date = t.date; // déjà normalisée YYYY-MM-DD
     const amount = Math.abs(parseFloat(t.amount)).toFixed(2);
     const desc = clean(t.description);
-    const cat = clean(t.category);
 
-    return `${t.accountId}|${date}|${amount}|${t.type}|${desc}|${cat}`;
+  return `${t.accountId}|${date}|${amount}|${t.type}|${desc}`;
   };
 
   const handleFileChange = (e) => {
@@ -66,7 +65,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     };
 
     // ⚠️ Idéalement: injecter CUTOFF_DATE par compte depuis le backend
-    const CUTOFF_DATE = '2025-12-10';
+    // const CUTOFF_DATE = '2025-12-10';
 
     // 1) Mapping fichiers → comptes
     const fileMappings = {};
@@ -206,9 +205,9 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
                 }
 
                 // Filtre date de coupure
-                if (cleanDate <= CUTOFF_DATE) {
-                  return null;
-                }
+                //if (cleanDate <= CUTOFF_DATE) {
+                //  return null;
+               // }
 
                 return {
                   accountId: targetAccountId,

@@ -1,68 +1,101 @@
+// ============================================================================
 // FICHIER: src/App.jsx
-// Version REFACTORISÉE avec composants extraits
+// Description: Point d'entrée principal de l'application MoneyTracker
+// Version: Refactorisée avec composants extraits et indentation corrigée
+// ============================================================================
 
 import React, { useState, useEffect, useMemo } from "react";
 import { 
   Wallet, TrendingUp, TrendingDown, AlertTriangle, Briefcase 
 } from "lucide-react";
 
-// Hooks personnalisés
+// ============================================================================
+// HOOKS PERSONNALISÉS
+// ============================================================================
 import { useAuth } from "./hooks/useAuth";
 import { useAccounts } from "./hooks/useAccounts";
 import { useTransactions } from "./hooks/useTransactions";
 import { useToast } from "./hooks/useToast";
 import { useProjects } from "./hooks/useProjects";
 
-// Services
+// HOOKS / CONTEXT FINANCE
+import { useFinance } from "./contexts/FinanceContext";
+
+// ============================================================================
+// SERVICES
+// ============================================================================
 import { accountsService } from "./services/accountsService";
 import { transactionsService } from "./services/transactionsService";
 import { projectsService } from "./services/projectsService";
 import { API_BASE } from "./services/api";
+import { normalizeDate } from './domain/finance/parsers';
+import { buildTransactionSignature } from './domain/finance/signature';
+import { createSignature } from "./utils/transactionUtils";
 
-
-// ✅ NOUVEAUX COMPOSANTS EXTRAITS
+// ============================================================================
+// COMPOSANTS - LAYOUT
+// ============================================================================
 import { Header } from "./components/layout/Header";
 import { Navigation } from "./components/layout/Navigation";
+
+// ============================================================================
+// COMPOSANTS - COMPTES
+// ============================================================================
 import { AccountList } from "./components/accounts/AccountList";
 import { AccountDetails } from "./components/accounts/AccountDetails";
 import { AccountModal } from "./components/accounts/AccountModal";
+
+// ============================================================================
+// COMPOSANTS - TRANSACTIONS
+// ============================================================================
 import TransactionList from './components/transactions/TransactionList';
 import { TransactionModal } from "./components/transactions/TransactionModal";
 import { CategoryBreakdown } from "./components/transactions/CategoryBreakdown";
+import TransactionEditModal from './TransactionEditModal';
+import { TransactionDetailsModal } from "./TransactionDetailsModal";
+
+// ============================================================================
+// COMPOSANTS - AUTRES FONCTIONNALITÉS
+// ============================================================================
 import ReceivablesScreen from "./components/ReceivablesScreen";
 import NotesSlide from './components/NotesSlide';
 import HumanResourcesPage from './HumanResourcesPage';
 import TreasuryForecast from './components/TreasuryForecast';
 
-
-// Composants communs existants
+// ============================================================================
+// COMPOSANTS - COMMUNS
+// ============================================================================
 import { Toast } from "./components/common/Toast";
 import { StatCard } from "./components/common/StatCard";
 import { PinInput } from "./components/common/PinInput";
 import FinancialChart from './components/charts/FinancialChart';
 
-// Modals et Dashboards existants
+// ============================================================================
+// MODALS ET DASHBOARDS
+// ============================================================================
 import ImportModal from "./ImportModal";
 import { BackupImportModal } from "./BackupImportModal";
-import { BookkeeperDashboard } from "./BookkeeperDashboard";
+import BookkeeperDashboard from "./BookkeeperDashboard";
 import { OperatorDashboard } from "./OperatorDashboard";
 import { ContentReplicator } from "./ContentReplicator";
 import { ReportsModal } from "./ReportsModal";
 import { ProjectPlannerModal } from "./ProjectPlannerModal";
 import { ProjectsListModal } from "./ProjectsListModal";
-import { TransactionDetailsModal } from "./TransactionDetailsModal";
 import backupService from "./services/backupService";
-import TransactionEditModal from './TransactionEditModal';
 
-// Utilitaires
+// ============================================================================
+// UTILITAIRES
+// ============================================================================
 import { formatCurrency } from "./utils/formatters";
 
+// ============================================================================
+// CONSTANTES
+// ============================================================================
 
-/* ============================================================================
-   CONSTANTES
-============================================================================ */
-// Debug switch to silence noisy console logs in production/dev
+// Switch de debug pour réduire les logs en production
 const DEBUG = false;
+
+// Comptes par défaut à créer lors de l'initialisation
 const DEFAULT_ACCOUNTS = [
   { name: "Argent Liquide", type: "cash", balance: 0 },
   { name: "MVola", type: "mobile", balance: 0 },
@@ -73,48 +106,71 @@ const DEFAULT_ACCOUNTS = [
   { name: "Redotpay", type: "digital", balance: 0 },
 ];
 
-/* ============================================================================
-   COMPOSANT PRINCIPAL APP
-============================================================================ */
-
+// ============================================================================
+// COMPOSANT PRINCIPAL
+// ============================================================================
 export default function App() {
-  // Hooks personnalisés
+  const {
+  accounts,
+  createAccount,
+  deleteAccount,
+  transactions,
+  createTransaction,
+  updateTransaction,
+  deleteTransaction,
+  projects,
+  visibleTransactions,
+  totalOpenReceivables,
+  totalBalance,
+  income,
+  expense,
+  accountsWithCorrectAvoir,
+  activeProjects,
+  remainingCostSum,
+  projectsTotalRevenues,
+  projectsNetImpact,
+  projectsForecastCoffre,
+  projectsForecastTotal,
+  projectFilterId,
+  setProjectFilterId,
+  accountFilterId,
+  setAccountFilterId,
+  refreshAccounts,
+  refreshTransactions,
+  refreshProjects,
+} = useFinance();
+
+  // ==========================================================================
+  // HOOKS PERSONNALISÉS
+  // ==========================================================================
+  
   const auth = useAuth();
   const { toast, showToast, hideToast } = useToast();
-
-  const accountsHook = useAccounts(auth.isAuthenticated);
-  const transactionsHook = useTransactions(auth.isAuthenticated);
-  const { projects, refreshProjects, loading: projectsLoading } =
-    useProjects(auth.isAuthenticated);
-
-  const { accounts } = accountsHook;
-  const { transactions } = transactionsHook;
-
-  // ✅ NOUVEAU: State pour le total des receivables ouverts
-  const [totalOpenReceivables, setTotalOpenReceivables] = useState(0);
-
-  // Fonction de déconnexion
-  const handleLogout = async () => {
-    try {
-      await auth.logout();
-      showToast("Déconnexion réussie", "success");
-    } catch (error) {
-      showToast("Erreur lors de la déconnexion", "error");
-    }
-  };
-
-  // après avoir rempli `projects` (useEffect + fetch)
-  const plgProject = projects.find(
-    (p) => p.name === "PLG FLPT - Campagne Pêche Complete"
-  );
+  
+  // ==========================================================================
+  // ÉTATS LOCAUX - DONNÉES
+  // ==========================================================================
+  
+  // Projet PLG spécifique (utilisé dans certains workflows)
+  const plgProject = projects.find(p => p.name === "PLG FLPT - Campagne Pêche Complete");
   const plgProjectId = plgProject?.id || null;
 
-  // États UI locaux
+  // ==========================================================================
+  // ÉTATS LOCAUX - INTERFACE UTILISATEUR
+  // ==========================================================================
+  
+  // Navigation principale
   const [activeTab, setActiveTab] = useState("overview");
-  const [activeView, setActiveView] = useState("dashboard"); 
+  const [activeView, setActiveView] = useState("dashboard");
+  
+  // Modals de création/édition
   const [showAdd, setShowAdd] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  
+  // Modals de gestion
   const [showImport, setShowImport] = useState(false);
   const [showBackupImport, setShowBackupImport] = useState(false);
   const [showBookkeeper, setShowBookkeeper] = useState(false);
@@ -124,44 +180,17 @@ export default function App() {
   const [showProjectPlanner, setShowProjectPlanner] = useState(false);
   const [showProjectsList, setShowProjectsList] = useState(false);
   const [transactionDetailsModal, setTransactionDetailsModal] = useState(null);
-  const [editingProject, setEditingProject] = useState(null);
-  const [editingTransaction, setEditingTransaction] = useState(null);
 
-  // Fonction pour ouvrir le modal
-  const openTransactionDetails = (type) => {
-    setTransactionDetailsModal(type);
-  };
-
-  // ✅ NOUVEAU: Charger le total des receivables au boot
-  useEffect(() => {
-    const fetchReceivables = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/receivables`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-        const data = await res.json();
-        const total = data.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-        setTotalOpenReceivables(total);
-      } catch (e) {
-        console.error("Erreur chargement receivables:", e);
-      }
-    };
-
-    if (auth.isAuthenticated) {
-      fetchReceivables();
-    }
-  }, [auth.isAuthenticated]);
-
-  // Migration des projets au démarrage
+  // ==========================================================================
+  // EFFETS - CHARGEMENT INITIAL
+  // ==========================================================================
+  // Migration des projets depuis localStorage vers la base de données
   useEffect(() => {
     const migrateProjects = async () => {
       try {
         const result = await projectsService.migrateFromLocalStorage();
         if (result.migrated > 0) {
-          showToast(
-            `✅ ${result.migrated} projets migrés vers la base de données`,
-            "success"
-          );
+          showToast(`✅ ${result.migrated} projets migrés vers la base de données`, "success");
           if (refreshProjects) refreshProjects();
         }
       } catch (error) {
@@ -174,15 +203,30 @@ export default function App() {
     }
   }, [auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // GESTION DU PIN
+
+  // ==========================================================================
+  // HANDLERS - AUTHENTIFICATION
+  // ==========================================================================
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+      showToast("Déconnexion réussie", "success");
+    } catch (error) {
+      showToast("Erreur lors de la déconnexion", "error");
+    }
+  };
+
   const handlePinSubmit = async (pin) => {
     try {
       if (!auth.hasPin) {
+        // Création d'un nouveau PIN
         if (auth.pinStep === "enter") {
           auth.setFirstPin(pin);
           auth.setPinStep("confirm");
           return;
         }
+        
+        // Confirmation du PIN
         if (auth.pinStep === "confirm") {
           if (pin !== auth.firstPin) {
             showToast("Les PIN ne correspondent pas", "error");
@@ -194,6 +238,7 @@ export default function App() {
           showToast("PIN créé avec succès", "success");
         }
       } else {
+        // Connexion avec PIN existant
         await auth.login(pin);
         showToast("Connexion réussie", "success");
       }
@@ -204,62 +249,50 @@ export default function App() {
     }
   };
 
-  // FILTRES
-const [projectFilterId, setProjectFilterId] = useState(null);  // null = tous
-const [accountFilterId, setAccountFilterId] = useState(null);  // null = tous
-
-const visibleTransactions = useMemo(() => {
-  let list = transactions || [];
-
-  if (projectFilterId) {
-    list = list.filter(t => String(t.project_id) === String(projectFilterId));
-  }
-
-  if (accountFilterId) {
-    list = list.filter(t => String(t.account_id) === String(accountFilterId));
-  }
-
-  return list;
-}, [transactions, projectFilterId, accountFilterId]);
-
-
-  // GESTION DES COMPTES
+  // ==========================================================================
+  // HANDLERS - COMPTES
+  // ==========================================================================
+  
   const handleInitDefaults = async () => {
-    if (!confirm("Voulez-vous créer les 7 comptes par défaut ?")) return;
-    try {
-      await Promise.all(
-        DEFAULT_ACCOUNTS.map((account) => accountsService.create(account))
-      );
-      showToast("Comptes créés avec succès !", "success");
-      await accountsHook.refreshAccounts();
-    } catch (e) {
-      showToast("Erreur lors de l'initialisation", "error");
-    }
-  };
+  if (!confirm("Voulez-vous créer les 7 comptes par défaut ?")) return;
+  
+  try {
+    await Promise.all(
+      DEFAULT_ACCOUNTS.map((account) => accountsService.create(account))
+    );
+    showToast("Comptes créés avec succès !", "success");
+    await refreshAccounts(); // ✅ contexte
+  } catch (e) {
+    showToast("Erreur lors de l'initialisation", "error");
+  }
+};
 
-  const handleCreateAccount = async (data) => {
-    try {
-      await accountsHook.createAccount(data);
-      showToast(`Compte ${data.name} créé !`, "success");
-      setShowAddAccount(false);
-    } catch (e) {
-      showToast("Erreur création compte", "error");
-    }
-  };
+const handleCreateAccount = async (data) => {
+  try {
+    await createAccount(data); // ✅ contexte
+    showToast(`Compte ${data.name} créé !`, "success");
+    setShowAddAccount(false);
+  } catch (e) {
+    showToast("Erreur création compte", "error");
+  }
+};
 
-  const handleDeleteAccount = async (id) => {
-    try {
-      await accountsHook.deleteAccount(id);
-      showToast("Supprimé", "success");
-    } catch (e) {
-      showToast("Erreur suppression", "error");
-    }
-  };
+const handleDeleteAccount = async (id) => {
+  try {
+    await deleteAccount(id); // ✅ contexte
+    showToast("Supprimé", "success");
+  } catch (e) {
+    showToast("Erreur suppression", "error");
+  }
+};
 
-  // GESTION DES TRANSACTIONS
+  // ==========================================================================
+  // HANDLERS - TRANSACTIONS
+  // ==========================================================================
+  
   const addTransaction = async (trx) => {
     try {
-      await transactionsHook.createTransaction({
+      await createTransaction({
         account_id: trx.accountId,
         type: trx.type,
         amount: trx.amount,
@@ -268,31 +301,34 @@ const visibleTransactions = useMemo(() => {
         date: trx.date,
       });
       showToast("Ajouté", "success");
-      await accountsHook.refreshAccounts();
+      await refreshAccounts();
     } catch (e) {
       showToast("Erreur ajout", "error");
     }
   };
 
-  const deleteTransaction = async (id) => {
-  const numericId = Number(id);
-  console.log("🗑 deleteTransaction called with id:", id, "→", numericId, "type:", typeof numericId);
-  if (!numericId || Number.isNaN(numericId)) {
-    console.error("❌ ID de transaction invalide:", id);
-    showToast("ID de transaction invalide", "error");
-    return;
-  }
-  if (!confirm("Supprimer ?")) return;
-  try {
-    await transactionsHook.deleteTransaction(numericId);
-    showToast("Supprimé", "success");
-    await accountsHook.refreshAccounts();
-  } catch (e) {
-    showToast("Erreur suppression", "error");
-  }
-};
+  const handleTransactionClick = (transaction) => {
+    console.log('🖱️ Transaction cliquée:', transaction.id);
+    setEditingTransaction(transaction);
+  };
 
-  // IMPORT CSV INCRÉMENTAL (VERSION PRODUCTION)
+  const handleTransactionUpdate = async () => {
+    await refreshAccounts()();
+    await transactionsHook.refreshTransactions();
+    setEditingTransaction(null);
+  };
+
+  const handleTransactionDelete = async () => {
+    await transactionsHook.refreshTransactions();
+    await refreshAccounts();
+    setEditingTransaction(null);
+    console.log('✅ Transaction supprimée avec succès');
+  };
+
+  // ==========================================================================
+  // HANDLERS - IMPORT CSV
+  // ==========================================================================
+  
   const handleImportTransactions = async (importedTransactions) => {
     console.log("🔄 Import CSV incrémental...", importedTransactions.length);
 
@@ -302,78 +338,12 @@ const visibleTransactions = useMemo(() => {
     }
 
     try {
-      // FONCTION HELPER : Normalisation de date
-      const normalizeDate = (d) => {
-        if (!d) return null;
-
-        // Déjà au bon format 'YYYY-MM-DD'
-        if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
-          return d;
-        }
-
-        // Format avec slashs ex: '31/12/2025' ou '31/12/25'
-        if (typeof d === "string" && d.includes("/")) {
-          try {
-            const parts = d.split(" ")[0].split("/");
-            if (parts.length === 3) {
-              let [day, month, year] = parts;
-              if (year.length === 2) year = "20" + year;
-              return `${year}-${month.padStart(2, "0")}-${day.padStart(
-                2,
-                "0"
-              )}`;
-            }
-          } catch {
-            // on laisse continuer vers le parsing générique
-          }
-        }
-
-        // ISO complète ou objet Date
-        try {
-          const dateObj = d instanceof Date ? d : new Date(d);
-          if (isNaN(dateObj.getTime())) return null;
-
-          const year = dateObj.getFullYear();
-          const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-          const day = String(dateObj.getDate()).padStart(2, "0");
-          return `${year}-${month}-${day}`;
-        } catch {
-          return null;
-        }
-      };
-
-      // FONCTION HELPER : Créer une signature unique
-      const createSignature = (accountId, date, amount, type, desc) => {
-        const cleanAccId = accountId ? String(accountId).trim() : null;
-        const cleanDate = normalizeDate(date);
-        const cleanAmount =
-          amount != null ? Math.abs(parseFloat(amount)).toFixed(2) : null;
-        const cleanType = type ? String(type).trim().toLowerCase() : null;
-
-        const cleanDesc = desc
-          ? String(desc)
-              .trim()
-              .toLowerCase()
-              .normalize("NFD")
-              .replace(/[\u0300-\u036f]/g, "")
-              .replace(/\s+/g, " ")
-              .replace(/[.,;:!?@#$%^&*()]/g, "")
-              .substring(0, 40)
-          : null;
-
-        if (!cleanAccId || !cleanDate || !cleanAmount || !cleanType) {
-          return null;
-        }
-
-        return `${cleanAccId}|${cleanDate}|${cleanAmount}|${cleanType}|${cleanDesc}`;
-      };
-
-      // ÉTAPE 1: Récupérer toutes les transactions existantes
+      // --- ÉTAPE 1: Récupérer les transactions existantes ---
       console.log("📥 Chargement des transactions existantes...");
       const existingTransactions = await transactionsService.getAll();
       console.log(`📊 ${existingTransactions.length} transactions en base`);
 
-      // ÉTAPE 2: Créer un index des signatures existantes
+      // --- ÉTAPE 2: Créer un index des signatures existantes ---
       const existingSignatures = new Map();
       existingTransactions.forEach((t) => {
         const sig = createSignature(
@@ -395,15 +365,15 @@ const visibleTransactions = useMemo(() => {
 
       console.log(`🔑 ${existingSignatures.size} signatures uniques indexées`);
 
-      // ÉTAPE 3: Filtrer les transactions à importer
+      // --- ÉTAPE 3: Filtrer les transactions à importer ---
       const newTransactions = [];
       const duplicates = [];
       const invalid = [];
 
       importedTransactions.forEach((trx, index) => {
         const sig = createSignature(
-          trx.accountId,
-          trx.date,
+          trx.account_id || trx.accountId,
+          trx.transaction_date || trx.date,
           trx.amount,
           trx.type,
           trx.description
@@ -433,7 +403,7 @@ const visibleTransactions = useMemo(() => {
         }
       });
 
-      // ÉTAPE 4: Afficher le résumé
+      // --- ÉTAPE 4: Afficher le résumé d'analyse ---
       console.log(`\n📊 === ANALYSE DES DONNÉES CSV ===`);
       console.log(`📥 Total CSV: ${importedTransactions.length}`);
       console.log(`✅ Nouvelles: ${newTransactions.length}`);
@@ -443,14 +413,12 @@ const visibleTransactions = useMemo(() => {
       if (duplicates.length > 0 && duplicates.length <= 5) {
         console.log(`\n🔍 Exemples de doublons détectés:`);
         duplicates.slice(0, 5).forEach((dup) => {
-          console.log(
-            `  - ${dup.csv.description} (${dup.csv.amount} Ar, ${dup.csv.date})`
-          );
+          console.log(`  - ${dup.csv.description} (${dup.csv.amount} Ar, ${dup.csv.date})`);
           console.log(`    → Existe en base avec ID ${dup.existing.id}`);
         });
       }
 
-      // ÉTAPE 5: Si aucune nouvelle transaction, arrêter
+      // --- ÉTAPE 5: Arrêter si aucune nouvelle transaction ---
       if (newTransactions.length === 0) {
         const msg = `
 📊 IMPORT CSV TERMINÉ
@@ -459,23 +427,15 @@ const visibleTransactions = useMemo(() => {
 ⚠️ Doublons ignorés: ${duplicates.length}
 ❌ Transactions invalides: ${invalid.length}
 
-${
-  duplicates.length > 0
-    ? "✅ Toutes les transactions du CSV existent déjà en base."
-    : ""
-}
-${
-  invalid.length > 0
-    ? `⚠️ ${invalid.length} transactions ont été ignorées (données invalides).`
-    : ""
-}
+${duplicates.length > 0 ? "✅ Toutes les transactions du CSV existent déjà en base." : ""}
+${invalid.length > 0 ? `⚠️ ${invalid.length} transactions ont été ignorées (données invalides).` : ""}
         `;
         alert(msg.trim());
         showToast("Aucune nouvelle transaction à importer", "info");
         return;
       }
 
-      // ÉTAPE 6: Calculer l'impact sur les soldes par compte
+      // --- ÉTAPE 6: Calculer l'impact sur les soldes par compte ---
       const impactByAccount = {};
       newTransactions.forEach((trx) => {
         const accId = trx.accountId;
@@ -498,7 +458,7 @@ ${
         }
       });
 
-      // ÉTAPE 7: Afficher la confirmation avec impact détaillé
+      // --- ÉTAPE 7: Afficher la confirmation avec impact détaillé ---
       let impactDetails = "\n💰 IMPACT SUR LES SOLDES:\n\n";
       Object.values(impactByAccount).forEach((acc) => {
         const netImpact = acc.income - acc.expense;
@@ -506,22 +466,14 @@ ${
         const sign = netImpact >= 0 ? "+" : "";
 
         impactDetails += `${acc.name} (${acc.count} trx):\n`;
-        impactDetails += `  Solde actuel: ${acc.currentBalance.toLocaleString(
-          "fr-FR"
-        )} Ar\n`;
+        impactDetails += `  Solde actuel: ${acc.currentBalance.toLocaleString("fr-FR")} Ar\n`;
         if (acc.income > 0) {
-          impactDetails += `  + Revenus: ${acc.income.toLocaleString(
-            "fr-FR"
-          )} Ar\n`;
+          impactDetails += `  + Revenus: ${acc.income.toLocaleString("fr-FR")} Ar\n`;
         }
         if (acc.expense > 0) {
-          impactDetails += `  - Dépenses: ${acc.expense.toLocaleString(
-            "fr-FR"
-          )} Ar\n`;
+          impactDetails += `  - Dépenses: ${acc.expense.toLocaleString("fr-FR")} Ar\n`;
         }
-        impactDetails += `  → Nouveau solde: ${newBalance.toLocaleString(
-          "fr-FR"
-        )} Ar (${sign}${netImpact.toLocaleString("fr-FR")})\n\n`;
+        impactDetails += `  → Nouveau solde: ${newBalance.toLocaleString("fr-FR")} Ar (${sign}${netImpact.toLocaleString("fr-FR")})\n\n`;
       });
 
       const confirmMsg = `
@@ -529,11 +481,7 @@ ${
 
 ✅ Nouvelles transactions: ${newTransactions.length}
 ⚠️ Doublons ignorés: ${duplicates.length}
-${
-  invalid.length > 0
-    ? `❌ Invalides ignorées: ${invalid.length}\n`
-    : ""
-}
+${invalid.length > 0 ? `❌ Invalides ignorées: ${invalid.length}\n` : ""}
 ${impactDetails}
 Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
       `;
@@ -543,105 +491,52 @@ Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
         return;
       }
 
-      // ÉTAPE 8: Importer les nouvelles transactions
+      // --- ÉTAPE 8: Importer les nouvelles transactions via endpoint bulk ---
       console.log(`\n📤 Import de ${newTransactions.length} transactions...`);
-      let successCount = 0;
-      let errorCount = 0;
-      const errors = [];
 
-      for (const trx of newTransactions) {
-        try {
-          await transactionsService.create({
-            account_id: trx.accountId,
-            type: trx.type,
-            amount: trx.amount,
-            category: trx.category,
-            description: trx.description,
-            date: trx.date,
-            is_posted: true,
-            is_planned: false,
-            remarks: trx.remarks || "",
-          });
-          successCount++;
+      const payload = newTransactions.map(t => ({
+        account_id: t.accountId,
+        type: t.type,
+        amount: t.amount,
+        category: t.category,
+        description: t.description,
+        transaction_date: t.date,
+        is_planned: false,
+        is_posted: true,
+        project_id: t.projectId || null,
+        remarks: t.remarks || ''
+      }));
 
-          if (successCount % 20 === 0) {
-            console.log(
-              `  ✅ ${successCount}/${newTransactions.length} importées...`
-            );
-          }
-        } catch (error) {
-          console.error(`❌ Erreur import:`, trx.description, error);
-          errorCount++;
-          errors.push({
-            transaction: trx.description,
-            error: error.message,
-          });
-        }
-      }
+      const result = await transactionsService.importTransactions(payload);
+      const successCount = Number(result?.imported || 0);
+      const serverDuplicates = Number(result?.duplicates || 0);
 
-      console.log(
-        `\n✅ Import terminé: ${successCount}/${newTransactions.length} réussies`
-      );
+      console.log(`\n✅ Import terminé: ${successCount}/${newTransactions.length} réussies`);
 
       if (successCount > 0) {
-        // ÉTAPE 9: Recalculer tous les soldes
+        // --- ÉTAPE 9: Recalculer tous les soldes ---
         console.log("🔄 Recalcul des soldes...");
         const token = localStorage.getItem("token");
 
         try {
-          const response = await fetch(
-            `${API_BASE}/accounts/recalculate-all`,
-            {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
+          const response = await fetch(`${API_BASE}/accounts/recalculate-all`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
           if (response.ok) {
             const data = await response.json();
-            console.log("✅ Soldes recalculés:", data.results);
 
             let summary = `✅ IMPORT CSV RÉUSSI !\n\n`;
             summary += `📥 ${successCount} nouvelles transactions importées\n`;
-            summary += `⚠️ ${duplicates.length} doublons ignorés\n`;
-            if (errorCount > 0)
-              summary += `❌ ${errorCount} erreurs\n`;
-            if (invalid.length > 0)
-              summary += `⚠️ ${invalid.length} transactions invalides ignorées\n`;
-            summary += `\n💰 SOLDES MIS À JOUR:\n\n`;
-
-            data.results.forEach((r) => {
-              const impact = impactByAccount[r.accountId];
-              if (impact && impact.count > 0) {
-                summary += `${r.accountName} (${impact.count} nouvelles trx):\n`;
-                summary += `  → ${r.newBalance.toLocaleString(
-                  "fr-FR"
-                )} Ar\n\n`;
-              }
-            });
-
-            if (errorCount > 0) {
-              summary += `\n⚠️ Erreurs détectées:\n`;
-              errors.slice(0, 3).forEach((err) => {
-                summary += `  - ${err.transaction}: ${err.error}\n`;
-              });
-              if (errors.length > 3) {
-                summary += `  ... et ${
-                  errors.length - 3
-                } autres erreurs\n`;
-              }
-            }
+            summary += `⚠️ ${duplicates.length} doublons ignorés (pré-analyse client)\n`;
+            summary += `⚠️ ${serverDuplicates} doublons ignorés (serveur)\n`;
+            if (invalid.length > 0) summary += `⚠️ ${invalid.length} transactions invalides ignorées\n`;
 
             alert(summary);
-            showToast(
-              `${successCount} transactions importées !`,
-              "success"
-            );
+            showToast(`${successCount} transactions importées !`, "success");
           } else {
-            console.error(
-              "❌ Erreur recalcul soldes:",
-              response.status
-            );
+            console.error("❌ Erreur recalcul soldes:", response.status);
             showToast(
               `${successCount} transactions importées mais erreur lors du recalcul des soldes`,
               "warning"
@@ -655,30 +550,29 @@ Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
           );
         }
 
-        // ÉTAPE 10: Rafraîchir l'interface
-        await accountsHook.refreshAccounts();
+        // --- ÉTAPE 10: Rafraîchir l'interface ---
+        await refreshAccounts();
         await transactionsHook.refreshTransactions();
       } else {
         alert(
-          `❌ Échec de l'import\n\n${errorCount} erreurs détectées.\n\nVérifiez les logs de la console.`
+          `📊 IMPORT CSV TERMINÉ\n\n` +
+          `✅ Importées: 0\n` +
+          `⚠️ Doublons (client): ${duplicates.length}\n` +
+          `⚠️ Doublons (serveur): ${serverDuplicates}\n` +
+          `❌ Invalides: ${invalid.length}\n`
         );
-        showToast("Aucune transaction n'a pu être importée.", "error");
+        showToast("Aucune transaction importée (tout doublon ou invalide).", "info");
       }
     } catch (error) {
-      console.error("❌ Erreur globale import:", error);
+      console.error("❌ Erreur import CSV:", error);
       showToast(`Erreur lors de l'import: ${error.message}`, "error");
     }
   };
 
-  // ✅ Callback après suppression (MANQUANT)
-const handleTransactionDelete = async () => {
-  await transactionsHook.refreshTransactions();   // <- important pour ProjectDetailsModal
-  await accountsHook.refreshAccounts();           // garder les soldes cohérents
-  setEditingTransaction(null);                    // fermer le modal d’édition
-  console.log('✅ Transaction supprimée avec succès');
-};
-
-  // Fonction pour éditer un projet
+  // ==========================================================================
+  // HANDLERS - PROJETS
+  // ==========================================================================
+  
   const handleEditProject = (project) => {
     console.log("📝 Édition du projet:", project);
     setEditingProject(project);
@@ -691,202 +585,171 @@ const handleTransactionDelete = async () => {
     const project = projects.find(p => String(p.id) === String(projectId));
     
     if (!project) {
-        console.error('Projet introuvable !');
-        alert('Projet introuvable');
-        return;
+      console.error('Projet introuvable !');
+      alert('Projet introuvable');
+      return;
     }
     
     console.log('Projet trouvé:', project.name, 'ID:', project.id);
     
     const parseExpenses = (data) => {
-        if (!data || typeof data !== 'string') return [];
-        try {
-            const parsed = JSON.parse(data);
-            return Array.isArray(parsed) ? parsed : [];
-        } catch (e) {
-            console.error('Parse expenses failed:', e);
-            return [];
-        }
+      if (!data || typeof data !== 'string') return [];
+      try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        console.error('Parse expenses failed:', e);
+        return [];
+      }
     };
     
     const parsedExpenses = parseExpenses(project.expenses);
     const parsedRevenues = parseExpenses(project.revenues);
     
-    // Confirmation
     if (!confirm(`ACTIVATION: ${project.name}\nDépenses: ${parsedExpenses.length}\nRevenus: ${parsedRevenues.length}\nConfirmer ?`)) {
-        return;
+      return;
     }
     
     try {
-        const token = localStorage.getItem('token');
-        const newTransactions = [];
-        
-        // ✅ CORRECTION : Transactions POSTÉES et NON PLANIFIÉES
-        for (const exp of parsedExpenses) {
-            const acc = accounts.find(a => a.name === exp.account);
-            if (acc) {
-                await transactionsService.create({
-                    accountid: acc.id,
-                    type: 'expense',
-                    amount: parseFloat(exp.amount),
-                    category: project.name,
-                    description: exp.description,
-                    date: new Date().toISOString().split('T')[0],
-                    projectid: projectId,
-                    is_planned: false,  // ✅ Pas planifiée
-                    is_posted: true     // ✅ Validée
-                });
-                newTransactions.push(exp);
-            }
+      const token = localStorage.getItem('token');
+      const newTransactions = [];
+      
+      // Créer les transactions de dépenses
+      for (const exp of parsedExpenses) {
+        const acc = accounts.find(a => a.name === exp.account);
+        if (acc) {
+          await transactionsService.create({
+            accountid: acc.id,
+            type: 'expense',
+            amount: parseFloat(exp.amount),
+            category: project.name,
+            description: exp.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            is_planned: false,
+            is_posted: true
+          });
+          newTransactions.push(exp);
         }
-        
-        for (const rev of parsedRevenues) {
-            const acc = accounts.find(a => a.name === rev.account);
-            if (acc) {
-                await transactionsService.create({
-                    accountid: acc.id,
-                    type: 'income',
-                    amount: parseFloat(rev.amount),
-                    category: project.name,
-                    description: rev.description,
-                    date: new Date().toISOString().split('T')[0],
-                    projectid: projectId,
-                    is_planned: false,  // ✅
-                    is_posted: true     // ✅
-                });
-                newTransactions.push(rev);
-            }
+      }
+      
+      // Créer les transactions de revenus
+      for (const rev of parsedRevenues) {
+        const acc = accounts.find(a => a.name === rev.account);
+        if (acc) {
+          await transactionsService.create({
+            accountid: acc.id,
+            type: 'income',
+            amount: parseFloat(rev.amount),
+            category: project.name,
+            description: rev.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            is_planned: false,
+            is_posted: true
+          });
+          newTransactions.push(rev);
         }
-        
-        const updateResponse = await fetch(`${API_BASE}/projects/${projectId}/toggle-status`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({ status: 'active' })
-        });
-        
-        await refreshProjects();
-        await transactionsHook.refreshTransactions();
-        await accountsHook.refreshAccounts();
-        
-        alert(`${project.name} ACTIVÉ !\n${newTransactions.length} transactions`);
+      }
+      
+      // Mettre à jour le statut du projet
+      const updateResponse = await fetch(`${API_BASE}/projects/${projectId}/toggle-status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ status: 'active' })
+      });
+      
+      await refreshProjects();
+      await transactionsHook.refreshTransactions();
+      await refreshAccounts();
+      
+      alert(`${project.name} ACTIVÉ !\n${newTransactions.length} transactions`);
     } catch (error) {
-        console.error('Erreur activation:', error);
-        alert(`Erreur: ${error.message}`);
+      console.error('Erreur activation:', error);
+      alert(`Erreur: ${error.message}`);
     }
-};
-
-  const handleProjectUpdated = async (projectId) => {
-    await refreshProjects();
-    await transactionsHook.refreshTransactions();
-    await accountsHook.refreshAccounts();
   };
 
-
-// ✅ HANDLER UNIQUE
-const handleTransactionClick = (transaction) => {
-    console.log('🖱️ Transaction cliquée:', transaction.id);
-    setEditingTransaction(transaction);
-};
-
-const handleTransactionUpdate = async () => {
-    await accountsHook.refreshAccounts();
-    await transactionsHook.refreshTransactions();
-    setEditingTransaction(null);
-};
-
-
-  // Activation PAR PHASE (Logistique/Ventes séparées)
-    // Version CORRIGÉE
   const activateProjectPhase = async (projectId, phaseName) => {
     const project = projects.find(p => p.id === projectId);
     const phaseExpenses = JSON.parse(project.expenses)
-        .filter(e => e.phase === phaseName && e.account !== 'Futur' && parseFloat(e.amount) > 0);
+      .filter(e => e.phase === phaseName && e.account !== 'Futur' && parseFloat(e.amount) > 0);
     
     if (phaseExpenses.length === 0) {
-        alert(`Phase "${phaseName}" vide ou déjà active`);
-        return;
+      alert(`Phase "${phaseName}" vide ou déjà active`);
+      return;
     }
     
     const totalPhase = phaseExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
     
     if (!confirm(`Activer Phase "${phaseName.toUpperCase()}" ?\n${phaseExpenses.length} lignes\n${formatCurrency(totalPhase)}`)) {
-        return;
+      return;
     }
     
     try {
-        let successCount = 0;
-        const token = localStorage.getItem('token');
+      let successCount = 0;
+      const token = localStorage.getItem('token');
+      
+      for (const exp of phaseExpenses) {
+        const targetAccount = accounts.find(a => a.name === exp.account) || accounts.find(a => a.type === 'cash');
         
-        for (const exp of phaseExpenses) {
-            const targetAccount = accounts.find(a => a.name === exp.account) || accounts.find(a => a.type === 'cash');
-            
-            if (!targetAccount) {
-                console.error('Compte introuvable pour la dépense', exp.description);
-                continue;
-            }
-            
-            // ✅ CORRECTION : Utiliser transactionsService au lieu de fetch direct
-            await transactionsService.create({
-                accountid: targetAccount.id,
-                type: 'expense',
-                amount: parseFloat(exp.amount),
-                category: `${project.name} - ${phaseName}`,
-                description: exp.description,
-                date: new Date().toISOString().split('T')[0],
-                is_planned: false,  // ✅ Pas planifiée
-                is_posted: true,    // ✅ Validée
-                projectid: projectId
-            });
-            
-            successCount++;
+        if (!targetAccount) {
+          console.error('Compte introuvable pour la dépense', exp.description);
+          continue;
         }
         
-        // Mise à jour du statut du projet
-        const newStatus = `Phase ${phaseName} Active (${successCount}/${phaseExpenses.length})`;
-        await fetch(`${API_BASE}/projects/${projectId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({ ...project, status: newStatus })
+        await transactionsService.create({
+          accountid: targetAccount.id,
+          type: 'expense',
+          amount: parseFloat(exp.amount),
+          category: `${project.name} - ${phaseName}`,
+          description: exp.description,
+          date: new Date().toISOString().split('T')[0],
+          is_planned: false,
+          is_posted: true,
+          projectid: projectId
         });
         
-        await refreshProjects();
-        await transactionsHook.refreshTransactions();
-        await accountsHook.refreshAccounts();
-        
-        alert(`Phase "${phaseName}" active !\n${successCount} transactions créées`);
+        successCount++;
+      }
+      
+      // Mise à jour du statut du projet
+      const newStatus = `Phase ${phaseName} Active (${successCount}/${phaseExpenses.length})`;
+      await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ ...project, status: newStatus })
+      });
+      
+      await refreshProjects();
+      await transactionsHook.refreshTransactions();
+      await refreshAccounts();
+      
+      alert(`Phase "${phaseName}" active !\n${successCount} transactions créées`);
     } catch (error) {
-        alert(`Erreur: ${error.message}`);
+      alert(`Erreur: ${error.message}`);
     }
-};
-
+  };
 
   const handleCompleteProject = async (projectId) => {
-    if (
-      !window.confirm(
-        "Marquer ce projet comme terminé et l'archiver ?"
-      )
-    )
-      return;
+    if (!window.confirm("Marquer ce projet comme terminé et l'archiver ?")) return;
 
     const token = localStorage.getItem("token");
 
     try {
-      const res = await fetch(
-        `${API_BASE}/projects/${projectId}/archive`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const res = await fetch(`${API_BASE}/projects/${projectId}/archive`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -895,7 +758,7 @@ const handleTransactionUpdate = async () => {
 
       await refreshProjects();
       await transactionsHook.refreshTransactions();
-      await accountsHook.refreshAccounts();
+      await refreshAccounts();
 
       alert("Projet archivé avec succès.");
     } catch (e) {
@@ -903,250 +766,117 @@ const handleTransactionUpdate = async () => {
       alert("Erreur archivage: " + e.message);
     }
   };
+
+  const handleProjectUpdated = async (projectId) => {
+    await refreshProjects();
+    await transactionsHook.refreshTransactions();
+    await refreshAccounts();
+  };
+
+  // ==========================================================================
+  // HANDLERS - BACKUP ET RESTAURATION
+  // ==========================================================================
   
-  // EXPORT BACKUP COMPLET (accounts + transactions + receivables + projects)
-const handleExportBackup = async () => {
-  try {
-    const defaultLabel = `snapshot-${new Date()
-      .toISOString()
-      .split("T")}`;
-    const label = prompt(
-      "Label du backup ? (ex: post-migration-AVOIR)",
-      defaultLabel
-    );
-    if (label === null) return;
+  const handleExportBackup = async () => {
+    try {
+      const defaultLabel = `snapshot-${new Date().toISOString().split("T")[0]}`;
+      const label = prompt("Label du backup ? (ex: post-migration-AVOIR)", defaultLabel);
+      if (label === null) return;
 
-    // ✅ Récupérer le backup complet depuis le serveur
-    const backupData = await backupService.fetchFull();
+      // Récupérer le backup complet depuis le serveur
+      const backupData = await backupService.fetchFull();
 
-    // ✅ Log pour vérifier que les projets sont bien présents
-    console.log('📦 Backup récupéré:', {
-      accounts: backupData.accounts?.length,
-      transactions: backupData.transactions?.length,
-      receivables: backupData.receivables?.length,
-      projects: backupData.projects?.length // ✅ Vérifier les projets
-    });
-
-    // ✅ CORRECTION: Ajouter les projets comme 4ème paramètre
-    const serverResult = await backupService.createLegacy(
-      backupData.accounts,
-      backupData.transactions,
-      backupData.receivables || [],
-      backupData.projects || [], // ✅ AJOUT DES PROJETS
-      label // ✅ Label en 5ème position
-    );
-
-    console.log("✅ Backup serveur créé:", serverResult);
-
-    const wantsLocal = confirm(
-      `Backup serveur créé:
-
-` +
-        `- Fichier: ${serverResult.filename}
-` +
-        `${serverResult.label ? `- Label: ${serverResult.label}
-` : ""}
-` +
-        `Voulez-vous aussi télécharger ce backup en local ?`
-    );
-
-    if (wantsLocal) {
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], {
-        type: "application/json",
+      console.log('📦 Backup récupéré:', {
+        accounts: backupData.accounts?.length,
+        transactions: backupData.transactions?.length,
+        receivables: backupData.receivables?.length,
+        projects: backupData.projects?.length
       });
-      const filename = `moneytracker_full_backup_${new Date()
-        .toISOString()
-        .split("T")}_${label.replace(
-        /[^a-zA-Z0-9-_]+/g,
-        "_"
-      )}.json`;
 
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Créer le backup sur le serveur avec les projets inclus
+      const serverResult = await backupService.createLegacy(
+        backupData.accounts,
+        backupData.transactions,
+        backupData.receivables || [],
+        backupData.projects || [],
+        label
+      );
 
-      showToast(
-        `✅ Backup serveur + local: ${filename}`,
-        "success"
+      console.log("✅ Backup serveur créé:", serverResult);
+
+      const wantsLocal = confirm(
+        `Backup serveur créé:\n\n` +
+        `- Fichier: ${serverResult.filename}\n` +
+        `${serverResult.label ? `- Label: ${serverResult.label}\n` : ""}\n` +
+        `Voulez-vous aussi télécharger ce backup en local ?`
       );
-    } else {
-      showToast(
-        `✅ Backup serveur créé: ${serverResult.filename}`,
-        "success"
-      );
+
+      if (wantsLocal) {
+        const blob = new Blob([JSON.stringify(backupData, null, 2)], {
+          type: "application/json",
+        });
+        const filename = `moneytracker_full_backup_${new Date().toISOString().split("T")[0]}_${label.replace(/[^a-zA-Z0-9-_]+/g, "_")}.json`;
+
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast(`✅ Backup serveur + local: ${filename}`, "success");
+      } else {
+        showToast(`✅ Backup serveur créé: ${serverResult.filename}`, "success");
+      }
+    } catch (error) {
+      console.error("❌ Erreur backup:", error);
+      showToast(`Erreur backup: ${error.message}`, "error");
     }
-  } catch (error) {
-    console.error("❌ Erreur backup:", error);
-    showToast(`Erreur backup: ${error.message}`, "error");
-  }
-};
-
+  };
 
   const handleRestoreSuccess = async () => {
-    await accountsHook.refreshAccounts();
+    await arefreshAccounts();
     await transactionsHook.refreshTransactions();
     showToast("Restauré avec succès !", "success");
   };
 
-  // CALCULS SOLDE ET TOTAUX
-  const { income, expense } = useMemo(() => {
-    const seenSignatures = new Set();
-    const uniqueTransactions = [];
+  // ==========================================================================
+  // HANDLERS - MODALS
+  // ==========================================================================
+  
+  const openTransactionDetails = (type) => {
+    setTransactionDetailsModal(type);
+  };
 
-    transactions.forEach((t) => {
-      const sig = `${t.account_id}|${(t.date || "").split("T")[0]}|${
-        t.amount
-      }|${t.type}`;
-      if (!seenSignatures.has(sig)) {
-        seenSignatures.add(sig);
-        uniqueTransactions.push(t);
-      }
+// --- ALERTES TRÉSORERIE ---
+const alerts = useMemo(() => {
+  const warnings = [];
+
+  accounts.forEach(acc => {
+    let projectedBalance = parseFloat(acc.balance || 0);
+
+    const plannedTrx = transactions.filter(t =>
+      String(t.account_id || t.accountId) === String(acc.id) &&
+      (t.is_planned === true || t.is_posted === false)
+    );
+
+    plannedTrx.forEach(t => {
+      if (t.type === "income") projectedBalance += parseFloat(t.amount || 0);
+      else projectedBalance -= parseFloat(t.amount || 0);
     });
 
-    return uniqueTransactions.reduce(
-      (tot, t) => {
-        const a = parseFloat(t.amount || 0);
-        if (t.type === "income") tot.income += a;
-        else tot.expense += a;
-        return tot;
-      },
-      { income: 0, expense: 0 }
-    );
-  }, [transactions]);
-
-  // ✅ CORRECTION: Créer un tableau de comptes avec le bon solde pour Avoir
-  const accountsWithCorrectAvoir = useMemo(() => {
-    return accounts.map(acc => {
-      if (acc.name === "Avoir") {
-        return {
-          ...acc,
-          balance: totalOpenReceivables // Remplace par le total receivables réel
-        };
-      }
-      return acc;
-    });
-  }, [accounts, totalOpenReceivables]);
-
-  // ✅ CORRECTION: Calcul du solde total avec le bon montant Avoir
-  const totalBalance = useMemo(() => {
-    return accountsWithCorrectAvoir.reduce(
-      (s, acc) => s + parseFloat(acc.balance || 0),
-      0
-    );
-  }, [accountsWithCorrectAvoir]);
-
-// === PRÉVISIONS COMPLÈTES (À AJOUTER ICI) ===
-const coffreAccount = accountsWithCorrectAvoir.find(a => a.name === "Coffre");
-const currentCoffreBalance = Number(coffreAccount?.balance || 0);
-
-// Après règlements
-const receivablesForecastCoffre = currentCoffreBalance + totalOpenReceivables;
-const receivablesForecastTotal = totalBalance + totalOpenReceivables;
-const avoirsTousRecoltes = currentCoffreBalance >= totalOpenReceivables;
-
-// CALCULS PROJETS - Exclure les projets inactifs
-const parseJSONSafe = (data) => {
-  if (!data || data === null || data === undefined || data === 'null') return [];
-  try {
-    if (typeof data === 'string') {
-      if (data.trim() === '[]' || data.trim() === '') return [];
-      const parsed = JSON.parse(data);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-    if (typeof data === 'object') {
-      if (Array.isArray(data)) return data;
-      return [data];
-    }
-    return [];
-  } catch {
-    return [];
-  }
-};
-
-// ✅ Filtrer uniquement les projets actifs
-const activeProjects = useMemo(() => {
-  return projects.filter(p => {
-    const status = (p.status || '').toLowerCase();
-    return (
-      status === 'active' ||
-      status === 'actif' ||
-      status.startsWith('phase ')
-    );
-  });
-}, [projects]);
-
-// --- ALERTES TRÉSORERIE (MANQUANT) ---
-  const alerts = useMemo(() => {
-    const warnings = [];
-    
-    // Pour chaque compte, on regarde le solde actuel
-    accounts.forEach(acc => {
-      let projectedBalance = parseFloat(acc.balance || 0);
-      
-      // On cherche les transactions PLANIFIÉES (non postées) pour ce compte
-      const plannedTrx = transactions.filter(t => 
-        (String(t.account_id) === String(acc.id)) && 
-        (t.is_planned === true || t.is_posted === false)
-      );
-
-      // On simule l'impact
-      plannedTrx.forEach(t => {
-        if (t.type === 'income') projectedBalance += parseFloat(t.amount);
-        else projectedBalance -= parseFloat(t.amount);
+    if (projectedBalance < 0) {
+      warnings.push({
+        id: acc.id,
+        account: acc.name,
+        current: parseFloat(acc.balance || 0),
+        projected: projectedBalance,
       });
-
-      // Si le solde projeté est négatif
-      if (projectedBalance < 0) {
-        warnings.push({
-          id: acc.id,
-          account: acc.name,
-          current: parseFloat(acc.balance),
-          projected: projectedBalance
-        });
-      }
-    });
-    return warnings;
-  }, [accounts, transactions]);
-
-// CALCUL INVESTISSEMENT - SEULEMENT Futur et Planifié + projets actifs
-const remainingCostSum = useMemo(() => {
-  return activeProjects.reduce((sum, p) => {
-    try {
-      const expenses = parseJSONSafe(p.expenses);
-      // EXCLUdre "Déjà Payé"
-      const futureExpenses = expenses.filter(e =>
-        e.account !== 'Déjà Payé' && e.account !== 'Payé'
-      );
-      return sum + futureExpenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
-    } catch {
-      return sum;
     }
-  }, 0);
-}, [activeProjects]);
-
-const projectsTotalRevenues = useMemo(() => {
-  return activeProjects.reduce((sum, p) => {
-    const revenues = parseJSONSafe(p.revenues);
-    return sum + revenues.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  }, 0);
-}, [activeProjects]);
-
-const projectsNetImpact = projectsTotalRevenues - remainingCostSum;
-
-const projectsForecastCoffre = receivablesForecastCoffre + projectsNetImpact;
-const projectsForecastTotal = receivablesForecastTotal + projectsNetImpact;
-
-if (DEBUG) {
-  console.log('🔍 PROJETS DEBUG:', {
-    'Investissement Global': remainingCostSum.toLocaleString(),
-    'Total Revenues': projectsTotalRevenues.toLocaleString(),
-    'Net Impact': projectsNetImpact.toLocaleString(),
-    projects: activeProjects.map(p => ({ name: p.name, status: p.status }))
   });
-}
+
+  return warnings;
+}, [accounts, transactions]);
 
 
   // LOADING STATE
@@ -1168,34 +898,36 @@ if (DEBUG) {
     return <PinInput onSubmit={handlePinSubmit} title={title} />;
   }
 
+console.log(accountsWithCorrectAvoir)
+
 // MAIN RENDER
-  return (
-    <>
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={hideToast}
-        />
-      )}
+return (
+ <>
+    {toast && (
+      <Toast
+        message={toast.message}
+        type={toast.type}
+        onClose={hideToast}
+      />
+    )}
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-        <Header
-          onAddTransaction={() => setShowAdd(true)}
-          onLogout={handleLogout}
-          onImport={() => setShowImport(true)}
-          onRestore={() => setShowBackupImport(true)}
-          onBackup={handleExportBackup}
-          onShowNotes={() => setActiveTab('notes')} 
-          onShowBookkeeper={() => setShowBookkeeper(true)}
-          onShowOperator={() => setShowOperator(true)}
-          onShowContent={() => setShowContentReplicator(true)}
-          onShowReports={() => setShowReports(true)}
-          onShowProjectPlanner={() => setShowProjectPlanner(true)}
-          onShowProjectsList={() => setShowProjectsList(true)}
-        />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+      <Header
+        onAddTransaction={() => setShowAdd(true)}
+        onLogout={handleLogout}
+        onImport={() => setShowImport(true)}
+        onRestore={() => setShowBackupImport(true)}
+        onBackup={handleExportBackup}
+        onShowNotes={() => setActiveTab("notes")}
+        onShowBookkeeper={() => setShowBookkeeper(true)}
+        onShowOperator={() => setShowOperator(true)}
+        onShowContent={() => setShowContentReplicator(true)}
+        onShowReports={() => setShowReports(true)}
+        onShowProjectPlanner={() => setShowProjectPlanner(true)}
+        onShowProjectsList={() => setShowProjectsList(true)}
+      />
 
-        <Navigation
+      <Navigation
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
@@ -1213,7 +945,7 @@ if (DEBUG) {
                       <h3 className="text-red-800 font-bold">Attention : Trésorerie tendue</h3>
                       <div className="mt-1 text-sm text-red-700">
                         {alerts.map(a => (
-                          <div key={a.id}>• <strong>{a.account}</strong> risque découvert (Proj: {formatCurrency(a.projected)})</div>
+                          <div key={a.id}>â€¢ <strong>{a.account}</strong> risque découvert (Proj: {formatCurrency(a.projected)})</div>
                         ))}
                       </div>
                     </div>
@@ -1264,7 +996,7 @@ if (DEBUG) {
                 
                 {/* Bouton RH temporaire (en attendant un vrai onglet) */}
                 <button
-  onClick={() => setActiveTab('hr')} // ✅ Utiliser activeTab au lieu de activeView
+  onClick={() => setActiveTab('hr')} // âœ… Utiliser activeTab au lieu de activeView
   className={`bg-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full border border-gray-100`}
 >
 
@@ -1274,21 +1006,25 @@ if (DEBUG) {
                     </div>
                   </div>
                   <h3 className="text-gray-600 text-sm font-medium mb-2">Ressources Humaines</h3>
-                  <p className="text-lg font-bold text-purple-600">Gérer l'équipe</p>
+                  <p className="text-lg font-bold text-purple-600">GÃ©rer l'Ã©quipe</p>
                 </button>
               </div>
 
-              {/* --- 3. PRÉVISIONS --- */}
-             <TreasuryForecast 
-  accounts={accountsWithCorrectAvoir}
-  projects={activeProjects}
-/>
+              {/* --- 3. PREVISIONS --- */}
+            <TreasuryForecast 
+            accounts={accounts}
+            projects={activeProjects}
+            />
               {/* --- 4. COMPTES --- */}
               <AccountList
-                accounts={accountsWithCorrectAvoir}
-                onSelectAccount={(acc) => acc.name === "Avoir" ? setActiveTab("receivables") : setSelectedAccount(acc)}
+                accounts={accounts}
+                onSelectAccount={(acc) =>
+                acc.name === "Avoir"
+                  ? setActiveTab("receivables")
+                   : setSelectedAccount(acc)
+                  }
                 onAddAccount={() => setShowAddAccount(true)}
-                onDeleteAccount={handleDeleteAccount}
+               onDeleteAccount={handleDeleteAccount}
                 onInitDefaults={handleInitDefaults}
               />
 
@@ -1316,11 +1052,10 @@ if (DEBUG) {
                 </div>
               </div>
 
-              {/* --- 6. RÉPARTITION --- */}
+              {/* --- 6. REPARTITION --- */}
               <div className="w-full">
                 <CategoryBreakdown transactions={transactions} />
               </div>
-
             </div>
           )}
 
@@ -1346,8 +1081,7 @@ if (DEBUG) {
             <ReceivablesScreen
               token={localStorage.getItem("token")}
               accounts={accounts}
-              onAfterChange={async () => { await accountsHook.refreshAccounts(); }}
-              onTotalsChange={({ totalOpenReceivables }) => setTotalOpenReceivables(totalOpenReceivables)}
+              onAfterChange={async () => { await refreshAccounts(); }}
             />
           )}
 
@@ -1359,31 +1093,30 @@ if (DEBUG) {
           
           {/* Remplacer activeView === 'hr' par activeTab === 'hr' */}
           {activeTab === 'hr' && <HumanResourcesPage />}
-          
         </main>
       </div>
 
       {/* --- MODALS GLOBAUX --- */}
-      
       {showAdd && (
         <TransactionModal
           onClose={() => setShowAdd(false)}
+          projects={projects}  // ✅ Passe la liste des projets
           accounts={accounts}
           onSave={async (tx) => {
             try {
-              await transactionsHook.createTransaction({
+              await createTransaction({
                 account_id: tx.accountId,
                 type: tx.type,
                 amount: tx.amount,
                 category: tx.category,
                 description: tx.description,
                 date: tx.date,
-                project_id: plgProjectId || null,
+                project_id: tx.projectId || null,  // ✅ Utilise le projet du formulaire
                 is_posted: true,
                 is_planned: false,
               });
               showToast("Transaction enregistrée", "success");
-              await accountsHook.refreshAccounts();
+              await refreshAccounts();
               await transactionsHook.refreshTransactions();
             } catch (e) {
               showToast("Erreur ajout transaction", "error");
@@ -1395,10 +1128,16 @@ if (DEBUG) {
       {showAddAccount && <AccountModal onClose={() => setShowAddAccount(false)} onSave={handleCreateAccount} />}
       {showImport && <ImportModal isOpen={showImport} accounts={accounts} onClose={() => setShowImport(false)} onImport={handleImportTransactions} />}
       {showBackupImport && <BackupImportModal onClose={() => setShowBackupImport(false)} onRestoreSuccess={handleRestoreSuccess} />}
-      
       {selectedAccount && <AccountDetails account={selectedAccount} transactions={transactions} onClose={() => setSelectedAccount(null)} onDelete={deleteTransaction} />}
       {showReports && <ReportsModal onClose={() => setShowReports(false)} transactions={transactions} accounts={accounts} />}
-      {showBookkeeper && <BookkeeperDashboard onClose={() => setShowBookkeeper(false)} transactions={transactions} accounts={accounts} projects={projects} />}
+      {showBookkeeper && (
+  <BookkeeperDashboard
+    onClose={() => setShowBookkeeper(false)}
+    transactions={transactions}
+    accounts={accounts}
+    projects={projects}
+  />
+)}
       {showOperator && <OperatorDashboard onClose={() => setShowOperator(false)} projects={projects} transactions={transactions} accounts={accounts} />}
       {showContentReplicator && <ContentReplicator onClose={() => setShowContentReplicator(false)} />}
       
@@ -1435,7 +1174,7 @@ if (DEBUG) {
           onDelete={handleTransactionDelete} // Appel du wrapper
           onDeleted={handleTransactionDelete} // Appel du wrapper
           onUpdate={handleTransactionUpdate}
-          accounts={accountsWithCorrectAvoir}
+          accounts={accounts}
         />
       )}
 
@@ -1447,5 +1186,5 @@ if (DEBUG) {
         />
       )}
     </>
-  );
+);
 }

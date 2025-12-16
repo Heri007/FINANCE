@@ -6,6 +6,13 @@ const logger = require('../config/logger'); // ✅ Import logger
  * Fonction utilitaire partagée pour créer la signature d'une transaction
  * Utilisée à la fois par checkDuplicates et importTransactions
  */
+const normalizeDate = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string') return d.split('T')[0];
+  if (d instanceof Date) return d.toISOString().split('T')[0];
+  return String(d).split('T')[0];
+};
+
 const createSig = (t) => {
   const cleanDesc = (t.description || '')
     .trim()
@@ -16,13 +23,9 @@ const createSig = (t) => {
     .replace(/[.,;:!?@#$%^&*()]/g, '')
     .substring(0, 40);
 
-  const date = t.transaction_date
-    ? t.transaction_date.split('T')[0]
-    : t.date;
-
+  const date = normalizeDate(t.transaction_date || t.date);
   const amount = Math.abs(parseFloat(t.amount)).toFixed(2);
 
-  // Signature composite: ID_COMPTE | DATE | MONTANT | TYPE | DESCRIPTION_NETTOYÉE
   return `${t.account_id}|${date}|${amount}|${t.type}|${cleanDesc}`;
 };
 

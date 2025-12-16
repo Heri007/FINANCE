@@ -1,50 +1,39 @@
-// FICHIER: src/services/projectsService.js
+// src/services/projectsService.js
 import { apiRequest } from './api';
 
 export const projectsService = {
-  // Récupérer tous les projets
-  getAll: () => apiRequest('/projects'),
-  
-  // ✅ Alias pour compatibilité avec useProjects.js
-  getAllProjects: () => apiRequest('/projects'),
+  // ✅ Ajouter guard array
+  async getAll() {
+    const data = await apiRequest('/projects');
+    return Array.isArray(data) ? data : [];
+  },
 
-  // Récupérer un projet par ID
+  // Alias
+  getAllProjects: () => projectsService.getAll(),
+
   getById: (id) => apiRequest(`/projects/${id}`),
 
-  // Créer un projet
   create: (project) => apiRequest('/projects', {
     method: 'POST',
-    body: JSON.stringify(project)
-  }),
-  
-  // ✅ Alias pour compatibilité
-  createProject: (project) => apiRequest('/projects', {
-    method: 'POST',
-    body: JSON.stringify(project)
+    body: JSON.stringify(project),
   }),
 
-  // Mettre à jour un projet
+  createProject: (project) => projectsService.create(project),
+
   update: (id, project) => apiRequest(`/projects/${id}`, {
     method: 'PUT',
-    body: JSON.stringify(project)
-  }),
-  
-  // ✅ Alias pour compatibilité
-  updateProject: (id, project) => apiRequest(`/projects/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(project)
+    body: JSON.stringify(project),
   }),
 
-  // Supprimer un projet
+  updateProject: (id, project) => projectsService.update(id, project),
+
   delete: (id) => apiRequest(`/projects/${id}`, { method: 'DELETE' }),
-  
-  // ✅ Alias pour compatibilité
-  deleteProject: (id) => apiRequest(`/projects/${id}`, { method: 'DELETE' }),
 
-  // Activer un projet
+  deleteProject: (id) => projectsService.delete(id),
+
   activate: (id) => apiRequest(`/projects/${id}/activate`, { method: 'POST' }),
 
-  // ✅ Migration depuis localStorage
+  // Migration localStorage (optionnel, peut être gardé)
   migrateFromLocalStorage: async () => {
     try {
       const localProjects = localStorage.getItem('projects');
@@ -62,27 +51,25 @@ export const projectsService = {
       for (const project of projects) {
         try {
           const existingProjects = await projectsService.getAll();
-          const exists = existingProjects.some(p => 
-            p.name === project.name && p.start_date === project.startDate
+          const exists = existingProjects.some(
+            (p) => p.name === project.name && p.start_date === project.startDate
           );
 
           if (!exists) {
-  await projectsService.create({
-    name: project.name,
-    description: project.description || '',
-    start_date: project.startDate,
-    end_date: project.endDate,
-    budget: project.budget || project.totalCost || 0,
-    status: project.status || 'draft',
-    // ✅ envoyer des arrays/objets natifs
-    expenses: project.expenses || [],
-    revenues: project.revenues || [],
-    total_cost: project.totalCost || 0,
-    total_revenues: project.totalRevenues || 0
-  });
-  migratedCount++;
-}
-
+            await projectsService.create({
+              name: project.name,
+              description: project.description || '',
+              start_date: project.startDate,
+              end_date: project.endDate,
+              budget: project.budget || project.totalCost || 0,
+              status: project.status || 'draft',
+              expenses: project.expenses || [],
+              revenues: project.revenues || [],
+              total_cost: project.totalCost || 0,
+              total_revenues: project.totalRevenues || 0,
+            });
+            migratedCount++;
+          }
         } catch (err) {
           console.error('Erreur migration projet:', project.name, err);
         }
@@ -90,7 +77,7 @@ export const projectsService = {
 
       if (migratedCount > 0) {
         localStorage.removeItem('projects');
-        console.log(`✅ ${migratedCount} projets migrés`);
+        console.log(`${migratedCount} projets migrés`);
       }
 
       return { migrated: migratedCount };
@@ -98,7 +85,7 @@ export const projectsService = {
       console.error('Erreur migration:', error);
       return { migrated: 0, error: error.message };
     }
-  }
+  },
 };
 
 export default projectsService;
