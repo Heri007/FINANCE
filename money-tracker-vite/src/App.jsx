@@ -120,6 +120,8 @@ export default function App() {
     activateProject,      // ✅ Nouvelle
     archiveProject,       // ✅ Nouvelle
     deactivateProject,    // ✅ Nouvelle
+    treasuryAlerts,        // ✅ Nouveau
+    transactionStats,      // ✅ Nouveau
     reactivateProject, 
     remainingCostSum,
     projectsTotalRevenues,
@@ -845,46 +847,6 @@ const handleProjectUpdated = async (projectId) => {
     setTransactionDetailsModal(type);
   };
 
-  // --- ALERTES TRÉSORERIE ---
-  const alerts = useMemo(() => {
-  const warnings = [];
-  
-  // ✅ Vérifier que accounts et transactions existent
-  if (!accounts || !transactions) return warnings;
-  
-  accounts.forEach(acc => {
-    let projectedBalance = parseFloat(acc.balance) || 0;
-    
-    // ✅ CORRECTION : || [] après filter()
-    const plannedTrx = (transactions || []).filter(
-      t => String(t.accountid || t.accountId) === String(acc.id) && 
-           t.isplanned === true && 
-           t.isposted === false
-    );
-    
-    // Calculer le solde projeté avec les transactions planifiées
-    plannedTrx.forEach(t => {
-      if (t.type === 'income') {
-        projectedBalance += parseFloat(t.amount) || 0;
-      } else {
-        projectedBalance -= parseFloat(t.amount) || 0;
-      }
-    });
-    
-    // Alerte si le solde projeté est négatif
-    if (projectedBalance < 0) {
-      warnings.push({
-        type: 'warning',
-        account: acc.name,
-        message: `Solde projeté négatif : ${projectedBalance.toFixed(2)} Ar`,
-        projectedBalance
-      });
-    }
-  });
-  
-  return warnings;
-  }, [accounts, transactions]);
-
   // LOADING STATE
   if (auth.isLoading) {
     return (
@@ -942,14 +904,14 @@ const handleProjectUpdated = async (projectId) => {
             <div className="space-y-8">
               
               {/* --- 1. ALERTES --- */}
-              {alerts.length > 0 && (
+              {treasuryAlerts.length > 0 && (
                 <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm">
                   <div className="flex items-start">
                     <AlertTriangle className="h-6 w-6 text-red-500 mr-3" />
                     <div>
                       <h3 className="text-red-800 font-bold">Attention : Trésorerie tendue</h3>
                       <div className="mt-1 text-sm text-red-700">
-                        {alerts.map(a => (
+                       {treasuryAlerts.map((a) => (
                           <div key={a.id}>â€¢ <strong>{a.account}</strong> risque découvert (Proj: {formatCurrency(a.projected)})</div>
                         ))}
                       </div>
@@ -976,7 +938,7 @@ const handleProjectUpdated = async (projectId) => {
                       <TrendingUp className="w-6 h-6 text-green-600" />
                     </div>
                     <span className="text-sm font-medium text-green-600">
-                      {transactions?.filter ((t) => t.type === "income").length} trx
+                      {transactionStats.income} trx
                     </span>
                   </div>
                   <h3 className="text-gray-600 text-sm font-medium mb-2">Encaissements</h3>
@@ -992,7 +954,7 @@ const handleProjectUpdated = async (projectId) => {
                       <TrendingDown className="w-6 h-6 text-red-600" />
                     </div>
                     <span className="text-sm font-medium text-red-600">
-                      {transactions?.filter ((t) => t.type === "expense").length} trx
+                      {transactionStats.expense} trx
                     </span>
                   </div>
                   <h3 className="text-gray-600 text-sm font-medium mb-2">Dépenses</h3>
