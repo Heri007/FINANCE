@@ -459,13 +459,29 @@ export function FinanceProvider({ children }) {
   // VALUE WITH PROJECT ACTIONS
   // ============================================================
 
-  const valueWithProjectActions = useMemo(() => ({
-    ...value,
-    activateProject,
-    archiveProject,
-    reactivateProject,
-    deactivateProject,
-  }), [value, activateProject, archiveProject, reactivateProject, deactivateProject]);
+  // ✅ APRÈS - Dépendances plus précises
+const valueWithProjectActions = useMemo(() => ({
+  ...value,
+  activateProject,
+  archiveProject,
+  reactivateProject,
+  deactivateProject,
+}), [
+  // ✅ Liste explicite des dépendances qui changent vraiment
+  accounts,
+  transactions,
+  projects,
+  projectFilterId,
+  accountFilterId,
+  totalOpenReceivables,
+  accountsLoading,
+  transactionsLoading,
+  projectsLoading,
+  activateProject,
+  archiveProject,
+  reactivateProject,
+  deactivateProject,
+]);
 
   return (
     <FinanceContext.Provider value={valueWithProjectActions}>

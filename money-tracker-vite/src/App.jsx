@@ -865,7 +865,6 @@ const handleProjectUpdated = async (projectId) => {
       : "Saisissez votre PIN";
     return <PinInput onSubmit={handlePinSubmit} title={title} />;
   }
-  console.log(accounts)
 
   // MAIN RENDER
   return (

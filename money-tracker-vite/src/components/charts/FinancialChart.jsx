@@ -12,7 +12,6 @@ import {
 } from 'recharts';
 
 const FinancialChart = ({ transactions = [] }) => {
-  console.log('🔵 FinancialChart chargé !', new Date().toISOString());
   // Préparer les données pour le graphique
   const chartData = useMemo(() => {
     if (!Array.isArray(transactions) || transactions.length === 0) {
