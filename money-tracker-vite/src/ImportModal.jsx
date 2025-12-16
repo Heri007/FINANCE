@@ -2,6 +2,8 @@
 
 import React, { useState } from 'react';
 import Papa from 'papaparse';
+import { parseJSONSafe, normalizeDate } from './domain/finance/parsers';
+import { buildTransactionSignature } from './domain/finance/signature';
 
 const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -13,25 +15,6 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   const addLog = (msg, type = 'info') => {
     setLogs(prev => [...prev, { msg, type, time: new Date().toLocaleTimeString() }]);
     console.log(msg);
-  };
-
-  // 🔐 même logique de nettoyage que côté backend (importController.createSig)
-  const createLocalSig = (t) => {
-    const clean = (str) =>
-      (str || '')
-        .trim()
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, ' ')
-        .replace(/[.,;:!?@#$%^&*()]/g, '')
-        .substring(0, 40);
-
-    const date = t.date; // déjà normalisée YYYY-MM-DD
-    const amount = Math.abs(parseFloat(t.amount)).toFixed(2);
-    const desc = clean(t.description);
-
-  return `${t.accountId}|${date}|${amount}|${t.type}|${desc}`;
   };
 
   const handleFileChange = (e) => {
@@ -268,6 +251,15 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
       setIsImporting(false);
     }
   };
+
+  const sig = buildTransactionSignature({
+  accountId: t.accountId,
+  date: t.date,
+  amount: t.amount,
+  type: t.type,
+  description: t.description,
+  category: t.category || 'Autre',
+});
 
 // transactions bulk creation is handled via onImport(...) inside handleImport,
 // so we must not perform await calls during render; keep rendering the component.

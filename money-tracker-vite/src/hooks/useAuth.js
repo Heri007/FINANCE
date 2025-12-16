@@ -1,9 +1,12 @@
+// src/hooks/useAuth.js
 import { useState, useEffect } from 'react';
+import { useUser } from '../contexts/UserContext';
 import { authService } from '../services/authService';
 
 export function useAuth() {
+  const { isAuthenticated, setAuthToken, clearAuth } = useUser();
+  
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasPin, setHasPin] = useState(false);
   const [pinStep, setPinStep] = useState('enter'); // 'enter' ou 'confirm'
   const [firstPin, setFirstPin] = useState('');
@@ -12,13 +15,12 @@ export function useAuth() {
   useEffect(() => {
     const initAuth = async () => {
       setIsLoading(true);
-      
       try {
         // 1. Vérifier si un token existe et est valide
         const tokenCheck = await authService.verifyToken();
-        
         if (tokenCheck.valid) {
-          setIsAuthenticated(true);
+          // ✅ Token valide trouvé au démarrage
+          // UserContext a déjà le token depuis localStorage
           setHasPin(true);
           setIsLoading(false);
           return;
@@ -26,23 +28,19 @@ export function useAuth() {
 
         // 2. Vérifier si un PIN existe dans la base de données
         const pinCheck = await authService.checkPin();
-        
         if (pinCheck.exists) {
           // PIN existe, demander la saisie
           setHasPin(true);
-          setIsAuthenticated(false);
           setPinStep('enter');
         } else {
           // Aucun PIN, premier accès
           setHasPin(false);
-          setIsAuthenticated(false);
           setPinStep('enter');
         }
       } catch (error) {
         console.error('Erreur initialisation auth:', error);
         // En cas d'erreur, considérer comme non authentifié
         setHasPin(false);
-        setIsAuthenticated(false);
         setPinStep('enter');
       } finally {
         setIsLoading(false);
@@ -55,9 +53,15 @@ export function useAuth() {
   // Créer un nouveau PIN
   const setupPin = async (pin) => {
     try {
-      await authService.setupPin(pin);
+      const response = await authService.setupPin(pin);
+      
+      // ✅ CORRECTION: Utiliser setAuthToken de UserContext
+      if (response.token) {
+        setAuthToken(response.token);
+        console.log('✅ useAuth.setupPin: Token défini via UserContext');
+      }
+      
       setHasPin(true);
-      setIsAuthenticated(true);
       setFirstPin('');
       setPinStep('enter');
       return { success: true };
@@ -70,8 +74,14 @@ export function useAuth() {
   // Se connecter avec le PIN
   const login = async (pin) => {
     try {
-      await authService.loginWithPin(pin);
-      setIsAuthenticated(true);
+      const response = await authService.loginWithPin(pin);
+      
+      // ✅ CORRECTION: Utiliser setAuthToken de UserContext
+      if (response.token) {
+        setAuthToken(response.token);
+        console.log('✅ useAuth.login: Token défini via UserContext');
+      }
+      
       return { success: true };
     } catch (error) {
       console.error('Erreur login:', error);
@@ -81,15 +91,15 @@ export function useAuth() {
 
   // Déconnexion
   const logout = () => {
-    authService.logout();
-    setIsAuthenticated(false);
+    console.log('🔓 useAuth.logout: Déconnexion demandée');
+    clearAuth(); // ✅ Utilise clearAuth qui émet 'auth:logout'
     setFirstPin('');
     setPinStep('enter');
   };
 
   return {
     isLoading,
-    isAuthenticated,
+    isAuthenticated, // ✅ Vient de UserContext maintenant
     hasPin,
     pinStep,
     firstPin,

@@ -1,14 +1,6 @@
 // src/contexts/UserContext.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 
-/**
- * UserContext minimal:
- * - Source de vérité: présence du token dans localStorage
- * - Permet à FinanceContext (et autres) de savoir si l'utilisateur est "auth"
- *
- * Note: useAuth() continue d'exister et gère le PIN / verifyToken, etc.
- * Ici on ne fait PAS de verifyToken (ça reste dans useAuth).
- */
 const UserContext = createContext(null);
 
 export function UserProvider({ children }) {
@@ -16,23 +8,57 @@ export function UserProvider({ children }) {
 
   // Sync entre onglets + changements externes (login/logout)
   useEffect(() => {
-  const handleLogout = () => {
-    setToken(null);
-  };
-  
-  window.addEventListener('auth:logout', handleLogout);
-  return () => window.removeEventListener('auth:logout', handleLogout);
-}, []);
+    const handleLogout = () => {
+      console.log('🔓 UserContext: Déconnexion détectée');
+      setToken('');
+    };
+
+    // ✅ Écouter les événements de login (depuis authService)
+    const handleLogin = (event) => {
+      const newToken = event.detail?.token || localStorage.getItem('token');
+      if (newToken && newToken !== token) {
+        console.log('🔐 UserContext: Login détecté via événement, token mis à jour');
+        setToken(newToken);
+      }
+    };
+
+    // ✅ Sync multi-onglets via localStorage
+    const handleStorageChange = (e) => {
+      if (e.key === 'token') {
+        const newToken = e.newValue || '';
+        console.log('💾 UserContext: Token changé via localStorage (autre onglet?)');
+        setToken(newToken);
+      }
+    };
+
+    window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('auth:login', handleLogin);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+      window.removeEventListener('auth:login', handleLogin);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [token]);
 
   const setAuthToken = useCallback((newToken) => {
-    if (newToken) localStorage.setItem('token', newToken);
-    else localStorage.removeItem('token');
-    setToken(newToken || '');
+    console.log('✅ UserContext.setAuthToken appelé avec:', newToken ? 'TOKEN_PRÉSENT' : 'NULL');
+    
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+    } else {
+      localStorage.removeItem('token');
+      setToken('');
+    }
   }, []);
 
   const clearAuth = useCallback(() => {
+    console.log('🧹 UserContext.clearAuth: Nettoyage complet');
     localStorage.removeItem('token');
     setToken('');
+    window.dispatchEvent(new Event('auth:logout'));
   }, []);
 
   const value = useMemo(
@@ -45,7 +71,16 @@ export function UserProvider({ children }) {
     [token, setAuthToken, clearAuth]
   );
 
-  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
+  // ✅ LOG pour debug
+  useEffect(() => {
+    console.log('🔄 UserContext: isAuthenticated =', Boolean(token));
+  }, [token]);
+
+  return (
+    <UserContext.Provider value={value}>
+      {children}
+    </UserContext.Provider>
+  );
 }
 
 export function useUser() {

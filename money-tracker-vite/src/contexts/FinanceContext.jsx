@@ -109,14 +109,17 @@ export function FinanceProvider({ children }) {
   }, [isAuthenticated]);
 
   useEffect(() => {
+      console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
+
     if (!isAuthenticated) {
+      console.log('❌ FinanceContext: Non authentifié, reset données');
       setAccounts([]);
       setTransactions([]);
       setProjects([]);
       setTotalOpenReceivables(0);
       return;
     }
-
+    console.log('✅ FinanceContext: Authentifié, chargement données...');
     refreshAccounts();
     refreshTransactions();
     refreshProjects();
@@ -353,217 +356,215 @@ export function FinanceProvider({ children }) {
     deleteProject,
   };
 
+  // ============================================================
+  // ACTIONS - PROJETS (ACTIVATION, DÉSACTIVATION, ARCHIVAGE)
+  // ============================================================
 
-// ============================================================
-// ACTIONS - PROJETS (ACTIVATION, DÉSACTIVATION, ARCHIVAGE)
-// ============================================================
-
-/**
- * Active un projet : crée les transactions associées (dépenses + revenus)
- */
-const activateProject = async (projectId) => {
-  try {
-    const project = projects.find(p => String(p.id) === String(projectId));
-    if (!project) {
-      throw new Error('Projet introuvable');
-    }
-
-    const parseExpenses = (data) => {
-      if (!data || typeof data !== 'string') return [];
-      try {
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : [];
-      } catch (e) {
-        console.error('Parse expenses failed', e);
-        return [];
+  /**
+   * Active un projet : crée les transactions associées (dépenses + revenus)
+   */
+  const activateProject = useCallback(async (projectId) => {
+    try {
+      const project = projects.find(p => String(p.id) === String(projectId));
+      if (!project) {
+        throw new Error('Projet introuvable');
       }
-    };
 
-    const parsedExpenses = parseExpenses(project.expenses);
-    const parsedRevenues = parseExpenses(project.revenues);
+      const parseExpenses = (data) => {
+        if (!data || typeof data !== 'string') return [];
+        try {
+          const parsed = JSON.parse(data);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          console.error('Parse expenses failed', e);
+          return [];
+        }
+      };
 
-    const newTransactions = [];
+      const parsedExpenses = parseExpenses(project.expenses);
+      const parsedRevenues = parseExpenses(project.revenues);
 
-    // Créer les transactions de dépenses
-    for (const exp of parsedExpenses) {
-      const acc = accounts.find(a => a.name === exp.account);
-      if (acc) {
-        await createTransaction({
-          accountid: acc.id,
-          type: 'expense',
-          amount: parseFloat(exp.amount),
-          category: project.name,
-          description: exp.description,
-          date: new Date().toISOString().split('T')[0],
-          projectid: projectId,
-          isplanned: false,
-          isposted: true,
-        });
-        newTransactions.push(exp);
+      const newTransactions = [];
+
+      // Créer les transactions de dépenses
+      for (const exp of parsedExpenses) {
+        const acc = accounts.find(a => a.name === exp.account);
+        if (acc) {
+          await createTransaction({
+            accountid: acc.id,
+            type: 'expense',
+            amount: parseFloat(exp.amount),
+            category: project.name,
+            description: exp.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            isplanned: false,
+            isposted: true,
+          });
+          newTransactions.push(exp);
+        }
       }
-    }
 
-    // Créer les transactions de revenus
-    for (const rev of parsedRevenues) {
-      const acc = accounts.find(a => a.name === rev.account);
-      if (acc) {
-        await createTransaction({
-          accountid: acc.id,
-          type: 'income',
-          amount: parseFloat(rev.amount),
-          category: project.name,
-          description: rev.description,
-          date: new Date().toISOString().split('T')[0],
-          projectid: projectId,
-          isplanned: false,
-          isposted: true,
-        });
-        newTransactions.push(rev);
+      // Créer les transactions de revenus
+      for (const rev of parsedRevenues) {
+        const acc = accounts.find(a => a.name === rev.account);
+        if (acc) {
+          await createTransaction({
+            accountid: acc.id,
+            type: 'income',
+            amount: parseFloat(rev.amount),
+            category: project.name,
+            description: rev.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            isplanned: false,
+            isposted: true,
+          });
+          newTransactions.push(rev);
+        }
       }
+
+      // Mettre à jour le statut du projet
+      await updateProject(projectId, { status: 'active' });
+
+      await refreshProjects();
+      await refreshTransactions();
+      await refreshAccounts();
+
+      return { success: true, transactionCount: newTransactions.length };
+    } catch (error) {
+      console.error('Erreur activation projet', error);
+      throw error;
     }
+  }, [projects, accounts, createTransaction, updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
 
-    // Mettre à jour le statut du projet
-    await updateProject(projectId, { status: 'active' });
-
+  /**
+   * Archive (complète) un projet
+   */
+  const archiveProject = useCallback(async (projectId) => {
+    await updateProject(projectId, { status: 'archived' });
     await refreshProjects();
     await refreshTransactions();
     await refreshAccounts();
+  }, [updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
 
-    return { success: true, transactionCount: newTransactions.length };
-  } catch (error) {
-    console.error('Erreur activation projet', error);
-    throw error;
-  }
-};
+  /**
+   * Désactive un projet (passe le statut à "Inactif")
+   */
+  const deactivateProject = useCallback(async (projectId) => {
+    try {
+      const project = projects.find(p => String(p.id) === String(projectId));
+      
+      if (!project) {
+        throw new Error('Projet introuvable');
+      }
 
-/**
- * Archive (complète) un projet
- */
-const archiveProject = async (projectId) => {
-  await updateProject(projectId, { status: 'archived' });
-  await refreshProjects();
-  await refreshTransactions();
-  await refreshAccounts();
-};
+      console.log('🔍 Projet AVANT désactivation:', project);
 
-/**
- * Désactive un projet (passe le statut à "Inactif")
- */
-const deactivateProject = async (projectId) => {
-  try {
-    const project = projects.find(p => String(p.id) === String(projectId));
-    
-    if (!project) {
-      throw new Error('Projet introuvable');
+      // ✅ Normaliser toutes les données
+      const dataToSend = {
+        ...project,
+        
+        // ✅ CORRECTION 1 : Statut valide
+        status: 'paused',
+        
+        // ✅ CORRECTION 2 : allocation doit être un objet ou string, pas un array
+        allocation: (() => {
+          if (typeof project.allocation === 'string') return project.allocation;
+          if (typeof project.allocation === 'object' && !Array.isArray(project.allocation)) {
+            return project.allocation;
+          }
+          return {}; // Convertir [] en {}
+        })(),
+        
+        // ✅ Assurer que revenueAllocation est un objet
+        revenueAllocation: typeof project.revenueAllocation === 'object' && !Array.isArray(project.revenueAllocation)
+          ? project.revenueAllocation
+          : {},
+        
+        // ✅ S'assurer que expenses et revenues sont des strings JSON
+        expenses: typeof project.expenses === 'string' 
+          ? project.expenses 
+          : JSON.stringify(project.expenses || []),
+        
+        revenues: typeof project.revenues === 'string' 
+          ? project.revenues 
+          : JSON.stringify(project.revenues || []),
+      };
+
+      console.log('📤 Données normalisées à envoyer:', {
+        ...dataToSend,
+        expenses: `[${typeof dataToSend.expenses === 'string' ? 'string' : 'object'}]`,
+        revenues: `[${typeof dataToSend.revenues === 'string' ? 'string' : 'object'}]`,
+      });
+
+      await updateProject(projectId, dataToSend);
+      await refreshProjects();
+      
+      console.log('✅ Projet désactivé avec succès (status: paused)');
+    } catch (error) {
+      console.error('❌ Erreur désactivation:', error);
+      
+      if (error.details) {
+        console.error('🔴 Détails validation:', error.details);
+      }
+      
+      throw error;
     }
+  }, [projects, updateProject, refreshProjects]);
 
-    console.log('🔍 Projet AVANT désactivation:', project);
+  /**
+   * Réactive un projet (passe le statut de "paused" à "active")
+   */
+  const reactivateProject = useCallback(async (projectId) => {
+    try {
+      const project = projects.find(p => String(p.id) === String(projectId));
+      
+      if (!project) {
+        throw new Error('Projet introuvable');
+      }
 
-    // ✅ Normaliser toutes les données
-    const dataToSend = {
-      ...project,
-      
-      // ✅ CORRECTION 1 : Statut valide
-      status: 'paused',
-      
-      // ✅ CORRECTION 2 : allocation doit être un objet ou string, pas un array
-      allocation: (() => {
-        if (typeof project.allocation === 'string') return project.allocation;
-        if (typeof project.allocation === 'object' && !Array.isArray(project.allocation)) {
-          return project.allocation;
-        }
-        return {}; // Convertir [] en {}
-      })(),
-      
-      // ✅ Assurer que revenueAllocation est un objet
-      revenueAllocation: typeof project.revenueAllocation === 'object' && !Array.isArray(project.revenueAllocation)
-        ? project.revenueAllocation
-        : {},
-      
-      // ✅ S'assurer que expenses et revenues sont des strings JSON
-      expenses: typeof project.expenses === 'string' 
-        ? project.expenses 
-        : JSON.stringify(project.expenses || []),
-      
-      revenues: typeof project.revenues === 'string' 
-        ? project.revenues 
-        : JSON.stringify(project.revenues || []),
-    };
+      console.log('🔄 Réactivation du projet:', project.name);
 
-    console.log('📤 Données normalisées à envoyer:', {
-      ...dataToSend,
-      expenses: `[${typeof dataToSend.expenses === 'string' ? 'string' : 'object'}]`,
-      revenues: `[${typeof dataToSend.revenues === 'string' ? 'string' : 'object'}]`,
-    });
+      // ✅ Changer le statut à "active"
+      const dataToSend = {
+        ...project,
+        status: 'active',
+        allocation: typeof project.allocation === 'object' && !Array.isArray(project.allocation)
+          ? project.allocation
+          : {}
+      };
 
-    await updateProject(projectId, dataToSend);
-    await refreshProjects();
-    
-    console.log('✅ Projet désactivé avec succès (status: paused)');
-  } catch (error) {
-    console.error('❌ Erreur désactivation:', error);
-    
-    if (error.details) {
-      console.error('🔴 Détails validation:', error.details);
+      await updateProject(projectId, dataToSend);
+      await refreshProjects();
+      
+      console.log('✅ Projet réactivé avec succès (status: active)');
+    } catch (error) {
+      console.error('❌ Erreur réactivation:', error);
+      if (error.details) {
+        console.error('🔴 Détails validation:', error.details);
+      }
+      throw error;
     }
+  }, [projects, updateProject, refreshProjects]);
+
+  // ✅ AJOUTER LES ACTIONS PROJETS AU VALUE
+  const valueWithProjectActions = useMemo(() => ({
+    ...value,
     
-    throw error;
-  }
-};
+    // Actions projets supplémentaires
+    activateProject,
+    archiveProject,
+    reactivateProject,
+    deactivateProject,
+  }), [value, activateProject, archiveProject, reactivateProject, deactivateProject]);
 
-/**
- * Réactive un projet (passe le statut de "paused" à "active")
- */
-const reactivateProject = async (projectId) => {
-  try {
-    const project = projects.find(p => String(p.id) === String(projectId));
-    
-    if (!project) {
-      throw new Error('Projet introuvable');
-    }
-
-    console.log('🔄 Réactivation du projet:', project.name);
-
-    // ✅ Changer le statut à "active"
-    const dataToSend = {
-      ...project,
-      status: 'active',
-      allocation: typeof project.allocation === 'object' && !Array.isArray(project.allocation)
-        ? project.allocation
-        : {}
-    };
-
-    await updateProject(projectId, dataToSend);
-    await refreshProjects();
-    
-    console.log('✅ Projet réactivé avec succès (status: active)');
-  } catch (error) {
-    console.error('❌ Erreur réactivation:', error);
-    if (error.details) {
-      console.error('🔴 Détails validation:', error.details);
-    }
-    throw error;
-  }
-};
-
-// ✅ AJOUTER LES ACTIONS PROJETS AU VALUE
-const valueWithProjectActions = {
-  ...value, // ✅ Tout le contenu de l'objet value créé plus haut
-  
-  // Actions projets supplémentaires
-  activateProject,
-  archiveProject,
-  reactivateProject,
-  deactivateProject,
-
-};
-
-return (
-  <FinanceContext.Provider value={valueWithProjectActions}>
-    {children}
-  </FinanceContext.Provider>
-);
-}
+  return (
+    <FinanceContext.Provider value={valueWithProjectActions}>
+      {children}
+    </FinanceContext.Provider>
+  );
+}  // ✅ CORRECTION: Fermeture de FinanceProvider
 
 // Hook useFinance est déjà correct ✅
 export function useFinance() {

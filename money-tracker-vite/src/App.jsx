@@ -20,8 +20,8 @@ import { useFinance } from "./contexts/FinanceContext";
 // SERVICES
 // ============================================================================
 import { API_BASE } from "./services/api";
-import { normalizeDate } from './domain/finance/parsers';
-import { buildTransactionSignature } from './domain/finance/signature';
+import { parseJSONSafe, normalizeDate } from './domain/finance/parsers';
+import { transactionSignature, deduplicateTransactions } from './domain/finance/signature';
 import { createSignature } from "./utils/transactionUtils";
 import { projectsService } from './services/projectsService'
 
