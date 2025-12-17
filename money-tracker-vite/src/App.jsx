@@ -139,6 +139,7 @@ export default function App() {
   createAccount,
   updateAccount,
   deleteAccount,
+  importTransactions,
   createTransaction, // ✅ AJOUTER ICI
   updateTransaction,
   deleteTransaction,
@@ -324,255 +325,49 @@ const handleDeleteAccount = async (id) => {
   };
 
   // ==========================================================================
-  // HANDLERS - IMPORT CSV
+  // HANDLERS - IMPORT CSV (VERSION SIMPLIFIÉE)
   // ==========================================================================
-  const handleImportTransactions = async (importedTransactions) => {
-  console.log('📥 Import CSV incrémental...', importedTransactions.length);
-
+const handleImportTransactions = async (importedTransactions) => {
+  console.log('📥 Début import CSV:', importedTransactions.length, 'transactions');
+  
   if (!importedTransactions || importedTransactions.length === 0) {
     showToast('Aucune transaction à importer.', 'info');
     return;
   }
 
   try {
-    // --- ÉTAPE 1 : Utiliser les transactions du contexte (déjà chargées) ---
-    console.log('✅ Utilisation des transactions du contexte...');
-    const existingTransactions = transactions; // ✅ Pas besoin de fetch
-    console.log(`${existingTransactions.length} transactions en base`);
+    // ✅ Déléguer toute la logique au contexte
+    const result = await importTransactions(importedTransactions);
 
-    // --- ÉTAPE 2 : Créer un index des signatures existantes ---
-    const existingSignatures = new Map();
-    existingTransactions.forEach((t) => {
-      const sig = createSignature(
-        t.account_id || t.accountId,
-        t.transaction_date || t.transactionDate || t.date,
-        t.amount,
-        t.type,
-        t.description
-      );
-      if (sig) {
-        existingSignatures.set(sig, {
-          id: t.id,
-          description: t.description,
-          amount: t.amount,
-          date: t.transaction_date || t.date,
-        });
+    if (result.success && result.imported > 0) {
+      let summary = `✅ IMPORT CSV RÉUSSI !\n\n`;
+      summary += `${result.imported} nouvelles transactions importées\n`;
+      summary += `${result.duplicates} doublons ignorés (pré-analyse client)\n`;
+      if (result.serverDuplicates > 0) {
+        summary += `${result.serverDuplicates} doublons ignorés (serveur)\n`;
       }
-    });
-
-    console.log(`${existingSignatures.size} signatures uniques indexées`);
-
-    // --- ÉTAPE 3 : Filtrer les transactions à importer ---
-    const newTransactions = [];
-    const duplicates = [];
-    const invalid = [];
-
-    importedTransactions.forEach((trx, index) => {
-      const sig = createSignature(
-        trx.account_id || trx.accountId,
-        trx.transaction_date || trx.date,
-        trx.amount,
-        trx.type,
-        trx.description
-      );
-
-      if (!sig) {
-        invalid.push({
-          index: index + 1,
-          reason: 'Données invalides (date, montant ou compte manquant)',
-          trx,
-        });
-        return;
+      if (result.invalid > 0) {
+        summary += `${result.invalid} transactions invalides ignorées\n`;
       }
-
-      if (existingSignatures.has(sig)) {
-        const existing = existingSignatures.get(sig);
-        duplicates.push({
-          index: index + 1,
-          sig,
-          csv: trx,
-          existing: existing,
-          reason: 'Transaction identique déjà en base',
-        });
-      } else {
-        newTransactions.push(trx);
-        existingSignatures.set(sig, { new: true });
-      }
-    });
-
-    // --- ÉTAPE 4 : Afficher le résumé d'analyse ---
-    console.log('📊 ANALYSE DES DONNÉES CSV');
-    console.log(`Total CSV: ${importedTransactions.length}`);
-    console.log(`Nouvelles: ${newTransactions.length}`);
-    console.log(`Doublons: ${duplicates.length}`);
-    console.log(`Invalides: ${invalid.length}`);
-
-    if (duplicates.length > 0 && duplicates.length <= 5) {
-      console.log('⚠️ Exemples de doublons détectés:');
-      duplicates.slice(0, 5).forEach((dup) => {
-        console.log(`  - ${dup.csv.description} (${dup.csv.amount} Ar, ${dup.csv.date})`);
-        console.log(`    Existe en base avec ID: ${dup.existing.id}`);
-      });
-    }
-
-    // --- ÉTAPE 5 : Arrêter si aucune nouvelle transaction ---
-    if (newTransactions.length === 0) {
-      const msg = `
-📊 IMPORT CSV TERMINÉ
-
-Nouvelles transactions: 0
-Doublons ignorés: ${duplicates.length}
-Transactions invalides: ${invalid.length}
-
-${duplicates.length > 0 ? '✅ Toutes les transactions du CSV existent déjà en base.' : ''}
-${invalid.length > 0 ? `⚠️ ${invalid.length} transactions ont été ignorées (données invalides).` : ''}
-      `;
-      alert(msg.trim());
+      
+      alert(summary);
+      showToast(`${result.imported} transactions importées !`, 'success');
+    } else if (result.imported === 0) {
+      alert(`IMPORT CSV TERMINÉ\n\n` +
+        `Nouvelles transactions: 0\n` +
+        `Doublons ignorés: ${result.duplicates}\n` +
+        (result.invalid > 0 ? `Transactions invalides: ${result.invalid}\n` : '') +
+        `\nToutes les transactions du CSV existent déjà en base.`);
       showToast('Aucune nouvelle transaction à importer', 'info');
-      return;
-    }
-
-    // --- ÉTAPE 6 : Calculer l'impact sur les soldes par compte ---
-    const impactByAccount = {};
-    newTransactions.forEach((trx) => {
-      const accId = trx.accountId;
-      if (!impactByAccount[accId]) {
-        const account = accounts.find((a) => a.id === accId);
-        impactByAccount[accId] = {
-          name: account?.name || 'Compte inconnu',
-          currentBalance: parseFloat(account?.balance || 0),
-          income: 0,
-          expense: 0,
-          count: 0,
-        };
-      }
-      impactByAccount[accId].count++;
-      if (trx.type === 'income') {
-        impactByAccount[accId].income += trx.amount;
-      } else {
-        impactByAccount[accId].expense += trx.amount;
-      }
-    });
-
-    // --- ÉTAPE 7 : Afficher la confirmation avec impact détaillé ---
-    let impactDetails = '\n📊 IMPACT SUR LES SOLDES:\n\n';
-    Object.values(impactByAccount).forEach((acc) => {
-      const netImpact = acc.income - acc.expense;
-      const newBalance = acc.currentBalance + netImpact;
-      const sign = netImpact > 0 ? '+' : '';
-
-      impactDetails += `${acc.name} (${acc.count} trx):\n`;
-      impactDetails += `  Solde actuel: ${acc.currentBalance.toLocaleString('fr-FR')} Ar\n`;
-      if (acc.income > 0)
-        impactDetails += `  + Revenus: ${acc.income.toLocaleString('fr-FR')} Ar\n`;
-      if (acc.expense > 0)
-        impactDetails += `  - Dépenses: ${acc.expense.toLocaleString('fr-FR')} Ar\n`;
-      impactDetails += `  → Nouveau solde: ${newBalance.toLocaleString('fr-FR')} Ar (${sign}${netImpact.toLocaleString('fr-FR')})\n\n`;
-    });
-
-    const confirmMsg = `
-📥 IMPORT CSV - CONFIRMATION
-
-Nouvelles transactions: ${newTransactions.length}
-Doublons ignorés: ${duplicates.length}
-${invalid.length > 0 ? `Invalides ignorées: ${invalid.length}` : ''}
-
-${impactDetails}
-
-⚠️ Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
-    `;
-
-    if (!confirm(confirmMsg.trim())) {
-      showToast('Import annulé.', 'info');
-      return;
-    }
-
-    // --- ÉTAPE 8 : Importer les nouvelles transactions via endpoint bulk ---
-    console.log(`🚀 Import de ${newTransactions.length} transactions...`);
-
-    const payload = newTransactions.map((t) => ({
-      account_id: t.accountId,           // ✅ Avec underscore
-      type: t.type,
-      amount: t.amount,
-      category: t.category,
-      description: t.description,
-      transaction_date: t.date,          // ✅ Avec underscore
-      is_planned: false,                 // ✅ Avec underscore
-      is_posted: true,                   // ✅ Avec underscore
-      project_id: t.projectId || null,   // ✅ Avec underscore
-      remarks: t.remarks,
-    }));
-
-    // DEBUG : Afficher les 2 premières transactions du payload
-    console.log('📦 Payload envoyé (2 premiers):', JSON.stringify(payload.slice(0, 2), null, 2));
-
-    // ✅ Garder le service pour le bulk insert (spécifique)
-    const result = await transactionsService.importTransactions(payload);
-
-    const successCount = Number(result?.imported || 0);
-    const serverDuplicates = Number(result?.duplicates || 0);
-
-    console.log(`✅ Import terminé: ${successCount}/${newTransactions.length} réussies`);
-
-    if (successCount > 0) {
-      // --- ÉTAPE 9 : Recalculer tous les soldes ---
-      console.log('🔄 Recalcul des soldes...');
-      const token = localStorage.getItem('token');
-
-      try {
-        const response = await fetch(`${API_BASE}/api/accounts/recalculate-all`, {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${token}` },
-});
-
-        if (response.ok) {
-          const data = await response.json();
-
-          let summary = `
-✅ IMPORT CSV RÉUSSI !
-
-${successCount} nouvelles transactions importées
-${duplicates.length} doublons ignorés (pré-analyse client)
-${serverDuplicates} doublons ignorés (serveur)
-${invalid.length > 0 ? `${invalid.length} transactions invalides ignorées` : ''}
-          `;
-
-          alert(summary);
-          showToast(`${successCount} transactions importées !`, 'success');
-        } else {
-          console.error('❌ Erreur recalcul soldes:', response.status);
-          showToast(
-            `${successCount} transactions importées mais erreur lors du recalcul des soldes`,
-            'warning'
-          );
-        }
-      } catch (recalcError) {
-        console.error('❌ Erreur recalcul:', recalcError);
-        showToast(
-          `${successCount} transactions importées mais erreur lors du recalcul des soldes`,
-          'warning'
-        );
-      }
-
-      // --- ÉTAPE 10 : Rafraîchir l'interface ---
-      await refreshAccounts(); // ✅ Contexte
-      await refreshTransactions(); // ✅ Contexte
     } else {
-      alert(`
-📊 IMPORT CSV TERMINÉ
-
-Importées: 0
-Doublons client: ${duplicates.length}
-Doublons serveur: ${serverDuplicates}
-Invalides: ${invalid.length}
-      `);
-      showToast('Aucune transaction importée (tout doublon ou invalide).', 'info');
+      showToast(result.message || 'Import annulé', 'info');
     }
+
   } catch (error) {
     console.error('❌ Erreur import CSV:', error);
     showToast(`Erreur lors de l'import: ${error.message}`, 'error');
   }
-  };
+};
 
   // ==========================================================================
   // HANDLERS - PROJETS

@@ -7,15 +7,17 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { apiRequest } from '../services/api';
 
+import { apiRequest, API_BASE } from '../services/api';
 import { accountsService } from '../services/accountsService';
 import { transactionsService } from '../services/transactionsService';
 import { projectsService } from '../services/projectsService';
 import { receivablesService } from '../services/receivablesService';
 
+
 import { useUser } from './UserContext';
 import { parseJSONSafe } from '../domain/finance/parsers';
+import { buildTransactionSignature as createSignature } from '../domain/finance/signature';
 
 const FinanceContext = createContext(null);
 
@@ -37,7 +39,6 @@ export function FinanceProvider({ children }) {
   // ============================================================
   // REFRESH FUNCTIONS
   // ============================================================
-
   const refreshAccounts = useCallback(async () => {
     if (!isAuthenticated) return;
 
@@ -116,7 +117,6 @@ export function FinanceProvider({ children }) {
   // ============================================================
   // INITIAL LOAD
   // ============================================================
-
   useEffect(() => {
     console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
 
@@ -144,7 +144,6 @@ export function FinanceProvider({ children }) {
   // ============================================================
   // MUTATIONS - ACCOUNTS
   // ============================================================
-
   const createAccount = useCallback(
     async (data) => {
       const created = await accountsService.create(data);
@@ -174,7 +173,6 @@ export function FinanceProvider({ children }) {
   // ============================================================
   // MUTATIONS - TRANSACTIONS
   // ============================================================
-
   const createTransaction = useCallback(
     async (data) => {
       try {
@@ -426,7 +424,6 @@ const deactivateProject = useCallback(async (projectId) => {
   }
 }, [projects, refreshProjects]);
 
-
 const reactivateProject = useCallback(async (projectId) => {
   try {
     console.log('🟢 Réactivation projet ID:', projectId);
@@ -477,6 +474,215 @@ const reactivateProject = useCallback(async (projectId) => {
     throw error;
   }
 }, [projects, refreshProjects]);
+
+// --- IMPORT BULK TRANSACTIONS ---
+const importTransactions = useCallback(async (importedTransactions) => {
+  if (!Array.isArray(importedTransactions) || importedTransactions.length === 0) {
+    throw new Error('Aucune transaction à importer');
+  }
+
+  try {
+    console.log('📥 Import CSV:', importedTransactions.length, 'transactions');
+
+    // 1. Récupérer les transactions existantes (déjà en mémoire)
+    const existingTransactions = transactions || [];
+    console.log(`📊 ${existingTransactions.length} transactions en base`);
+
+    // 2. Créer un index des signatures existantes
+    const existingSignatures = new Map();
+existingTransactions.forEach(t => {
+  const sig = createSignature({
+    accountId: t.account_id,           // ✅ accountId (camelCase)
+    date: t.transaction_date || t.date, // ✅ date (pas transactiondate)
+    amount: t.amount,
+    type: t.type,
+    description: t.description,
+    category: t.category || 'Autre',   // ✅ Ajouter category
+  });
+  if (sig) {
+    existingSignatures.set(sig, {
+      id: t.id,
+      description: t.description,
+      amount: t.amount,
+      date: t.transaction_date || t.date,
+    });
+  }
+});
+    console.log(`🔑 ${existingSignatures.size} signatures uniques indexées`);
+
+    // 3. Filtrer les transactions à importer
+    const newTransactions = [];
+    const duplicates = [];
+    const invalid = [];
+
+    importedTransactions.forEach((trx, index) => {
+  const sig = createSignature({
+    accountId: trx.accountId,           // ✅ Déjà OK
+    date: trx.date,                     // ✅ Déjà OK
+    amount: trx.amount,
+    type: trx.type,
+    description: trx.description,
+    category: trx.category || 'Autre',  // ✅ Ajouter category
+  });
+
+  if (!sig) {
+    invalid.push({
+      index: index + 1,
+      reason: 'Données invalides (date, montant ou compte manquant)',
+      trx,
+    });
+    return;
+  }
+
+      if (existingSignatures.has(sig)) {
+        const existing = existingSignatures.get(sig);
+        duplicates.push({
+          index: index + 1,
+          sig,
+          csv: trx,
+          existing,
+          reason: 'Transaction identique déjà en base',
+        });
+      } else {
+        newTransactions.push(trx);
+        existingSignatures.set(sig, { new: true });
+      }
+    });
+
+    console.log('📊 ANALYSE:');
+    console.log(`  - Total CSV: ${importedTransactions.length}`);
+    console.log(`  - Nouvelles: ${newTransactions.length}`);
+    console.log(`  - Doublons: ${duplicates.length}`);
+    console.log(`  - Invalides: ${invalid.length}`);
+
+    // 4. Si aucune nouvelle transaction, arrêter
+    if (newTransactions.length === 0) {
+      return {
+        success: true,
+        imported: 0,
+        duplicates: duplicates.length,
+        invalid: invalid.length,
+        message: 'Aucune nouvelle transaction à importer',
+        details: { duplicates, invalid },
+      };
+    }
+
+    // 5. Calculer l'impact par compte
+    const impactByAccount = {};
+    newTransactions.forEach(trx => {
+      const accId = trx.accountId;
+      if (!impactByAccount[accId]) {
+        const account = accounts.find(a => a.id === accId);
+        impactByAccount[accId] = {
+          name: account?.name || 'Compte inconnu',
+          currentBalance: parseFloat(account?.balance || 0),
+          income: 0,
+          expense: 0,
+          count: 0,
+        };
+      }
+      impactByAccount[accId].count++;
+      if (trx.type === 'income') {
+        impactByAccount[accId].income += trx.amount;
+      } else {
+        impactByAccount[accId].expense += trx.amount;
+      }
+    });
+
+    // 6. Générer le message de confirmation
+    let impactDetails = '\n\n📊 IMPACT SUR LES SOLDES:\n';
+    Object.values(impactByAccount).forEach(acc => {
+      const netImpact = acc.income - acc.expense;
+      const newBalance = acc.currentBalance + netImpact;
+      const sign = netImpact >= 0 ? '+' : '';
+      impactDetails += `\n${acc.name} (${acc.count} trx):\n`;
+      impactDetails += `  Solde actuel: ${acc.currentBalance.toLocaleString('fr-FR')} Ar\n`;
+      if (acc.income > 0) impactDetails += `  + Revenus: ${acc.income.toLocaleString('fr-FR')} Ar\n`;
+      if (acc.expense > 0) impactDetails += `  - Dépenses: ${acc.expense.toLocaleString('fr-FR')} Ar\n`;
+      impactDetails += `  = Nouveau solde: ${newBalance.toLocaleString('fr-FR')} Ar (${sign}${netImpact.toLocaleString('fr-FR')})\n`;
+    });
+
+    const confirmMsg = `📥 IMPORT CSV - CONFIRMATION\n\n` +
+      `✅ Nouvelles transactions: ${newTransactions.length}\n` +
+      `⚠️  Doublons ignorés: ${duplicates.length}\n` +
+      (invalid.length > 0 ? `❌ Invalides ignorées: ${invalid.length}\n` : '') +
+      impactDetails +
+      `\n\nVoulez-vous importer ces ${newTransactions.length} nouvelles transactions ?`;
+
+    if (!window.confirm(confirmMsg.trim())) {
+      return {
+        success: false,
+        imported: 0,
+        duplicates: duplicates.length,
+        invalid: invalid.length,
+        message: 'Import annulé par l\'utilisateur',
+      };
+    }
+
+    // 7. Importer via l'endpoint bulk
+    console.log(`🚀 Import de ${newTransactions.length} transactions...`);
+
+    // ✅ NOUVEAU CODE (snake_case)
+const payload = newTransactions.map(t => ({
+  account_id: t.accountId,           // ✅ snake_case
+  type: t.type,
+  amount: t.amount,
+  category: t.category,
+  description: t.description,
+  transaction_date: t.date,          // ✅ snake_case
+  is_planned: false,                 // ✅ snake_case
+  is_posted: true,                   // ✅ snake_case
+  project_id: t.projectId || null,   // ✅ snake_case
+  remarks: t.remarks || '',
+}));
+
+
+    // Utiliser transactionsService pour le bulk import
+    const result = await transactionsService.importTransactions(payload);
+    const successCount = Number(result?.imported || 0);
+    const serverDuplicates = Number(result?.duplicates || 0);
+
+    console.log(`✅ Import terminé: ${successCount}/${newTransactions.length} réussies`);
+
+    if (successCount > 0) {
+      // 8. Recalculer tous les soldes
+      console.log('🔄 Recalcul des soldes...');
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE}/api/accounts/recalculate-all`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('Erreur recalcul soldes:', response.status);
+        }
+      } catch (recalcError) {
+        console.error('Erreur recalcul:', recalcError);
+      }
+
+      // 9. Rafraîchir les données
+      await refreshAccounts();
+      await refreshTransactions();
+    }
+
+    return {
+      success: true,
+      imported: successCount,
+      duplicates: duplicates.length,
+      serverDuplicates,
+      invalid: invalid.length,
+      message: `${successCount} transactions importées avec succès`,
+      details: { duplicates, invalid },
+    };
+
+  } catch (error) {
+    console.error('❌ Erreur importTransactions:', error);
+    throw error;
+  }
+}, [transactions, accounts, refreshAccounts, refreshTransactions]);
 
   // ============================================================
   // SELECTORS / COMPUTED VALUES
@@ -678,6 +884,7 @@ const reactivateProject = useCallback(async (projectId) => {
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    importTransactions,
 
     // ✅ Mutations Projects
     createProject,
@@ -722,6 +929,7 @@ const reactivateProject = useCallback(async (projectId) => {
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    importTransactions,
     createProject,
     updateProject,
     deleteProject,

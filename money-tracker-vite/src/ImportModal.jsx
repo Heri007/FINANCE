@@ -252,14 +252,17 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     }
   };
 
-  const sig = buildTransactionSignature({
-  accountId: t.accountId,
-  date: t.date,
-  amount: t.amount,
-  type: t.type,
-  description: t.description,
-  category: t.category || 'Autre',
-});
+  // ✅ FONCTION HELPER: Créer signature locale
+  const createLocalSig = (t) => {
+    return buildTransactionSignature({
+      accountId: t.accountId,
+      date: t.date,
+      amount: t.amount,
+      type: t.type,
+      description: t.description,
+      category: t.category || 'Autre',
+    });
+  };
 
 // transactions bulk creation is handled via onImport(...) inside handleImport,
 // so we must not perform await calls during render; keep rendering the component.
