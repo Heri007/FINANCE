@@ -166,11 +166,11 @@ export default function NotesSlide({ isOpen, onClose }) {
                 <li
                   key={note.id}
                   onClick={() => openNote(note)}
-                  className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-start justify-between gap-3"
+                  className="px-6 py-4 hover:bg-blue-300 cursor-pointer flex items-start justify-between gap-3"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-900 truncate">
+                      <span className="text-sm font-extrabold text-gray-900 truncate">
                         {note.content
                           ? note.content.split("\n")[0].substring(0, 80)
                           : "Nouvelle note..."}
