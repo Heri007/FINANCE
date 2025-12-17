@@ -203,18 +203,20 @@ router.get('/full-export', authenticateToken, async (req, res) => {
     console.log('📦 Full export demandé');
 
     // ✅ Requêtes parallèles SANS filtrage par user_id
-    const [accountsRes, transactionsRes, receivablesRes, projectsRes, notesRes] = await Promise.all([
+    const [accountsRes, transactionsRes, receivablesRes, projectsRes, notesRes, visionsRes, objectivesRes,     
+      ] = await Promise.all([
       pool.query('SELECT * FROM accounts ORDER BY id'),
       pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
       pool.query('SELECT * FROM receivables ORDER BY id'),
       pool.query('SELECT * FROM projects ORDER BY id'), // ✅ AJOUT DES PROJETS
       pool.query('SELECT * FROM notes ORDER BY id'),
+      pool.query('SELECT * FROM visions ORDER BY id'),  
+      pool.query('SELECT * FROM objectives ORDER BY id')  
     ]);
 
     console.log(
-      `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} avoirs, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes` // ✅ AJOUTER
+      `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} avoirs, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes`, `${visionsRes.rows.length} visions`, `${objectivesRes.rows.length} objectifs`
     );
-
     const backup = {
       version: '2.0',
       date: new Date().toISOString(),
@@ -223,6 +225,9 @@ router.get('/full-export', authenticateToken, async (req, res) => {
       receivables: receivablesRes.rows,
       projects: projectsRes.rows, // ✅ AJOUT DES PROJETS
       notes: notesRes.rows, // ✅ AJOUTER
+      visions: visionsRes.rows,          // 👈 NEW
+      objectives: objectivesRes.rows     // 👈 NEW
+
     };
 
     res.json(backup);
@@ -292,6 +297,8 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
         ? backup.archived_projects.length
         : 0,
       notes: Array.isArray(backup.notes) ? backup.notes.length : 0, // ✅ AJOUTER
+      isions: Array.isArray(backup.visions) ? backup.visions.length : 0,          // 👈 NEW
+      objectives: Array.isArray(backup.objectives) ? backup.objectives.length : 0, // 👈 NEW
       includeProjects,
       dryRun,
     };
@@ -308,13 +315,16 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
     await client.query('BEGIN');
 
     // 1) SUPPRIMER les données (SANS filtrer par user_id pour tout effacer)
-    console.log(`🗑️ Suppression de TOUTES les données...`);
-    await client.query('DELETE FROM transactions'); // ✅ Supprimer TOUT
-    await client.query('DELETE FROM receivables');
-    if (includeProjects) {
-      await client.query('DELETE FROM projects');
-    }
-    await client.query('DELETE FROM accounts');
+   console.log('🗑️ Suppression de TOUTES les données...');
+await client.query('DELETE FROM transactions');
+await client.query('DELETE FROM receivables');
+if (includeProjects) {
+  await client.query('DELETE FROM projects');
+}
+await client.query('DELETE FROM objectives'); // 👈 NEW
+await client.query('DELETE FROM visions');    // 👈 NEW
+await client.query('DELETE FROM accounts');
+
 
     // 2) Restaurer les comptes
     console.log(`📦 Restauration de ${backup.accounts.length} comptes...`);
@@ -462,6 +472,71 @@ if (includeProjects && Array.isArray(backup.projects) && backup.projects.length 
       }
     }
 
+    // 5bis) Restaurer les visions
+if (Array.isArray(backup.visions) && backup.visions.length > 0) {
+  console.log(`📦 Restauration de ${backup.visions.length} visions...`);
+
+  // Helper local
+  const normalizeValues = (raw) => {
+    if (!raw) return '[]';                // valeur par défaut
+    if (Array.isArray(raw)) return JSON.stringify(raw);
+    if (typeof raw === 'object') return JSON.stringify(raw);
+    // si c'est une string, on tente de parser, sinon on l’emballe dans un tableau
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return JSON.stringify(parsed);
+      } catch {
+        // "TEST5" -> ["TEST5"]
+        return JSON.stringify([raw]);
+      }
+    }
+    return '[]';
+  };
+
+  for (const v of backup.visions) {
+    await client.query(
+      `INSERT INTO visions (id, content, mission, values, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        v.id,
+        v.content || '',
+        v.mission || '',
+        normalizeValues(v.values),         // 👈 ici
+        v.created_at || new Date(),
+        v.updated_at || new Date()
+      ]
+    );
+  }
+}
+
+
+// 5ter) Restaurer les objectifs
+if (Array.isArray(backup.objectives) && backup.objectives.length > 0) {
+  console.log(`📦 Restauration de ${backup.objectives.length} objectifs...`);
+  for (const o of backup.objectives) {
+    await client.query(
+      `INSERT INTO objectives
+       (id, title, description, category, deadline, budget, progress, completed, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        o.id,
+        o.title,
+        o.description || '',
+        o.category || 'short',
+        o.deadline || null,
+        o.budget || 0,
+        o.progress || 0,
+        o.completed || false,
+        o.created_at || new Date(),
+        o.updated_at || new Date()
+      ]
+    );
+  }
+}
+
     // 6) Reset des séquences PostgreSQL
     await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
     await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
@@ -469,8 +544,10 @@ if (includeProjects && Array.isArray(backup.projects) && backup.projects.length 
     if (includeProjects) {
       await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
     }
-
+    await client.query(`SELECT setval('visions_id_seq', (SELECT MAX(id) FROM visions))`);
+    await client.query(`SELECT setval('objectives_id_seq', (SELECT MAX(id) FROM objectives))`);
     await client.query('COMMIT');
+    
     console.log('✅ Restauration committée avec succès');
 
     // 7) Recalculer tous les soldes

@@ -14,6 +14,8 @@ const authenticateToken = require('./middleware/auth').authenticateToken || requ
 const transactionLinkingRoutes = require('./routes/transactionLinking');
 const backupRoutes = require('./routes/backup');
 const notesRoutes = require('./routes/notes');
+const visionRouter = require('./routes/vision');
+
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -47,6 +49,7 @@ app.use('/api/receivables', require('./routes/receivables'));
 app.use('/api/notes', require('./routes/notes'));
 app.use('/api/transaction-linking', transactionLinkingRoutes);
 app.use('/api/project-migration', require('./routes/projectMigration'));
+app.use('/api/vision', visionRouter);
 
 // ✅ Routes sans préfixe /api (pour compatibilité frontend)
 app.use('/backup', backupRoutes);
