@@ -13,6 +13,7 @@ const pool = require('./config/database');
 const authenticateToken = require('./middleware/auth').authenticateToken || require('./middleware/auth');
 const transactionLinkingRoutes = require('./routes/transactionLinking');
 const backupRoutes = require('./routes/backup');
+const notesRoutes = require('./routes/notes');
 
 const app = express();
 const PORT = process.env.PORT || 5002;

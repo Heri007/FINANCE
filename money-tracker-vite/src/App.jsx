@@ -152,7 +152,7 @@ export default function App() {
 
   // Projet PLG spécifique (utilisé dans certains workflows)
   const plgProject = projects?.find(p => p.name === 'PLG FLPT - Campagne Pêche Complete');
-const plgProjectId = plgProject?.id || null;
+  const plgProjectId = plgProject?.id || null;
 
 
   // ==========================================================================
@@ -180,6 +180,7 @@ const plgProjectId = plgProject?.id || null;
   const [showProjectPlanner, setShowProjectPlanner] = useState(false);
   const [showProjectsList, setShowProjectsList] = useState(false);
   const [transactionDetailsModal, setTransactionDetailsModal] = useState(null);
+  const [showNotes, setShowNotes] = useState(false);
 
   // ==========================================================================
   // EFFETS - CHARGEMENT INITIAL
@@ -681,7 +682,7 @@ const handleProjectUpdated = async (projectId) => {
         onImport={() => setShowImport(true)}
         onRestore={() => setShowBackupImport(true)}
         onBackup={handleExportBackup}
-        onShowNotes={() => setActiveTab("notes")}
+        onShowNotes={() => setShowNotes(true)} 
         onShowBookkeeper={() => setShowBookkeeper(true)}
         onShowOperator={() => setShowOperator(true)}
         onShowContent={() => setShowContentReplicator(true)}
@@ -848,11 +849,6 @@ const handleProjectUpdated = async (projectId) => {
             />
           )}
 
-          {activeTab === 'notes' && (
-            <div className="p-6 bg-white rounded-lg shadow-xl">
-              <NotesSlide />
-            </div>
-          )}
           
           {/* Remplacer activeView === 'hr' par activeTab === 'hr' */}
           {activeTab === 'hr' && <HumanResourcesPage />}
@@ -957,6 +953,11 @@ const handleProjectUpdated = async (projectId) => {
           onClose={() => setTransactionDetailsModal(null)}
         />
       )}
+      {/* ✅ AJOUTER ICI: NotesSlide en Modal */}
+      <NotesSlide
+        isOpen={showNotes}
+        onClose={() => setShowNotes(false)}
+      />
     </>
   );
 }

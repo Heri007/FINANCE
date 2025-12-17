@@ -40,15 +40,13 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
           throw new Error('Version de backup non supportée. Version 2.0 requise.');
         }
 
-        const { accounts, transactions, receivables = [], projects = [] } = backupData;
+        const { accounts, transactions, receivables = [], projects = [], notes } = backupData;
 
         if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
           throw new Error('Format invalide : accounts et transactions doivent être des tableaux');
         }
 
-        addLog(
-          `✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length} avoirs, ${projects.length} projets`
-        );
+        addLog(`✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} avoirs, ${projects.length || 0} projets, ${notes?.length || 0} notes`); // ✅ AJOUTER
 
         const token = localStorage.getItem('token');
         const headers = {

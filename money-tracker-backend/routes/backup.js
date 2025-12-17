@@ -203,14 +203,17 @@ router.get('/full-export', authenticateToken, async (req, res) => {
     console.log('📦 Full export demandé');
 
     // ✅ Requêtes parallèles SANS filtrage par user_id
-    const [accountsRes, transactionsRes, receivablesRes, projectsRes] = await Promise.all([
+    const [accountsRes, transactionsRes, receivablesRes, projectsRes, notesRes] = await Promise.all([
       pool.query('SELECT * FROM accounts ORDER BY id'),
       pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
       pool.query('SELECT * FROM receivables ORDER BY id'),
       pool.query('SELECT * FROM projects ORDER BY id'), // ✅ AJOUT DES PROJETS
+      pool.query('SELECT * FROM notes ORDER BY id'),
     ]);
 
-    console.log(`✅ Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} avoirs, ${projectsRes.rows.length} projets`);
+    console.log(
+      `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} avoirs, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes` // ✅ AJOUTER
+    );
 
     const backup = {
       version: '2.0',
@@ -219,6 +222,7 @@ router.get('/full-export', authenticateToken, async (req, res) => {
       transactions: transactionsRes.rows,
       receivables: receivablesRes.rows,
       projects: projectsRes.rows, // ✅ AJOUT DES PROJETS
+      notes: notesRes.rows, // ✅ AJOUTER
     };
 
     res.json(backup);
@@ -287,6 +291,7 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
       archived_projects: Array.isArray(backup.archived_projects)
         ? backup.archived_projects.length
         : 0,
+      notes: Array.isArray(backup.notes) ? backup.notes.length : 0, // ✅ AJOUTER
       includeProjects,
       dryRun,
     };
@@ -436,6 +441,26 @@ if (includeProjects && Array.isArray(backup.projects) && backup.projects.length 
     );
   }
 }
+    // ✅ 5.5️⃣ Restaurer les notes
+    if (Array.isArray(backup.notes) && backup.notes.length > 0) {
+      console.log(`📝 Restauration de ${backup.notes.length} notes...`);
+      
+      for (const note of backup.notes) {
+        await client.query(
+          `INSERT INTO notes (id, content, created_at, updated_at)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (id) DO UPDATE SET 
+             content = EXCLUDED.content,
+             updated_at = EXCLUDED.updated_at`,
+          [
+            note.id,
+            note.content || '',
+            note.created_at || new Date(),
+            note.updated_at || new Date()
+          ]
+        );
+      }
+    }
 
     // 6) Reset des séquences PostgreSQL
     await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
