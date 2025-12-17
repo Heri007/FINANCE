@@ -22,9 +22,18 @@ export function ProjectPlannerModal({
   onClose,
   accounts = [],
   project = null,
-  onProjectSaved = null,
-  onProjectUpdated = null
+  onProjectSaved,
+  onProjectUpdated,
+  createTransaction,
 }) {
+  // ✅ AJOUTER: Vérification de sécurité
+  if (!createTransaction) {
+    console.error('❌ createTransaction manquant dans ProjectPlannerModal !');
+    // Empêcher le crash total
+    return null;
+  }
+
+  console.log('🔍 createTransaction type:', typeof createTransaction);
   // --- ÉTATS DU FORMULAIRE ---
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
@@ -209,7 +218,6 @@ export function ProjectPlannerModal({
     });
   }, [pricePerContainer, containerCount, commissionRateProprio, commissionRateRandou, projectType]);
 
-
   // ✅ FONCTION MANUELLE : GÉNÉRER LA LIGNE DE REVENU GLOBAL
   const generateContainerRevenues = () => {
     if (!pricePerContainer || !containerCount) {
@@ -328,117 +336,102 @@ export function ProjectPlannerModal({
 
   // --- ACTIONS FINANCIÈRES ---
 const handlePayerDepense = async (exp, index) => {
-    console.log("🟢 Début Paiement pour:", exp);
+  try {
+    if (!exp.account) return alert('Choisis un compte');
+    
+    const accountObj = accounts.find(a => a.name === exp.account);
+    if (!accountObj) return alert('Compte introuvable');
+    
+    if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) {
+      return;
+    }
 
-    try {
-      // 1. Vérifications de base
-      if (!exp.account) return alert('Veuillez choisir un compte (Source) pour cette dépense.');
-      
-      const accountObj = accounts.find(a => a.name === exp.account);
-      if (!accountObj) return alert(`Compte introuvable : ${exp.account}`);
+    // ✅ Vérifier que le projet existe
+    if (!project || !project.id) {
+      alert('Erreur: Projet introuvable.');
+      return;
+    }
 
-      const amountVal = parseFloat(exp.amount);
-      if (!amountVal || amountVal <= 0) return alert('Le montant doit être supérieur à 0.');
-
-      if (!window.confirm(`Confirmer le paiement de ${formatCurrency(amountVal)} depuis ${exp.account} ?`)) return;
-
-      setLoading(true);
-  // Avant création transaction, s'assurer que la ligne existe en base
-  if (!exp.dbId && exp.id && typeof exp.id === 'string' && exp.id.includes('-')) {
-    // C'est un UUID frontend, besoin de créer la ligne en base d'abord
-    const lineResult = await projectsService.createExpenseLine(project.id, {
-      description: exp.description,
-      amount: exp.amount,
-      category: exp.category
+    // ✅ Utiliser createTransaction du contexte
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'expense',
+      amount: parseFloat(exp.amount),
+      category: exp.category || 'Projet - Dépense',
+      description: `${project.name} - ${exp.description || 'Dépense'}`,
+      date: new Date().toISOString().split('T')[0],
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: null,
     });
-    exp.dbId = lineResult.id; // ID réel de la base
+
+    // Mettre à jour l'état local
+    const updated = [...expenses];
+    updated[index] = { ...updated[index], isPaid: true };
+    setExpenses(updated);
+    
+    // Sauvegarder
+    await saveProjectState(updated, revenues);
+
+    if (onProjectUpdated) onProjectUpdated();
+    
+    alert('✅ Dépense payée !');
+  } catch (error) {
+    console.error('❌ Erreur handlePayerDepense:', error);
+    const msg = error?.message || error?.raw?.message || 'Erreur paiement';
+    alert(msg);
   }
-      // 2. Préparation de la Transaction
-      // Note : On envoie project_line_id (UUID ou Int) pour lier la transaction à cette ligne
-      const txPayload = {
-        type: 'expense',
-        amount: amountVal,
-        category: (exp.category && exp.category.trim() !== '') ? exp.category : 'Projet',
-        description: `${projectName} - ${exp.description || 'Dépense'}`,
-        date: new Date().toISOString().split('T')[0], // YYYY-MM-DD
-        account_id: parseInt(accountObj.id, 10),
-        project_id: project?.id ? parseInt(project.id, 10) : null,
-        project_line_id: exp.dbId || exp.id, // Peut être UUID ou Int
-        is_posted: true,   // IMPORTANT : On valide la transaction tout de suite
-        is_planned: false  // Ce n'est plus du prévisionnel
-      };
+};
 
-      console.log('📤 Envoi Transaction:', txPayload);
-
-      // 3. Création de la transaction (Point critique)
-      try {
-        await transactionsService.createTransaction(txPayload);
-      } catch (txError) {
-        console.error("❌ Erreur Transaction:", txError);
-        // On affiche l'erreur exacte venue du backend pour comprendre
-        const errorMsg = txError.details ? JSON.stringify(txError.details) : txError.message;
-        throw new Error(`Échec création transaction : ${errorMsg}`);
-      }
-
-      // 4. Mise à jour de l'interface locale (Ligne devient verte)
-      const updatedExpenses = [...expenses];
-      updatedExpenses[index] = { ...updatedExpenses[index], isPaid: true };
-      setExpenses(updatedExpenses);
-
-      // 5. Sauvegarde du Projet (Pour mémoriser que c'est payé)
-      console.log('💾 Sauvegarde état projet...');
-      await saveProjectState(updatedExpenses, revenues);
-
-      // 6. Rafraîchissement global
-      if (onProjectUpdated) {
-        await onProjectUpdated(); 
-      }
-      
-      alert('✅ Dépense payée avec succès !');
-
-    } catch (error) {
-      console.error('💥 ERREUR CRITIQUE:', error);
-      alert(error.message);
-    } finally {
-      setLoading(false);
+ const handleEncaisser = async (rev, index) => {
+  try {
+    if (!rev.account) return alert('Choisis un compte');
+    
+    const accountObj = accounts.find(a => a.name === rev.account);
+    if (!accountObj) return alert('Compte introuvable');
+    
+    if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) {
+      return;
     }
-  };
 
-  const handleEncaisser = async (rev, index) => {
-    try {
-      if (!rev.account) return alert('Choisis un compte');
-      const accountObj = accounts.find(a => a.name === rev.account);
-      if (!accountObj) return alert('Compte introuvable');
-      if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) return;
-
-      const txPayload = {
-        type: 'income',
-        amount: parseFloat(rev.amount),
-        category: 'Projet - Revenu',
-        description: `${projectName} - ${rev.description || 'Revenu'}`,
-        date: new Date().toISOString().split('T')[0],
-        account_id: parseInt(accountObj.id, 10),
-        project_id: project?.id ? parseInt(project.id, 10) : null,
-        project_line_id: exp.id,
-        is_posted: true,
-        is_planned: false
-      };
-
-      await transactionsService.createTransaction(txPayload);
-
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: true };
-      setRevenues(updated);
-      await saveProjectState(expenses, updated);
-
-      if (onProjectUpdated) onProjectUpdated();
-      alert('Revenu encaissé !');
-    } catch (error) {
-      console.error('Erreur handleEncaisser:', error);
-      const msg = error?.message || error?.raw?.message || 'Erreur encaissement';
-      alert(msg);
+    // ✅ Vérifier que le projet existe
+    if (!project || !project.id) {
+      alert('Erreur: Projet introuvable.');
+      return;
     }
-  };
+
+    // ✅ Utiliser createTransaction du contexte (passé via props)
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'income',
+      amount: parseFloat(rev.amount),
+      category: 'Projet - Revenu',
+      description: `${project.name} - ${rev.description || 'Revenu'}`,
+      date: new Date().toISOString().split('T')[0],
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: null, // ✅ Correction
+    });
+
+    // Mettre à jour l'état local
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: true };
+    setRevenues(updated);
+    
+    // Sauvegarder
+    await saveProjectState(expenses, updated);
+
+    if (onProjectUpdated) onProjectUpdated();
+    
+    alert('✅ Revenu encaissé !');
+  } catch (error) {
+    console.error('❌ Erreur handleEncaisser:', error);
+    const msg = error?.message || error?.raw?.message || 'Erreur encaissement';
+    alert(msg);
+  }
+};
 
   // --- ANNULATION PAIEMENT DÉPENSE ---
   const handleCancelPaymentExpense = async (exp, index) => {

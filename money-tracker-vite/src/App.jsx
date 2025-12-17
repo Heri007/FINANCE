@@ -108,40 +108,42 @@ const DEFAULT_ACCOUNTS = [
 export default function App() {
   // ✅ CONTEXTE FINANCE (source unique)
   const {
-    accounts,
-    transactions,
-    projects,
-    visibleTransactions,
-    totalOpenReceivables,
-    totalBalance,
-    income,
-    expense,
-    activeProjects,
-    activateProject,      // ✅ Nouvelle
-    archiveProject,       // ✅ Nouvelle
-    deactivateProject,    // ✅ Nouvelle
-    treasuryAlerts,        // ✅ Nouveau
-    transactionStats,      // ✅ Nouveau
-    reactivateProject, 
-    remainingCostSum,
-    projectsTotalRevenues,
-    projectsNetImpact,
-    projectsForecastCoffre,
-    projectsForecastTotal,
-    projectFilterId,
-    setProjectFilterId,
-    accountFilterId,
-    setAccountFilterId,
-    refreshAccounts,
-    refreshTransactions,
-    refreshProjects,
-    createAccount,
-    updateAccount,
-    deleteAccount,
-    createTransaction,
-    updateTransaction,
-    deleteTransaction,
-  } = useFinance();
+  accounts,
+  transactions,
+  projects,
+  visibleTransactions,
+  totalOpenReceivables,
+  totalBalance,
+  income,
+  expense,
+  deleteProject,
+  activeProjects,
+  activateProject,
+  archiveProject,
+  deactivateProject,
+  treasuryAlerts,
+  transactionStats,
+  reactivateProject,
+  remainingCostSum,
+  projectsTotalRevenues,
+  projectsNetImpact,
+  projectsForecastCoffre,
+  projectsForecastTotal,
+  projectFilterId,
+  setProjectFilterId,
+  accountFilterId,
+  setAccountFilterId,
+  refreshAccounts,
+  refreshTransactions,
+  refreshProjects,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+  createTransaction, // ✅ AJOUTER ICI
+  updateTransaction,
+  deleteTransaction,
+} = useFinance();
+
 
   // ✅ HOOKS PERSONNALISÉS (non remplacés par le contexte)
   const auth = useAuth();
@@ -1113,7 +1115,7 @@ const handleProjectUpdated = async (projectId) => {
         onNewProject={() => { setEditingProject(null); setShowProjectPlanner(true); }}
         onEditProject={handleEditProject}
         onActivateProject={handleActivateProject}
-        onDeleteProject={async (id) => { await projectsService.deleteProject(id); await refreshProjects(); }}
+        onDeleteProject={deleteProject}
         onCompleteProject={handleCompleteProject}
         onProjectUpdate={refreshProjects}
         onDeactivateProject={deactivateProject} // ✅ Nouveau
@@ -1126,13 +1128,20 @@ const handleProjectUpdated = async (projectId) => {
       />
 
       <ProjectPlannerModal
-        isOpen={showProjectPlanner}
-        onClose={() => { setShowProjectPlanner(false); setEditingProject(null); }}
-        accounts={accounts}
-        project={editingProject}
-        onProjectSaved={async () => { await refreshProjects(); setEditingProject(null); }}
-        onProjectUpdated={handleProjectUpdated}
-      />
+  isOpen={showProjectPlanner}
+  onClose={() => {
+    setShowProjectPlanner(false);
+    setEditingProject(null);
+  }}
+  accounts={accounts}
+  project={editingProject}
+  onProjectSaved={async () => {
+    await refreshProjects();
+    setEditingProject(null);
+  }}
+  onProjectUpdated={handleProjectUpdated}
+  createTransaction={createTransaction} // ✅ Devrait être là (déjà présent)
+/>
 
       {editingTransaction && (
         <TransactionEditModal

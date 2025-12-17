@@ -16,8 +16,14 @@ const safeJson = async (response) => {
 };
 
 export const apiRequest = async (endpoint, options = {}) => {
-  // ✅ Assure que endpoint commence par /
-  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // ✅ CORRECTION: Normaliser l'endpoint pour ajouter /api/ si absent
+  let normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  // Si l'endpoint ne commence pas par /api/ et n'est pas /backup
+  if (!normalizedEndpoint.startsWith('/api/') && !normalizedEndpoint.startsWith('/backup')) {
+    normalizedEndpoint = `/api${normalizedEndpoint}`;
+  }
+  
   const url = `${API_BASE}${normalizedEndpoint}`;
 
   const config = {
@@ -76,3 +82,27 @@ export const apiRequest = async (endpoint, options = {}) => {
     throw error;
   }
 };
+
+// ✅ BONUS: Helper functions pour simplifier l'utilisation
+export const api = {
+  get: (endpoint) => apiRequest(endpoint, { method: 'GET' }),
+  
+  post: (endpoint, data) => apiRequest(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  
+  put: (endpoint, data) => apiRequest(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  
+  patch: (endpoint, data) => apiRequest(endpoint, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+  
+  delete: (endpoint) => apiRequest(endpoint, { method: 'DELETE' }),
+};
+
+export default api;

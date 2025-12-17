@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
+import { apiRequest } from '../services/api';
 
 import { accountsService } from '../services/accountsService';
 import { transactionsService } from '../services/transactionsService';
@@ -32,6 +33,10 @@ export function FinanceProvider({ children }) {
 
   const [projectFilterId, setProjectFilterId] = useState(null);
   const [accountFilterId, setAccountFilterId] = useState(null);
+
+  // ============================================================
+  // REFRESH FUNCTIONS
+  // ============================================================
 
   const refreshAccounts = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -108,8 +113,12 @@ export function FinanceProvider({ children }) {
     }
   }, [isAuthenticated]);
 
+  // ============================================================
+  // INITIAL LOAD
+  // ============================================================
+
   useEffect(() => {
-      console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
+    console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
 
     if (!isAuthenticated) {
       console.log('❌ FinanceContext: Non authentifié, reset données');
@@ -132,7 +141,10 @@ export function FinanceProvider({ children }) {
     refreshReceivables,
   ]);
 
-  // Mutations (CRUD)
+  // ============================================================
+  // MUTATIONS - ACCOUNTS
+  // ============================================================
+
   const createAccount = useCallback(
     async (data) => {
       const created = await accountsService.create(data);
@@ -159,34 +171,100 @@ export function FinanceProvider({ children }) {
     [refreshAccounts]
   );
 
+  // ============================================================
+  // MUTATIONS - TRANSACTIONS
+  // ============================================================
+
   const createTransaction = useCallback(
     async (data) => {
-      const created = await transactionsService.create(data);
-      await refreshTransactions();
-      await refreshAccounts();
-      return created;
+      try {
+        const payload = {
+          account_id: parseInt(data.accountid || data.accountId || data.account_id, 10),
+          type: data.type,
+          amount: parseFloat(data.amount),
+          category: data.category || 'Autre',
+          description: data.description || '',
+          date: data.date || data.transactiondate || data.transaction_date || new Date().toISOString().split('T')[0],
+          is_planned: data.isplanned ?? data.is_planned ?? false,
+          is_posted: data.isposted ?? data.is_posted ?? true,
+          project_id: data.projectid || data.projectId || data.project_id || null,
+          project_line_id: data.projectlineid || data.project_line_id || null,
+        };
+
+        console.log('🔵 createTransaction payload:', payload);
+
+        const response = await apiRequest('/transactions', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+
+        console.log('✅ Transaction créée:', response);
+
+        await refreshTransactions();
+        await refreshAccounts();
+        
+        return response;
+      } catch (error) {
+        console.error('❌ Erreur createTransaction:', error);
+        if (error.details) {
+          console.error('📋 Détails validation:', error.details);
+        }
+        throw error;
+      }
     },
     [refreshTransactions, refreshAccounts]
   );
 
   const updateTransaction = useCallback(
     async (id, data) => {
-      const updated = await transactionsService.update(id, data);
-      await refreshTransactions();
-      await refreshAccounts();
-      return updated;
+      try {
+        const payload = {
+          account_id: parseInt(data.accountid || data.accountId || data.account_id, 10),
+          type: data.type,
+          amount: parseFloat(data.amount),
+          category: data.category || 'Autre',
+          description: data.description || '',
+          date: data.date || data.transactiondate || data.transaction_date || new Date().toISOString().split('T')[0],
+          is_planned: data.isplanned ?? data.is_planned ?? false,
+          is_posted: data.isposted ?? data.is_posted ?? true,
+          project_id: data.projectid || data.projectId || data.project_id || null,
+          project_line_id: data.projectlineid || data.project_line_id || null,
+        };
+
+        const response = await apiRequest(`/transactions/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+
+        await refreshTransactions();
+        await refreshAccounts();
+        
+        return response;
+      } catch (error) {
+        console.error('❌ Erreur updateTransaction:', error);
+        throw error;
+      }
     },
     [refreshTransactions, refreshAccounts]
   );
 
   const deleteTransaction = useCallback(
     async (id) => {
-      await transactionsService.delete(id);
-      await refreshTransactions();
-      await refreshAccounts();
+      try {
+        await apiRequest(`/transactions/${id}`, { method: 'DELETE' });
+        await refreshTransactions();
+        await refreshAccounts();
+      } catch (error) {
+        console.error('Erreur deleteTransaction:', error);
+        throw error;
+      }
     },
     [refreshTransactions, refreshAccounts]
   );
+
+  // ============================================================
+  // MUTATIONS - PROJECTS
+  // ============================================================
 
   const createProject = useCallback(
     async (data) => {
@@ -206,19 +284,204 @@ export function FinanceProvider({ children }) {
     [refreshProjects]
   );
 
-  const deleteProject = useCallback(
-    async (id) => {
-      await projectsService.delete(id);
+  const deleteProject = useCallback(async (id) => {
+    try {
+      await apiRequest(`/projects/${id}`, { method: 'DELETE' });
       await refreshProjects();
-    },
-    [refreshProjects]
-  );
+    } catch (error) {
+      console.error('Erreur deleteProject:', error);
+      throw error;
+    }
+  }, [refreshProjects]);
 
- // ============================================================
+  const activateProject = useCallback(async (projectId) => {
+    try {
+      const project = projects.find(p => String(p.id) === String(projectId));
+      if (!project) {
+        throw new Error('Projet introuvable');
+      }
+
+      const parseExpenses = (data) => {
+        if (!data || typeof data !== 'string') return [];
+        try {
+          const parsed = JSON.parse(data);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+          console.error('Parse expenses failed', e);
+          return [];
+        }
+      };
+
+      const parsedExpenses = parseExpenses(project.expenses);
+      const parsedRevenues = parseExpenses(project.revenues);
+
+      const newTransactions = [];
+
+      // Créer les transactions de dépenses
+      for (const exp of parsedExpenses) {
+        const acc = accounts.find(a => a.name === exp.account);
+        if (acc) {
+          await createTransaction({
+            accountid: acc.id,
+            type: 'expense',
+            amount: parseFloat(exp.amount),
+            category: project.name,
+            description: exp.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            isplanned: false,
+            isposted: true,
+          });
+          newTransactions.push(exp);
+        }
+      }
+
+      // Créer les transactions de revenus
+      for (const rev of parsedRevenues) {
+        const acc = accounts.find(a => a.name === rev.account);
+        if (acc) {
+          await createTransaction({
+            accountid: acc.id,
+            type: 'income',
+            amount: parseFloat(rev.amount),
+            category: project.name,
+            description: rev.description,
+            date: new Date().toISOString().split('T')[0],
+            projectid: projectId,
+            isplanned: false,
+            isposted: true,
+          });
+          newTransactions.push(rev);
+        }
+      }
+
+      // Mettre à jour le statut du projet
+      await updateProject(projectId, { status: 'active' });
+
+      await refreshProjects();
+      await refreshTransactions();
+      await refreshAccounts();
+
+      return { success: true, transactionCount: newTransactions.length };
+    } catch (error) {
+      console.error('Erreur activation projet', error);
+      throw error;
+    }
+  }, [projects, accounts, createTransaction, updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
+
+  const archiveProject = useCallback(async (projectId) => {
+    await updateProject(projectId, { status: 'archived' });
+    await refreshProjects();
+    await refreshTransactions();
+    await refreshAccounts();
+  }, [updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
+
+const deactivateProject = useCallback(async (projectId) => {
+  try {
+    console.log('🔴 Désactivation projet ID:', projectId);
+    
+    const project = projects?.find(p => p.id === projectId);
+    if (!project) {
+      throw new Error('Projet introuvable');
+    }
+    
+    // ✅ PAYLOAD MINIMAL
+    const payload = {
+      name: project.name,
+      description: project.description || '',
+      type: project.type,
+      status: 'paused', // ✅ Utiliser "paused"
+      startDate: project.startDate,
+      endDate: project.endDate || null,
+      totalCost: Number(project.totalCost) || 0,
+      totalRevenues: Number(project.totalRevenues) || 0,
+      netProfit: Number(project.netProfit) || 0,
+      roi: Number(project.roi) || 0,
+      expenses: typeof project.expenses === 'string' 
+        ? project.expenses 
+        : JSON.stringify(project.expenses || []),
+      revenues: typeof project.revenues === 'string'
+        ? project.revenues
+        : JSON.stringify(project.revenues || []),
+      // ❌ NE PAS inclure: allocation, revenueAllocation
+    };
+
+    console.log('📤 Payload désactivation:', payload);
+
+    await apiRequest(`/projects/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    
+    console.log('✅ Projet désactivé (paused), rafraîchissement...');
+    await refreshProjects();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Erreur deactivateProject:', error);
+    if (error.details) {
+      console.error('📋 Détails validation:', error.details);
+    }
+    throw error;
+  }
+}, [projects, refreshProjects]);
+
+
+const reactivateProject = useCallback(async (projectId) => {
+  try {
+    console.log('🟢 Réactivation projet ID:', projectId);
+    
+    const project = projects?.find(p => p.id === projectId);
+    if (!project) {
+      throw new Error('Projet introuvable');
+    }
+    
+    // ✅ PAYLOAD MINIMAL - Ne pas envoyer allocation
+    const payload = {
+      name: project.name,
+      description: project.description || '',
+      type: project.type,
+      status: 'active', // ✅ Réactiver
+      startDate: project.startDate,
+      endDate: project.endDate || null,
+      totalCost: Number(project.totalCost) || 0,
+      totalRevenues: Number(project.totalRevenues) || 0,
+      netProfit: Number(project.netProfit) || 0,
+      roi: Number(project.roi) || 0,
+      // Formatter expenses et revenues en string JSON
+      expenses: typeof project.expenses === 'string' 
+        ? project.expenses 
+        : JSON.stringify(project.expenses || []),
+      revenues: typeof project.revenues === 'string'
+        ? project.revenues
+        : JSON.stringify(project.revenues || []),
+      // ❌ NE PAS inclure: allocation, revenueAllocation, etc.
+    };
+
+    console.log('📤 Payload réactivation:', payload);
+
+    await apiRequest(`/projects/${projectId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+    
+    console.log('✅ Projet réactivé, rafraîchissement...');
+    await refreshProjects();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Erreur reactivateProject:', error);
+    if (error.details) {
+      console.error('📋 Détails validation:', error.details);
+    }
+    throw error;
+  }
+}, [projects, refreshProjects]);
+
+  // ============================================================
   // SELECTORS / COMPUTED VALUES
   // ============================================================
 
-  // 1. Transactions visibles (filtrées)
   const visibleTransactions = useMemo(() => {
     let list = transactions || [];
     if (projectFilterId) {
@@ -230,7 +493,6 @@ export function FinanceProvider({ children }) {
     return list;
   }, [transactions, projectFilterId, accountFilterId]);
 
-  // 2. Income & Expense (avec déduplication)
   const { income, expense } = useMemo(() => {
     const seen = new Set();
     const unique = [];
@@ -253,7 +515,6 @@ export function FinanceProvider({ children }) {
     );
   }, [transactions]);
 
-  // 3. Accounts avec correction Avoir
   const accountsWithCorrectAvoir = useMemo(() => {
     return (accounts || []).map((acc) => {
       if (acc?.name === 'Avoir') return { ...acc, balance: totalOpenReceivables };
@@ -261,7 +522,6 @@ export function FinanceProvider({ children }) {
     });
   }, [accounts, totalOpenReceivables]);
 
-  // 4. Total Balance
   const totalBalance = useMemo(() => {
     return (accountsWithCorrectAvoir || []).reduce(
       (s, acc) => s + parseFloat(acc?.balance || 0),
@@ -269,15 +529,14 @@ export function FinanceProvider({ children }) {
     );
   }, [accountsWithCorrectAvoir]);
 
-  // 5. Active Projects
   const activeProjects = useMemo(() => {
-    return (projects || []).filter((p) => {
-      const status = String(p?.status || '').toLowerCase();
-      return status === 'active' || status === 'actif' || status.startsWith('phase ');
-    });
+  return (projects || []).filter((p) => {
+    const status = String(p?.status || '').toLowerCase();
+    // ✅ Exclure "paused", "archived", "completed", "cancelled"
+    return status === 'active' || status === 'actif' || status === 'draft' || status.startsWith('phase ');
+  });
   }, [projects]);
 
-  // 6. Remaining Cost Sum
   const remainingCostSum = useMemo(() => {
     return activeProjects.reduce((sum, p) => {
       const expensesArr = parseJSONSafe(p?.expenses);
@@ -292,7 +551,6 @@ export function FinanceProvider({ children }) {
     }, 0);
   }, [activeProjects]);
 
-  // 7. Projects Total Revenues
   const projectsTotalRevenues = useMemo(() => {
     return activeProjects.reduce((sum, p) => {
       const revArr = parseJSONSafe(p?.revenues);
@@ -301,24 +559,16 @@ export function FinanceProvider({ children }) {
     }, 0);
   }, [activeProjects]);
 
-  // 8. Projects Net Impact
   const projectsNetImpact = projectsTotalRevenues - remainingCostSum;
 
-  // 9. Coffre Account
   const coffreAccount = accountsWithCorrectAvoir.find((a) => a?.name === 'Coffre');
   const currentCoffreBalance = Number(coffreAccount?.balance || 0);
 
-  // 10. Forecasts
   const receivablesForecastCoffre = currentCoffreBalance + totalOpenReceivables;
   const receivablesForecastTotal = totalBalance + totalOpenReceivables;
   const projectsForecastCoffre = receivablesForecastCoffre + projectsNetImpact;
   const projectsForecastTotal = receivablesForecastTotal + projectsNetImpact;
 
-  // ============================================================
-  // ✅ COMMIT 6: NOUVEAUX SELECTORS
-  // ============================================================
-
-  // 11. Treasury Alerts
   const treasuryAlerts = useMemo(() => {
     const warnings = [];
     
@@ -329,7 +579,6 @@ export function FinanceProvider({ children }) {
     accountsWithCorrectAvoir.forEach((acc) => {
       let projectedBalance = parseFloat(acc.balance) || 0;
       
-      // Transactions planifiées mais non postées
       const plannedTrx = transactions.filter(
         (t) =>
           String(t.account_id || t.accountid) === String(acc.id) &&
@@ -337,7 +586,6 @@ export function FinanceProvider({ children }) {
           t.isposted === false
       );
 
-      // Calculer l'impact des transactions planifiées
       plannedTrx.forEach((t) => {
         if (t.type === 'income') {
           projectedBalance += parseFloat(t.amount) || 0;
@@ -346,7 +594,6 @@ export function FinanceProvider({ children }) {
         }
       });
 
-      // Alerte si négatif
       if (projectedBalance < 0) {
         warnings.push({
           type: 'warning',
@@ -362,7 +609,6 @@ export function FinanceProvider({ children }) {
     return warnings;
   }, [accountsWithCorrectAvoir, transactions]);
 
-  // 12. Transaction Stats
   const transactionStats = useMemo(() => {
     if (!transactions) {
       return { income: 0, expense: 0, total: 0 };
@@ -379,22 +625,22 @@ export function FinanceProvider({ children }) {
   }, [transactions]);
 
   // ============================================================
-  // CONTEXT VALUE (APRÈS TOUS LES SELECTORS)
+  // ✅ CONTEXT VALUE - AVEC TOUTES LES MUTATIONS
   // ============================================================
 
-  const value = {
-    // raw state
+  const value = useMemo(() => ({
+    // State
     accounts: accountsWithCorrectAvoir,
     transactions,
     projects,
 
-    // filters
+    // Filters
     projectFilterId,
     setProjectFilterId,
     accountFilterId,
     setAccountFilterId,
 
-    // derived
+    // Computed
     visibleTransactions,
     totalOpenReceivables,
     income,
@@ -409,17 +655,63 @@ export function FinanceProvider({ children }) {
     receivablesForecastTotal,
     projectsForecastCoffre,
     projectsForecastTotal,
-
-    // ✅ COMMIT 6
     treasuryAlerts,
     transactionStats,
 
-    // loading
+    // Loading
     accountsLoading,
     transactionsLoading,
     projectsLoading,
 
-    // actions
+    // Refresh
+    refreshAccounts,
+    refreshTransactions,
+    refreshProjects,
+    refreshReceivables,
+
+    // ✅ Mutations Accounts
+    createAccount,
+    updateAccount,
+    deleteAccount,
+
+    // ✅ Mutations Transactions
+    createTransaction,
+    updateTransaction,
+    deleteTransaction,
+
+    // ✅ Mutations Projects
+    createProject,
+    updateProject,
+    deleteProject,
+    activateProject,
+    archiveProject,
+    deactivateProject,
+    reactivateProject,
+  }), [
+    accountsWithCorrectAvoir,
+    transactions,
+    projects,
+    projectFilterId,
+    accountFilterId,
+    visibleTransactions,
+    totalOpenReceivables,
+    income,
+    expense,
+    totalBalance,
+    activeProjects,
+    remainingCostSum,
+    projectsTotalRevenues,
+    projectsNetImpact,
+    currentCoffreBalance,
+    receivablesForecastCoffre,
+    receivablesForecastTotal,
+    projectsForecastCoffre,
+    projectsForecastTotal,
+    treasuryAlerts,
+    transactionStats,
+    accountsLoading,
+    transactionsLoading,
+    projectsLoading,
     refreshAccounts,
     refreshTransactions,
     refreshProjects,
@@ -433,62 +725,18 @@ export function FinanceProvider({ children }) {
     createProject,
     updateProject,
     deleteProject,
-  };
-
-  // ============================================================
-  // ACTIONS - PROJETS
-  // ============================================================
-
-  const activateProject = useCallback(async (projectId) => {
-    // ... votre code existant ...
-  }, [projects, accounts, createTransaction, updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
-
-  const archiveProject = useCallback(async (projectId) => {
-    // ... votre code existant ...
-  }, [updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
-
-  const deactivateProject = useCallback(async (projectId) => {
-    // ... votre code existant ...
-  }, [projects, updateProject, refreshProjects]);
-
-  const reactivateProject = useCallback(async (projectId) => {
-    // ... votre code existant ...
-  }, [projects, updateProject, refreshProjects]);
-
-  // ============================================================
-  // VALUE WITH PROJECT ACTIONS
-  // ============================================================
-
-  // ✅ APRÈS - Dépendances plus précises
-const valueWithProjectActions = useMemo(() => ({
-  ...value,
-  activateProject,
-  archiveProject,
-  reactivateProject,
-  deactivateProject,
-}), [
-  // ✅ Liste explicite des dépendances qui changent vraiment
-  accounts,
-  transactions,
-  projects,
-  projectFilterId,
-  accountFilterId,
-  totalOpenReceivables,
-  accountsLoading,
-  transactionsLoading,
-  projectsLoading,
-  activateProject,
-  archiveProject,
-  reactivateProject,
-  deactivateProject,
-]);
+    activateProject,
+    archiveProject,
+    deactivateProject,
+    reactivateProject,
+  ]);
 
   return (
-    <FinanceContext.Provider value={valueWithProjectActions}>
+    <FinanceContext.Provider value={value}>
       {children}
     </FinanceContext.Provider>
   );
-} // ✅ Fin de FinanceProvider
+}
 
 export function useFinance() {
   const ctx = useContext(FinanceContext);
