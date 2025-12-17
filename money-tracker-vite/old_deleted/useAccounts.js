@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { accountsService } from '../services/accountsService';
+import { accountsService } from '../src/services/accountsService';
 
 export const useAccounts = (isAuthenticated) => {
   const [accounts, setAccounts] = useState([]);

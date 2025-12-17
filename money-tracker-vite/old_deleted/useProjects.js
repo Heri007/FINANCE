@@ -1,6 +1,6 @@
 // FICHIER: src/hooks/useProjects.js
 import { useState, useCallback, useEffect } from 'react';
-import { projectsService } from '../services/projectsService';
+import { projectsService } from '../src/services/projectsService';
 
 export const useProjects = (isAuthenticated) => {
   const [projects, setProjects] = useState([]);

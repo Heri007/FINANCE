@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { transactionsService } from '../services/transactionsService';
+import { transactionsService } from '../src/services/transactionsService';
 
 export const useTransactions = (isAuthenticated) => {
   const [transactions, setTransactions] = useState([]);
