@@ -215,8 +215,9 @@ router.get('/full-export', authenticateToken, async (req, res) => {
     ]);
 
     console.log(
-      `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} avoirs, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes`, `${visionsRes.rows.length} visions`, `${objectivesRes.rows.length} objectifs`
-    );
+  `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} receivables, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes, ${visionsRes.rows.length} visions, ${objectivesRes.rows.length} objectifs`
+);
+
     const backup = {
       version: '2.0',
       date: new Date().toISOString(),
@@ -289,19 +290,19 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
     const userId = 1; // ✅ FORCER user_id = 1 (app mono-utilisateur)
 
     const summary = {
-      accounts: backup.accounts.length,
-      transactions: backup.transactions.length,
-      receivables: Array.isArray(backup.receivables) ? backup.receivables.length : 0,
-      projects: Array.isArray(backup.projects) ? backup.projects.length : 0,
-      archived_projects: Array.isArray(backup.archived_projects)
-        ? backup.archived_projects.length
-        : 0,
-      notes: Array.isArray(backup.notes) ? backup.notes.length : 0, // ✅ AJOUTER
-      isions: Array.isArray(backup.visions) ? backup.visions.length : 0,          // 👈 NEW
-      objectives: Array.isArray(backup.objectives) ? backup.objectives.length : 0, // 👈 NEW
-      includeProjects,
-      dryRun,
-    };
+  accounts: backup.accounts.length,
+  transactions: backup.transactions.length,
+  receivables: Array.isArray(backup.receivables) ? backup.receivables.length : 0,
+  projects: Array.isArray(backup.projects) ? backup.projects.length : 0,
+  archived_projects: Array.isArray(backup.archived_projects)
+    ? backup.archived_projects.length
+    : 0,
+  notes: Array.isArray(backup.notes) ? backup.notes.length : 0,
+  visions: Array.isArray(backup.visions) ? backup.visions.length : 0,          // ✅ Corrigé
+  objectives: Array.isArray(backup.objectives) ? backup.objectives.length : 0,
+  includeProjects,
+  dryRun,
+};
 
     if (dryRun) {
       return res.json({
@@ -368,30 +369,29 @@ await client.query('DELETE FROM accounts');
     }
 
     // 4) Restaurer les receivables
-    if (Array.isArray(backup.receivables) && backup.receivables.length > 0) {
-      console.log(`📦 Restauration de ${backup.receivables.length} avoirs...`);
-      for (const r of backup.receivables) {
-await client.query(
-  `INSERT INTO receivables 
-   (id, account_id, person, amount, description, status, created_at, updated_at, source_account_id, user_id)
-   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-   ON CONFLICT (id) DO NOTHING`,
-  [
-    r.id,
-    r.account_id,
-    r.person,
-    r.amount,
-    r.description || '',
-    r.status || 'open', // ✅ Statut par défaut = 'open'
-    r.created_at || new Date(),
-    r.updated_at || new Date(),
-    r.source_account_id || null,
-    1, // user_id
-  ]
-);
-
-      }
-    }
+if (Array.isArray(backup.receivables) && backup.receivables.length > 0) {
+  console.log(`📦 Restauration de ${backup.receivables.length} receivables...`);
+  for (const r of backup.receivables) {
+    await client.query(
+      `INSERT INTO receivables 
+       (id, account_id, person, amount, description, status, created_at, updated_at, source_account_id, user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        r.id,
+        r.account_id,
+        r.person,
+        r.amount,
+        r.description || '',
+        r.status || 'open',
+        r.created_at || new Date(),
+        r.updated_at || new Date(),
+        r.source_account_id || null,
+        1, // user_id
+      ]
+    );
+  }
+}
 
     // 5) Restaurer les projets
 if (includeProjects && Array.isArray(backup.projects) && backup.projects.length > 0) {

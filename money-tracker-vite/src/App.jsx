@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
+  AlertTriangle,
   Edit2,
   Trash2,
   Save,
@@ -146,7 +147,7 @@ const DEFAULT_ACCOUNTS = [
   { name: "Orange Money", type: "mobile", balance: 0 },
   { name: "Compte BOA", type: "bank", balance: 0 },
   { name: "Coffre", type: "cash", balance: 0 },
-  { name: "Avoir", type: "credit", balance: 0 },
+  { name: "Receivables", type: "receivables", balance: 0 },
   { name: "Redotpay", type: "digital", balance: 0 },
 ];
 
@@ -626,7 +627,7 @@ const handleProjectUpdated = async (projectId) => {
   const handleExportBackup = async () => {
     try {
       const defaultLabel = `snapshot-${new Date().toISOString().split("T")[0]}`;
-      const label = prompt("Label du backup ? (ex: post-migration-AVOIR)", defaultLabel);
+      const label = prompt("Label du backup ? (ex: post-migration-receivables)", defaultLabel);
       if (label === null) return;
 
       // Récupérer le backup complet depuis le serveur
@@ -847,7 +848,7 @@ const handleProjectUpdated = async (projectId) => {
               <AccountList
                 accounts={accounts}
                 onSelectAccount={(acc) =>
-                acc.name === "Avoir"
+                acc.name === "Receivables"
                   ? setActiveTab("receivables")
                    : setSelectedAccount(acc)
                   }
@@ -882,7 +883,7 @@ const handleProjectUpdated = async (projectId) => {
 
               {/* --- 6. REPARTITION --- */}
               <div className="w-full">
-                <CategoryBreakdown transactions={transactions} />
+                <CategoryBreakdown transactions={transactions} onTransactionClick={handleTransactionClick} />
               </div>
             </div>
           )}

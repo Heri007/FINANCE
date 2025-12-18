@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Papa from 'papaparse';
 import { parseJSONSafe, normalizeDate } from './domain/finance/parsers';
 import { buildTransactionSignature } from './domain/finance/signature';
+import { receivablesService } from './services/receivablesService';
 
 const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -43,7 +44,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
       compte_boa: 4,
       compteboa: 4,
       coffre: 5,
-      avoir: 7,
+      receivables: 7,
       redotpay: 6
     };
 

@@ -46,7 +46,7 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
           throw new Error('Format invalide : accounts et transactions doivent être des tableaux');
         }
 
-        addLog(`✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} avoirs, ${projects.length || 0} projets, ${notes?.length || 0} notes`); // ✅ AJOUTER
+        addLog(`✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} receivables, ${projects.length || 0} projets, ${notes?.length || 0} notes`); // ✅ AJOUTER
 
         const token = localStorage.getItem('token');
         const headers = {
@@ -81,7 +81,7 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
         addLog('✅ RESTAURATION RÉUSSIE !');
         addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
         addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
-        addLog(`📊 Avoirs restaurés: ${result.summary.receivables}`);
+        addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
         addLog(`📊 Projets restaurés: ${result.summary.projects}`);
 
         setStatus('success');
@@ -135,7 +135,7 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
                   Cette action est <strong>irréversible</strong>
                 </p>
                 <p className="text-xs text-amber-600">
-                  Toutes vos données actuelles (comptes, transactions, projets, avoirs) seront
+                  Toutes vos données actuelles (comptes, transactions, projets, receivables) seront
                   remplacées par celles du backup.
                 </p>
               </div>

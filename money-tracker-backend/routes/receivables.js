@@ -1,4 +1,5 @@
 // routes/receivables.js - VERSION COMPLÈTE + user_id
+
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
@@ -8,10 +9,11 @@ const { getAccountIds } = require('../config/accounts');
 
 router.use(authMiddleware);
 
-// GET tous les avoirs ouverts
+// GET tous les receivables ouverts
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
+
     // Test 1 : SANS filtre
     const testAll = await pool.query('SELECT COUNT(*) FROM receivables');
 
@@ -20,13 +22,13 @@ router.get('/', async (req, res) => {
       'SELECT COUNT(*) FROM receivables WHERE user_id = $1',
       [userId]
     );
-    
+
     // Test 3 : Avec filtre status
     const testStatus = await pool.query(
       'SELECT COUNT(*) FROM receivables WHERE user_id = $1 AND status <> \'closed\'',
       [userId]
     );
-    
+
     // Requête finale
     const result = await pool.query(
       `SELECT * FROM receivables
@@ -34,9 +36,11 @@ router.get('/', async (req, res) => {
        ORDER BY created_at DESC`,
       [userId]
     );
-    
+
     if (result.rows.length > 0) {
+      console.log('✅ Receivables trouvés:', result.rows.length);
     }
+
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Erreur get receivables:', err);
@@ -44,7 +48,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST créer avoir
+// POST créer receivable
 router.post('/', validate('receivableCreate'), async (req, res) => {
   const client = await pool.connect();
   try {
@@ -52,33 +56,35 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
 
     const { person, description, amount, source_account_id } = req.body;
     const userId = req.user.id;
-    const { AVOIR_ACCOUNT_ID } = getAccountIds();
 
-    if (!AVOIR_ACCOUNT_ID) {
+    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
+
+    if (!RECEIVABLES_ACCOUNT_ID) {
       await client.query('ROLLBACK');
-      return res.status(500).json({ 
-        error: 'Compte AVOIR non configuré (voir config/accounts.js)' 
+      return res.status(500).json({
+        error: 'Compte RECEIVABLES non configuré (voir config/accounts.js)'
       });
     }
 
-    // 1) Créer l'avoir
+    // 1) Créer le receivable
     const insert = await client.query(
       `INSERT INTO receivables (account_id, person, description, amount, status, source_account_id, user_id)
        VALUES ($1, $2, $3, $4, 'open', $5, $6)
        RETURNING *`,
-      [AVOIR_ACCOUNT_ID, person, description || '', amount, source_account_id, userId]
+      [RECEIVABLES_ACCOUNT_ID, person, description || '', amount, source_account_id, userId]
     );
+
     const receivable = insert.rows[0];
 
     // 2) Transaction de dépense source
     await client.query(
       `INSERT INTO transactions
        (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
-       VALUES ($1, 'expense', $2, 'Avoir', $3, NOW()::date, true, false, $4)`,
+       VALUES ($1, 'expense', $2, 'Receivables', $3, NOW()::date, true, false, $4)`,
       [
         source_account_id,
         amount,
-        `Avoir pour ${person}${description ? ' - ' + description : ''}`,
+        `Receivable ${person}${description ? ' - ' + description : ''}`,
         userId
       ]
     );
@@ -130,12 +136,12 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
 
     if (result.rowCount === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Avoir introuvable ou non autorisé' });
+      return res.status(404).json({ error: 'Receivable introuvable ou non autorisé' });
     }
 
     const accountId = result.rows[0].account_id;
 
-    // Recalcul solde AVOIR
+    // Recalcul solde RECEIVABLES
     await client.query(
       `UPDATE accounts SET balance = (
          SELECT COALESCE(SUM(amount), 0)
@@ -160,6 +166,7 @@ router.post('/:id/pay', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
     const { id } = req.params;
     const userId = req.user.id;
 
@@ -167,14 +174,16 @@ router.post('/:id/pay', async (req, res) => {
       `SELECT * FROM receivables WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
-    
+
     if (rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Avoir introuvable ou non autorisé' });
+      return res.status(404).json({ error: 'Receivable introuvable ou non autorisé' });
     }
+
     const rec = rows[0];
 
     const { COFFRE_ACCOUNT_ID } = getAccountIds();
+
     if (!COFFRE_ACCOUNT_ID) {
       await client.query('ROLLBACK');
       return res.status(500).json({ error: 'Compte COFFRE non configuré' });
@@ -182,7 +191,7 @@ router.post('/:id/pay', async (req, res) => {
 
     // 1) Marquer payé
     await client.query(
-      `UPDATE receivables SET status = 'closed', updated_at = NOW() 
+      `UPDATE receivables SET status = 'closed', updated_at = NOW()
        WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
@@ -191,16 +200,16 @@ router.post('/:id/pay', async (req, res) => {
     await client.query(
       `INSERT INTO transactions
        (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
-       VALUES ($1, 'income', $2, 'Remboursement Avoir', $3, NOW()::date, true, false, $4)`,
+       VALUES ($1, 'income', $2, 'Remboursement Receivables', $3, NOW()::date, true, false, $4)`,
       [COFFRE_ACCOUNT_ID, rec.amount, `Remboursement ${rec.person}${rec.description ? ' - ' + rec.description : ''}`, userId]
     );
 
-    // 3) Recalcul AVOIR (avec user_id)
+    // 3) Recalcul RECEIVABLES (avec user_id)
     await client.query(
       `UPDATE accounts SET balance = (
          SELECT COALESCE(SUM(amount), 0)
          FROM receivables WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
-       ), updated_at = CURRENT_TIMESTAMP 
+       ), updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND user_id = $2`,
       [rec.account_id, userId]
     );
@@ -221,19 +230,19 @@ router.post('/restore', validate('receivableRestore'), async (req, res) => {
   try {
     const userId = req.user.id;
     const { account_id, person, description, amount, status, source_account_id, created_at, updated_at } = req.body;
-    
+
     const result = await pool.query(
       `INSERT INTO receivables
        (account_id, person, description, amount, status, source_account_id, user_id, created_at, updated_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [account_id, person, description || '', amount, status || 'open', source_account_id || null, userId, created_at || new Date(), updated_at || new Date()]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('❌ Erreur restore receivable:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 module.exports = router;

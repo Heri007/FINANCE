@@ -11,11 +11,11 @@ export const backupService = {
     const backupData = {
       version: '2.0',
       date: new Date().toISOString(),
-      label, // pour annoter le snapshot, ex: "post-migration-AVOIR"
+      label, // pour annoter le snapshot, ex: "post-migration-receivables"
       accounts,
       transactions,
       receivables,
-      projects, // ✅ CORRECTION: utiliser "projects" au lieu de "projectsData"
+      projects,
     };
 
     return apiRequest('/backup/export', {

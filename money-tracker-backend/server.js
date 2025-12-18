@@ -17,7 +17,6 @@ const backupRoutes = require('./routes/backup');
 const notesRoutes = require('./routes/notes');
 const visionRouter = require('./routes/vision');
 
-
 const app = express();
 const PORT = process.env.PORT || 5002;
 
@@ -48,7 +47,6 @@ if (!fs.existsSync(employeesDir)) {
 
 // Servir les fichiers statiques
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
 
 // ✅ Request Logger
 app.use((req, res, next) => {
@@ -115,7 +113,7 @@ app.listen(PORT, () => {
       logger.info('✅ Connecté à PostgreSQL');
       try {
         const ids = await loadAccountIds();
-        logger.info(`✅ IDs chargés: AVOIR=${ids.AVOIR_ACCOUNT_ID}, COFFRE=${ids.COFFRE_ACCOUNT_ID}`);
+        logger.info(`✅ IDs chargés: RECEIVABLES=${ids.RECEIVABLES_ACCOUNT_ID}, COFFRE=${ids.COFFRE_ACCOUNT_ID}`);
       } catch (e) {
         logger.warn('⚠️ Impossible de charger les IDs de comptes spéciaux au démarrage');
       }

@@ -27,7 +27,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
     fetchReceivables();
   }, []);
 
-  // Total des avoirs ouverts
+  // Total des receivables ouverts
   const totalOpen = useMemo(
     () => items.reduce((sum, i) => sum + Number(i.amount || 0), 0),
     [items]
@@ -38,12 +38,12 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
   const currentCoffreBalance = Number(coffreAccount?.balance || 0);
   const currentTotalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
 
-  // PRÉVISIONS : soldes APRÈS règlement de TOUS les avoirs
+  // PRÉVISIONS : soldes APRÈS règlement de TOUS les receivables
   const coffreForecast = currentCoffreBalance + totalOpen;
   const totalForecast = currentTotalBalance + totalOpen;
 
-  // Vérification si tous les avoirs sont "récoltés"
-  const avoirsTousRecoltes = currentCoffreBalance >= totalOpen;
+  // Vérification si tous les receivables sont "récoltés"
+  const receivablesTousRecoltes = currentCoffreBalance >= totalOpen;
 
   useEffect(() => {
     if (onTotalsChange) {
@@ -78,13 +78,13 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         await onAfterChange();
       }
     } catch (e) {
-      console.error('Erreur création avoir:', e);
-      alert('Erreur lors de la création de l\'avoir');
+      console.error('Erreur création receivable:', e);
+      alert('Erreur lors de la création du receivable');
     }
   };
 
   const handleClose = async (id) => {
-    if (!confirm('Marquer cet avoir comme payé ?')) return;
+    if (!confirm('Marquer ce receivable comme payé ?')) return;
     
     try {
       await receivablesService.pay(id);
@@ -94,7 +94,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         await onAfterChange();
       }
     } catch (e) {
-      console.error('Erreur paiement avoir:', e);
+      console.error('Erreur paiement receivable:', e);
       alert('Erreur lors du marquage comme payé');
     }
   };
@@ -104,64 +104,79 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Avoirs</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Receivables</h2>
           <p className="text-sm text-gray-500">
             Avances d&apos;argent que tu fais depuis tes comptes vers d&apos;autres personnes,
             remboursées plus tard dans le Coffre.
           </p>
         </div>
         <div className="rounded-full bg-indigo-50 px-4 py-1 text-xs font-medium text-indigo-600 border border-indigo-100">
-          Compte AVOIR · créances
+          Compte RECEIVABLES · créances
         </div>
       </div>
 
       {/* Summary cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-indigo-100 bg-white/80 shadow-sm px-5 py-4">
-          <p className="text-xs font-medium text-gray-500 uppercase">
-            Total des avoirs ouverts
-          </p>
-          <p className="mt-1 text-2xl font-bold text-indigo-600">
-            {totalOpen.toLocaleString("fr-FR")} Ar
-          </p>
-        </div>
-        <div className="rounded-2xl border border-gray-100 bg-white/70 px-5 py-4">
-          <p className="text-xs font-medium text-gray-500 uppercase">
-            Nombre de lignes
-          </p>
-          <p className="mt-1 text-2xl font-semibold text-gray-800">{items.length}</p>
-        </div>
-        <div className={`rounded-2xl border px-5 py-4 shadow-sm ${avoirsTousRecoltes ? 'border-emerald-200 bg-emerald-50/80' : 'border-indigo-100 bg-indigo-50/70'}`}>
-          <p className={`text-xs font-medium uppercase ${avoirsTousRecoltes ? 'text-emerald-700' : 'text-indigo-600'}`}>
-            {avoirsTousRecoltes ? "Prévisions après règlements" : "Flux de trésorerie"}
-          </p>
-          {avoirsTousRecoltes ? (
-            <div className="mt-2 space-y-2">
-              <div className="flex justify-between items-baseline pt-1">
-                <span className="text-xs text-gray-600">COFFRE (prévu)</span>
-                <span className="text-lg font-bold text-emerald-700 tracking-tight">
-                  {coffreForecast.toLocaleString("fr-FR")} Ar
-                </span>
-              </div>
-              <div className="flex justify-between items-baseline border-t border-emerald-200 pt-2">
-                <span className="text-xs text-gray-600">TOTAL GÉNÉRAL (prévu)</span>
-                <span className="text-xl font-black text-emerald-800">
-                  {totalForecast.toLocaleString("fr-FR")} Ar
-                </span>
-              </div>
-              <div className="mt-2 pt-2 border-t border-emerald-200">
-                <p className="text-xs text-emerald-700 bg-emerald-100 px-2 py-1 rounded inline-block">
-                  +{totalOpen.toLocaleString("fr-FR")} Ar de remboursements attendus
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-1 text-sm text-indigo-700">
-              Débourse depuis Argent Liquide ou Coffre, encaisse les remboursements dans Coffre.
-            </p>
-          )}
-        </div>
+<div className="grid gap-4 md:grid-cols-3">
+  {/* Card 1 : Total receivables */}
+  <div className="rounded-2xl border border-indigo-100 bg-white/80 shadow-sm px-5 py-4">
+    <p className="text-xs font-medium text-gray-500 uppercase">
+      Total des receivables ouverts
+    </p>
+    <p className="mt-1 text-2xl font-bold text-indigo-600">
+      {totalOpen.toLocaleString("fr-FR")} Ar
+    </p>
+  </div>
+
+  {/* Card 2 : Nombre de lignes */}
+  <div className="rounded-2xl border border-gray-100 bg-white/70 px-5 py-4">
+    <p className="text-xs font-medium text-gray-500 uppercase">
+      Nombre de lignes
+    </p>
+    <p className="mt-1 text-2xl font-semibold text-gray-800">{items.length}</p>
+  </div>
+
+  {/* Card 3 : Prévisions TOUJOURS AFFICHÉES */}
+  <div className={`rounded-2xl border px-5 py-4 shadow-sm ${receivablesTousRecoltes ? 'border-emerald-200 bg-emerald-50/80' : 'border-indigo-100 bg-indigo-50/70'}`}>
+    <p className={`text-xs font-medium uppercase ${receivablesTousRecoltes ? 'text-emerald-700' : 'text-indigo-600'}`}>
+      {receivablesTousRecoltes ? "✅ Prévisions (Tout récolté)" : "📊 Prévisions (En cours)"}
+    </p>
+    
+    <div className="mt-2 space-y-2">
+      {/* Ligne 1 : COFFRE prévu */}
+      <div className="flex justify-between items-baseline pt-1">
+        <span className="text-xs text-gray-600">COFFRE (prévu)</span>
+        <span className={`text-lg font-bold tracking-tight ${receivablesTousRecoltes ? 'text-emerald-700' : 'text-indigo-700'}`}>
+          {coffreForecast.toLocaleString("fr-FR")} Ar
+        </span>
       </div>
+      
+      {/* Ligne 2 : TOTAL GÉNÉRAL prévu */}
+      <div className="flex justify-between items-baseline border-t border-gray-200 pt-2">
+        <span className="text-xs text-gray-600">TOTAL GÉNÉRAL (prévu)</span>
+        <span className={`text-xl font-black ${receivablesTousRecoltes ? 'text-emerald-800' : 'text-indigo-800'}`}>
+          {totalForecast.toLocaleString("fr-FR")} Ar
+        </span>
+      </div>
+      
+      {/* Ligne 3 : Détails */}
+      <div className="mt-2 pt-2 border-t border-gray-200">
+        <p className={`text-xs px-2 py-1 rounded inline-block ${receivablesTousRecoltes ? 'text-emerald-700 bg-emerald-100' : 'text-indigo-700 bg-indigo-100'}`}>
+          +{totalOpen.toLocaleString("fr-FR")} Ar de remboursements attendus
+        </p>
+      </div>
+      
+      {/* Ligne 4 : Message explicatif */}
+      <div className="mt-2 pt-2 border-t border-gray-200">
+        <p className="text-xs text-gray-600 italic">
+          {receivablesTousRecoltes 
+            ? "✅ Le Coffre couvre tous les receivables" 
+            : "⏳ Débourse depuis Argent Liquide ou Coffre, encaisse dans Coffre"}
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
 
       {/* Form */}
       <div className="rounded-2xl border border-gray-100 bg-white/90 px-4 py-3 shadow-sm">
@@ -213,12 +228,12 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         </form>
       </div>
 
-      {/* Liste des avoirs */}
+      {/* Liste des receivables */}
       <div className="space-y-4">
         {loading ? (
-          <p className="text-gray-500">Chargement des avoirs...</p>
+          <p className="text-gray-500">Chargement des receivables...</p>
         ) : items.length === 0 ? (
-          <p className="text-gray-500">Aucun avoir ouvert.</p>
+          <p className="text-gray-500">Aucun receivable ouvert.</p>
         ) : (
           items.map((item) => (
             <div

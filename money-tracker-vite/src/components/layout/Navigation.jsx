@@ -6,7 +6,7 @@ export function Navigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: "overview", label: "Vue d'ensemble" },
     { id: "transactions", label: "Transactions" },
-    { id: "receivables", label: "Avoirs" },         // ✅ nouvel onglet
+    { id: "receivables", label: "Receivables" },    // ✅ Renommé
   ];
 
   return (

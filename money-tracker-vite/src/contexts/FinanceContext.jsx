@@ -721,19 +721,24 @@ const payload = newTransactions.map(t => ({
     );
   }, [transactions]);
 
-  const accountsWithCorrectAvoir = useMemo(() => {
-    return (accounts || []).map((acc) => {
-      if (acc?.name === 'Avoir') return { ...acc, balance: totalOpenReceivables };
-      return acc;
-    });
-  }, [accounts, totalOpenReceivables]);
+  const accountsWithCorrectReceivables = useMemo(() => {
+  return (accounts || []).map((acc) => {
+    if (acc?.name === 'Receivables') {
+      // Solde = total des receivables ouvertes
+      return { ...acc, balance: totalOpenReceivables };
+    }
+    return acc;
+  });
+}, [accounts, totalOpenReceivables]);
 
-  const totalBalance = useMemo(() => {
-    return (accountsWithCorrectAvoir || []).reduce(
-      (s, acc) => s + parseFloat(acc?.balance || 0),
-      0
-    );
-  }, [accountsWithCorrectAvoir]);
+// ✅ AJOUT : Calcul du solde total
+const totalBalance = useMemo(() => {
+  return (accountsWithCorrectReceivables || []).reduce(
+    (sum, acc) => sum + parseFloat(acc?.balance || 0),
+    0
+  );
+}, [accountsWithCorrectReceivables]);
+
 
   const activeProjects = useMemo(() => {
   return (projects || []).filter((p) => {
@@ -767,7 +772,7 @@ const payload = newTransactions.map(t => ({
 
   const projectsNetImpact = projectsTotalRevenues - remainingCostSum;
 
-  const coffreAccount = accountsWithCorrectAvoir.find((a) => a?.name === 'Coffre');
+  const coffreAccount = accountsWithCorrectReceivables.find((a) => a?.name === 'Coffre');
   const currentCoffreBalance = Number(coffreAccount?.balance || 0);
 
   const receivablesForecastCoffre = currentCoffreBalance + totalOpenReceivables;
@@ -782,7 +787,7 @@ const payload = newTransactions.map(t => ({
       return warnings;
     }
 
-    accountsWithCorrectAvoir.forEach((acc) => {
+    accountsWithCorrectReceivables.forEach((acc) => {
       let projectedBalance = parseFloat(acc.balance) || 0;
       
       const plannedTrx = transactions.filter(
@@ -813,7 +818,7 @@ const payload = newTransactions.map(t => ({
     });
 
     return warnings;
-  }, [accountsWithCorrectAvoir, transactions]);
+  }, [accountsWithCorrectReceivables, transactions]);
 
   const transactionStats = useMemo(() => {
     if (!transactions) {
@@ -836,7 +841,7 @@ const payload = newTransactions.map(t => ({
 
   const value = useMemo(() => ({
     // State
-    accounts: accountsWithCorrectAvoir,
+    accounts: accountsWithCorrectReceivables,
     transactions,
     projects,
 
@@ -895,7 +900,7 @@ const payload = newTransactions.map(t => ({
     deactivateProject,
     reactivateProject,
   }), [
-    accountsWithCorrectAvoir,
+    accountsWithCorrectReceivables,
     transactions,
     projects,
     projectFilterId,

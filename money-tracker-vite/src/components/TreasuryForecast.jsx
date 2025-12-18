@@ -27,10 +27,10 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
     return parseFloat(coffreAccount?.balance || 0);
   }, [accounts]);
 
-  // 2. Compte Avoir (créances)
-  const avoir = useMemo(() => {
-    const avoirAccount = accounts.find((a) => a.name === 'Avoir' || a.name === 'AVOIR');
-    return parseFloat(avoirAccount?.balance || 0);
+  // 2. Compte Receivables (créances)
+  const receivables = useMemo(() => {
+    const receivablesAccount = accounts.find((a) => a.name === 'Receivables' || a.name === 'RECEIVABLES');
+    return parseFloat(receivablesAccount?.balance || 0);
   }, [accounts]);
 
   // 3. Projets actifs uniquement
@@ -56,16 +56,16 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
     return accounts
       .filter((a) => {
         const name = (a.name || '').toLowerCase();
-        return name !== 'coffre' && name !== 'avoir';
+        return name !== 'coffre' && name !== 'receivables';
       })
       .reduce((sum, acc) => sum + parseFloat(acc.balance || 0), 0);
   }, [accounts]);
 
   // 📊 CALCULS DES 4 NIVEAUX DE SOLDES
   const solde1_Coffre = coffre;
-  const solde2_CoffreAvoir = coffre + avoir;
-  const solde3_CoffreAvoirProjets = coffre + avoir + totalNetProfitDb;
-  const solde4_Total = coffre + avoir + totalNetProfitDb + autresComptes;
+  const solde2_CoffreReceivables = coffre + receivables;
+  const solde3_CoffreReceivablesProjets = coffre + receivables + totalNetProfitDb;
+  const solde4_Total = coffre + receivables + totalNetProfitDb + autresComptes;
 
   // Formatage
   const formatCurrency = (value) => {
@@ -106,7 +106,6 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
           </h3>
         </div>
         
-        {/* ✅ MODIFICATION ICI : Style rectangle vert discret et font-extrabold */}
         <span className="text-xs font-extrabold text-green-900 bg-green-100/90 border border-green-200/60 px-3 py-1.5 rounded-md shadow-sm backdrop-blur-sm">
           {activeProjects.length} PROJET{activeProjects.length > 1 ? 'S' : ''} ACTIF{activeProjects.length > 1 ? 'S' : ''}
         </span>
@@ -121,18 +120,18 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
           <p className="text-lg font-bold text-slate-900">{formatCurrency(solde1_Coffre)}</p>
         </div>
 
-        {/* 2. Coffre + Avoir */}
+        {/* 2. Coffre + Receivables */}
         <div className="bg-white/70 backdrop-blur-sm rounded-lg p-3 border border-green-200 shadow-md">
           <p className="text-xs text-slate-600 font-bold mb-1">+ CREANCES</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre + Avoir)</p>
-          <p className="text-lg font-bold text-green-800">{formatCurrency(solde2_CoffreAvoir)}</p>
+          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre + Receivables)</p>
+          <p className="text-lg font-bold text-green-800">{formatCurrency(solde2_CoffreReceivables)}</p>
         </div>
 
-        {/* 3. Coffre + Avoir + Projets */}
+        {/* 3. Coffre + Receivables + Projets */}
         <div className="bg-gradient-to-br from-purple-100/80 to-pink-100/80 backdrop-blur-sm rounded-lg p-3 border border-purple-300 shadow-md">
           <p className="text-xs text-slate-600 font-bold mb-1">+ PROJETS</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre+Avoir+Projets)</p>
-          <p className="text-lg font-bold text-purple-800">{formatCurrency(solde3_CoffreAvoirProjets)}</p>
+          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre+Receivables+Projets)</p>
+          <p className="text-lg font-bold text-purple-800">{formatCurrency(solde3_CoffreReceivablesProjets)}</p>
         </div>
 
         {/* 4. Solde Total (Tous les comptes) */}
@@ -146,8 +145,8 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
       {/* Détails des ajouts avec effet verre */}
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs relative">
         <div className="bg-red-50 backdrop-blur-sm rounded px-2 py-1 flex justify-between border border-slate-200">
-          <span className="text-slate-700 font-bold">+ Avoir:</span>
-          <span className="font-bold text-green-700">{formatCurrency(avoir)}</span>
+          <span className="text-slate-700 font-bold">+ Receivables:</span>
+          <span className="font-bold text-green-700">{formatCurrency(receivables)}</span>
         </div>
         <div className="bg-yellow-50 backdrop-blur-sm rounded px-2 py-1 flex justify-between border border-slate-200">
           <span className="text-slate-700 font-bold">+ Projets:</span>
@@ -165,9 +164,9 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
       <div className="mt-3 flex items-center justify-center gap-2 text-large text-slate-700 relative">
         <span className="font-extrabold text-slate-900">{formatCurrency(solde1_Coffre)}</span>
         <ArrowRight className="w-3 h-3" />
-        <span className="font-extrabold text-green-800">{formatCurrency(solde2_CoffreAvoir)}</span>
+        <span className="font-extrabold text-green-800">{formatCurrency(solde2_CoffreReceivables)}</span>
         <ArrowRight className="w-3 h-3" />
-        <span className="font-extrabold text-purple-800">{formatCurrency(solde3_CoffreAvoirProjets)}</span>
+        <span className="font-extrabold text-purple-800">{formatCurrency(solde3_CoffreReceivablesProjets)}</span>
         <ArrowRight className="w-3 h-3" />
         <span className="font-extrabold text-red-400">{formatCurrency(solde4_Total)}</span>
       </div>

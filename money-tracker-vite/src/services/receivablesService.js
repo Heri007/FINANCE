@@ -3,7 +3,7 @@ import { apiRequest } from './api';
 
 export const receivablesService = {
   /**
-   * Récupérer tous les avoirs ouverts
+   * Récupérer tous les receivables ouverts
    */
   async getAll() {
     try {
@@ -21,7 +21,7 @@ export const receivablesService = {
   },
 
   /**
-   * Récupérer un avoir par ID
+   * Récupérer un receivable par ID
    */
   async getById(id) {
     try {
@@ -35,7 +35,7 @@ export const receivablesService = {
   },
 
   /**
-   * Créer un nouvel avoir
+   * Créer un nouveau receivable
    */
   async create(data) {
     try {
@@ -50,7 +50,7 @@ export const receivablesService = {
   },
 
   /**
-   * Mettre à jour un avoir
+   * Mettre à jour un receivable
    */
   async update(id, data) {
     try {
@@ -65,7 +65,7 @@ export const receivablesService = {
   },
 
   /**
-   * Supprimer un avoir
+   * Supprimer un receivable
    */
   async delete(id) {
     try {
@@ -79,7 +79,7 @@ export const receivablesService = {
   },
 
   /**
-   * Marquer un avoir comme payé
+   * Marquer un receivable comme payé
    */
   async pay(id) {
     try {
@@ -93,7 +93,7 @@ export const receivablesService = {
   },
 
   /**
-   * Restaurer un avoir depuis une sauvegarde
+   * Restaurer un receivable depuis une sauvegarde
    */
   async restore(data) {
     try {
