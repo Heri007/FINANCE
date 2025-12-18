@@ -5,7 +5,6 @@ import { formatCurrency } from '../../utils/formatters';
 export function AccountCard({ account, onDelete, onClick }) {
   const IconComponent = accountIcons[account.type] || accountIcons.cash;
 
-  // Définition des couleurs par type de compte
   const typeStyles = {
     cash: {
       gradient: 'from-purple-50 via-indigo-50 to-purple-100',
@@ -49,45 +48,44 @@ export function AccountCard({ account, onDelete, onClick }) {
     }
   };
 
-  // Récupération du style selon le type (normalisé en minuscules)
   const accountType = (account.type || 'cash').toLowerCase();
   const style = typeStyles[accountType] || typeStyles.cash;
 
   return (
     <div 
       onClick={onClick}
-      className={`relative overflow-hidden rounded-2xl p-6 shadow-lg hover:shadow-2xl hover:scale-[1.02] transition-all duration-300 cursor-pointer group bg-gradient-to-br ${style.gradient} border-2 ${style.border}`}
+      className={`relative overflow-hidden rounded-xl p-4 shadow-md hover:shadow-lg hover:scale-[1.01] transition-all duration-300 cursor-pointer group bg-gradient-to-br ${style.gradient} border ${style.border}`}
       style={{
-        boxShadow: `0 10px 40px ${style.shadow}`
+        boxShadow: `0 4px 12px ${style.shadow}`
       }}
     >
       {/* Overlay brillant */}
-      <div className="absolute inset-0 bg-gradient-to-tr from-white/40 via-white/20 to-transparent opacity-60"></div>
+      <div className="absolute inset-0 bg-gradient-to-tr from-white/30 via-white/10 to-transparent opacity-40"></div>
       
-      {/* Ligne décorative animée */}
-      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${style.accentLine}`}></div>
+      {/* Ligne décorative */}
+      <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${style.accentLine}`}></div>
       
-      {/* Badge type de compte (en haut à droite) */}
-      <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-all">
-        <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${style.iconBg} ${style.iconColor} border ${style.border}`}>
+      {/* Badge type de compte */}
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all">
+        <span className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-lg ${style.iconBg} ${style.iconColor} border border-opacity-50 ${style.border}`}>
           {account.type}
         </span>
       </div>
       
       <div className="relative z-10">
-        <div className="flex items-start justify-between mb-5">
-          <div className="flex items-center gap-3">
-            {/* Icône avec taille augmentée */}
-            <div className={`p-4 ${style.iconBg} backdrop-blur-sm rounded-xl border-2 ${style.border} group-hover:scale-110 transition-all duration-300 shadow-md`}>
-              <IconComponent className={style.iconColor} size={28} />
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2 flex-1">
+            {/* Icône compacte */}
+            <div className={`p-2.5 ${style.iconBg} backdrop-blur-sm rounded-lg border ${style.border} group-hover:scale-105 transition-all duration-300`}>
+              <IconComponent className={style.iconColor} size={20} />
             </div>
-            <div>
-              <h3 className="font-bold text-gray-900 text-xl mb-0.5">{account.name}</h3>
-              <p className="text-xs text-gray-500 capitalize font-semibold tracking-wide">{account.type}</p>
+            <div className="min-w-0">
+              <h3 className="font-bold text-gray-900 text-sm mb-0.5 truncate">{account.name}</h3>
+              <p className="text-xs text-gray-500 capitalize font-medium">{account.type}</p>
             </div>
           </div>
           
-          {/* Bouton supprimer */}
+          {/* Bouton supprimer compact */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -95,16 +93,16 @@ export function AccountCard({ account, onDelete, onClick }) {
                 onDelete(account.id);
               }
             }}
-            className="opacity-0 group-hover:opacity-100 transition-all text-red-500 hover:bg-red-50 hover:text-red-700 p-2.5 rounded-xl border-2 border-transparent hover:border-red-200 shadow-sm"
+            className="opacity-0 group-hover:opacity-100 transition-all text-red-500 hover:bg-red-50 hover:text-red-700 p-1.5 rounded-lg border border-transparent hover:border-red-200 flex-shrink-0 ml-1"
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
           </button>
         </div>
         
-        {/* Section solde */}
-        <div className="pt-4 border-t-2 border-gray-200/40">
-          <p className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Solde Actuel</p>
-          <p className={`text-3xl font-extrabold ${
+        {/* Section solde compacte */}
+        <div className="pt-2.5 border-t border-gray-200/30">
+          <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wide">Solde</p>
+          <p className={`text-xl font-extrabold ${
             account.balance >= 0 
               ? 'text-emerald-700' 
               : 'text-red-600'
@@ -114,8 +112,8 @@ export function AccountCard({ account, onDelete, onClick }) {
         </div>
       </div>
 
-      {/* Indicateur visuel de hover (coin bas droit) */}
-      <div className={`absolute -bottom-8 -right-8 w-32 h-32 rounded-full ${style.iconBg} opacity-0 group-hover:opacity-20 transition-all duration-500 blur-2xl`}></div>
+      {/* Indicateur visuel subtle */}
+      <div className={`absolute -bottom-12 -right-12 w-24 h-24 rounded-full ${style.iconBg} opacity-0 group-hover:opacity-10 transition-all duration-500 blur-xl`}></div>
     </div>
   );
 }

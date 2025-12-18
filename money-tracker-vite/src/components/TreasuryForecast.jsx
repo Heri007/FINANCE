@@ -80,23 +80,20 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
   return (
     <section
       className="
-        mt-6 rounded-xl border-2 border-[#B68D40] p-4 
-        shadow-[0_10px_30px_-10px_rgba(218,165,32,0.6)]
-        relative overflow-hidden
-        /* Empilement de dégradés pour l'effet Or 3D */
-        bg-[radial-gradient(120%_140%_at_18%_18%,rgba(255,255,255,0.95)_0%,rgba(255,255,220,0)_57%),
-            radial-gradient(120%_140%_at_82%_85%,rgba(255,248,220,0.6)_0%,rgba(255,255,255,0)_72%),
-            radial-gradient(circle_at_center,#FFF8DC_0%,#FCD34D_38%,#D4AF37_55%,#B8860B_72%,#785310_100%)]
-      "
-    >
-      {/* Texture métal brossé (ajustée en brun/or foncé pour le réalisme) */}
-      <div
-        className="
-          pointer-events-none absolute inset-0 opacity-[0.55]
-          [background:repeating-linear-gradient(115deg,transparent_0px,transparent_2px,rgba(101,67,33,0.3)_2px,rgba(101,67,33,0.3)_4px)]
-          mix-blend-overlay
-        "
-      />
+  mt-6 rounded-xl border-2 border-[#2c2c2c] p-4 
+  shadow-[0_10px_30px_-10px_rgba(218,165,32,0.6)]
+  relative overflow-hidden
+  bg-[#f7eae5]
+"
+>
+  {/* Texture métal brossé subtile */}
+  <div
+    className="
+      pointer-events-none absolute inset-0 opacity-[0.15]
+      [background:repeating-linear-gradient(115deg,transparent_0px,transparent_2px,rgba(101,67,33,0.3)_2px,rgba(101,67,33,0.3)_4px)]
+      mix-blend-overlay
+    "
+  />
 
       {/* Header compact avec effet métallisé */}
       <div className="flex items-center justify-between mb-3 relative">

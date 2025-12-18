@@ -25,17 +25,6 @@ code {
     monospace;
 }
 
-/* SUPPRIMEZ toutes les règles suivantes OU gardez-les UNIQUEMENT si nécessaires */
-
-/* #root {
-  width: 100vw !important;
-  max-width: 100vw !important;
-  overflow-x: hidden;
-} */
-
-/* .min-h-screen {
-  width: 100% !important;
-} */
 
 /* Si vous avez besoin des styles modaux, gardez-les */
 .modal-overlay {

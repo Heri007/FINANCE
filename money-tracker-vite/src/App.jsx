@@ -765,75 +765,78 @@ const handleProjectUpdated = async (projectId) => {
                 </div>
               )}
 
-              {/* --- 2. KPI CARDS --- */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <StatCard
-                  icon={Wallet}
-                  label="Solde Total"
-                  value={formatCurrency(totalBalance)}
-                  color="indigo"
-                />
+             {/* --- 2. KPI CARDS --- */}
+<div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+  {/* Solde Total - 1 colonne */}
+  <StatCard
+    icon={Wallet}
+    label="Solde Total"
+    value={formatCurrency(totalBalance)}
+    color="indigo"
+  />
 
-                <button
-                  onClick={() => openTransactionDetails("income")}
-                  className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-green-100 p-3 rounded-xl">
-                      <TrendingUp className="w-6 h-6 text-green-600" />
-                    </div>
-                    <span className="text-sm font-medium text-green-600">
-                      {transactionStats.income} trx
-                    </span>
-                  </div>
-                  <h3 className="text-gray-600 text-sm font-medium mb-2">Encaissements</h3>
-                  <p className="text-3xl font-bold text-green-600">{formatCurrency(income)}</p>
-                </button>
-
-                <button
-                  onClick={() => openTransactionDetails("expense")}
-                  className="bg-gradient-to-br from-red-50 to-rose-50 p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-red-100 p-3 rounded-xl">
-                      <TrendingDown className="w-6 h-6 text-red-600" />
-                    </div>
-                    <span className="text-sm font-medium text-red-600">
-                      {transactionStats.expense} trx
-                    </span>
-                  </div>
-                  <h3 className="text-gray-600 text-sm font-medium mb-2">Dépenses</h3>
-                  <p className="text-3xl font-bold text-red-600">{formatCurrency(expense)}</p>
-                </button>
-                
-                {/* Bouton RH temporaire (en attendant un vrai onglet) */}
-                <button
-  onClick={() => setActiveTab('hr')} // âœ… Utiliser activeTab au lieu de activeView
-  className={`bg-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full border border-gray-100`}
->
-
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-purple-100 p-3 rounded-xl">
-                      <Briefcase className="w-6 h-6 text-purple-600" />
-                    </div>
-                  </div>
-                  <h3 className="text-gray-600 text-sm font-medium mb-2">Ressources Humaines</h3>
-                  <p className="text-lg font-bold text-purple-600">MY TEAM</p>
-                </button>
-                {/* ✅ NOUVEAU: Bouton Vision & Objectifs */}
-<button
-  onClick={() => setActiveTab('vision')}
-  className={`bg-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 text-left w-full border border-gray-100`}
->
-  <div className="flex items-center justify-between mb-4">
-    <div className="bg-gradient-to-br from-purple-100 to-pink-100 p-3 rounded-xl">
-      <Target className="w-6 h-6 text-purple-600" />
+  {/* Encaissements - 1 colonne */}
+  <button
+    onClick={() => openTransactionDetails("income")}
+    className="bg-gradient-to-br from-green-50 to-emerald-50 p-3 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left border-gray-700"
+  >
+    <div className="flex items-center justify-between mb-1">
+      <div className="bg-green-100 p-1.5 rounded">
+        <TrendingUp className="w-3 h-3 text-green-600" />
+      </div>
+      <span className="text-lg font-bold text-green-600">
+        {transactionStats.income} trx
+      </span>
     </div>
-  </div>
-  <h3 className="text-gray-600 text-sm font-medium mb-2">Stratégie & Croissance</h3>
-  <p className="text-lg font-bold text-purple-600">VISION & OBJECTIFS</p>
-</button>
-              </div>
+    <h3 className="text-gray-600 text-xs font-bold mb-1">Encaissements</h3>
+    <p className="text-2xl font-bold text-green-600">{formatCurrency(income)}</p>
+  </button>
+
+  {/* Dépenses - 1 colonne */}
+  <button
+    onClick={() => openTransactionDetails("expense")}
+    className="bg-gradient-to-br from-red-50 to-rose-50 p-3 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+  >
+    <div className="flex items-center justify-between mb-1">
+      <div className="bg-red-100 p-1.5 rounded">
+        <TrendingDown className="w-3 h-3 text-red-600" />
+      </div>
+      <span className="text-lg font-bold text-red-600">
+        {transactionStats.expense} trx
+      </span>
+    </div>
+    <h3 className="text-gray-600 text-xs font-bold mb-1">Dépenses</h3>
+    <p className="text-2xl font-bold text-red-600">{formatCurrency(expense)}</p>
+  </button>
+
+  {/* MY TEAM - 1 colonne */}
+  <button
+    onClick={() => setActiveTab('hr')}
+    className="bg-lime-200 p-4 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+  >
+    <div className="flex items-center justify-center mb-2">
+      <div className="bg-purple-100 p-2 rounded-lg">
+        <Briefcase className="w-4 h-4 text-purple-600" />
+      </div>
+    </div>
+    <h3 className="text-gray-600 text-xs font-bold mb-1 text-center">Ressources Humaines</h3>
+    <p className="text-xl font-bold text-blue-600 text-center">MY TEAM</p>
+  </button>
+
+  {/* VISION & OBJECTIFS - 1 colonne */}
+  <button
+    onClick={() => setActiveTab('vision')}
+    className="bg-pink-400 p-4 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+  >
+    <div className="flex items-center justify-center mb-2">
+      <div className="bg-gradient-to-br from-purple-100 to-pink-100 p-2 rounded-lg">
+        <Target className="w-4 h-4 text-purple-600" />
+      </div>
+    </div>
+    <h3 className="text-gray-600 text-xs font-bold mb-1 text-center">Stratégie & Croissance</h3>
+    <p className="text-xl font-bold text-indigo-600 text-center">VISION & OBJECTIFS</p>
+  </button>
+</div>
 
               {/* --- 3. PREVISIONS --- */}
             <TreasuryForecast 
@@ -910,7 +913,11 @@ const handleProjectUpdated = async (projectId) => {
             />
           )}
           {/* Remplacer activeView === 'hr' par activeTab === 'hr' */}
-          {activeTab === 'hr' && <HumanResourcesPage />}
+          {activeTab === 'hr' && (
+  <HumanResourcesPage 
+    projects={projects} // ✅ Passer les projets depuis useFinance
+  />
+)}
           {/* ✅ VISION BOARD */}
           {activeTab === 'vision' && <VisionBoard />}
         </main>

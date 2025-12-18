@@ -4,6 +4,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');  
 const { loadAccountIds } = require('./config/accounts');
 
 // Imports Config & Middleware
@@ -29,6 +30,25 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Créer les dossiers uploads au démarrage
+const uploadsDir = path.join(__dirname, 'uploads');
+const employeesDir = path.join(uploadsDir, 'employees');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('✅ Dossier uploads créé');
+}
+
+if (!fs.existsSync(employeesDir)) {
+  fs.mkdirSync(employeesDir, { recursive: true });
+  console.log('✅ Dossier uploads/employees créé');
+}
+
+// Servir les fichiers statiques
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // ✅ Request Logger
 app.use((req, res, next) => {
@@ -50,6 +70,8 @@ app.use('/api/notes', require('./routes/notes'));
 app.use('/api/transaction-linking', transactionLinkingRoutes);
 app.use('/api/project-migration', require('./routes/projectMigration'));
 app.use('/api/vision', visionRouter);
+app.use('/api/employees', require('./routes/employees'));
+app.use('/uploads', express.static('uploads'));
 
 // ✅ Routes sans préfixe /api (pour compatibilité frontend)
 app.use('/backup', backupRoutes);

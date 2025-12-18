@@ -35,7 +35,7 @@ export function AccountList({ accounts, onSelectAccount, onAddAccount, onDeleteA
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+    <div className="bg-gradient-to-r from-indigo-50 via-purple-100 to-pink-200 rounded-2xl shadow-lg p-6 border border-gray-600">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-800">État des Comptes</h2>
         <button 
@@ -59,5 +59,4 @@ export function AccountList({ accounts, onSelectAccount, onAddAccount, onDeleteA
     </div>
   );
 }
-
 export default AccountList;
