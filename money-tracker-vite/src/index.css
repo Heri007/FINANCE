@@ -25,7 +25,6 @@ code {
     monospace;
 }
 
-
 /* Si vous avez besoin des styles modaux, gardez-les */
 .modal-overlay {
   position: fixed;
@@ -48,6 +47,38 @@ code {
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
+}
+
+/* ✅ CORRECTION ERREURS RECHARTS - AJOUTÉ */
+/* Force les styles corrects sur tous les éléments SVG de Recharts */
+.recharts-wrapper * {
+  font-size: inherit !important;
+  letter-spacing: normal !important;
+}
+
+/* Textes des axes */
+.recharts-text,
+.recharts-cartesian-axis-tick-value {
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+}
+
+/* Légendes */
+.recharts-legend-item-text {
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+}
+
+/* Labels */
+.recharts-label {
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+}
+
+/* Tooltips (si nécessaire) */
+.recharts-tooltip-wrapper {
+  font-size: 14px !important;
+  letter-spacing: normal !important;
 }
 
 /* Les autres styles (.form-group, .checkbox-group, etc.) gardez-les si vous en avez besoin */

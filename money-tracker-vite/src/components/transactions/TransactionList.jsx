@@ -167,23 +167,24 @@ export default function TransactionList({
             </div>
           ) : (
             <div className="space-y-2">
-              {transactions.map(tx => (
-                <div 
-                  key={tx.id}
-                  onClick={() => onTransactionClick && onTransactionClick(tx)}
-                  className="
-                    flex justify-between items-center 
-                    p-4 
-                    hover:bg-slate-50 
-                    rounded-xl 
-                    cursor-pointer 
-                    transition-all duration-200
-                    border-2 border-transparent
-                    hover:border-slate-200
-                    hover:shadow-md
-                    group
-                  "
-                >
+  {transactions.map(tx => (
+    <div 
+      key={tx.id}
+      onClick={() => onTransactionClick?.(tx)}  // ✅ Optional chaining
+      className="
+        flex justify-between items-center 
+        p-4 
+        bg-white
+        hover:bg-slate-50 
+        rounded-xl 
+        cursor-pointer 
+        transition-all duration-200
+        border-2 border-slate-200
+        hover:border-blue-400
+        hover:shadow-lg
+        group
+      "
+    >
                   <div className="flex items-center gap-4 flex-1 min-w-0">
                     {/* Icône avec fond coloré */}
                     <div className={`

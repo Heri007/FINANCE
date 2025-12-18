@@ -96,7 +96,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
         amount: parseFloat(formData.amount),
         category: formData.category,
         description: formData.description,
-        transactiondate: formData.date,
+        date: formData.date,
         is_posted: formData.isPosted,
         is_planned: false,
         project_id: formData.projectId || null,

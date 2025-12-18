@@ -189,8 +189,6 @@ export function FinanceProvider({ children }) {
           project_line_id: data.projectlineid || data.project_line_id || null,
         };
 
-        console.log('🔵 createTransaction payload:', payload);
-
         const response = await apiRequest('/transactions', {
           method: 'POST',
           body: JSON.stringify(payload),

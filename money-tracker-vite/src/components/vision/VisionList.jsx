@@ -1,84 +1,98 @@
 // src/components/vision/VisionList.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Edit, Trash2, Eye } from 'lucide-react';
 import { apiRequest } from '../../services/api';
 
 export function VisionList({ onSelect, onCreate }) {
   const [visions, setVisions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  console.log('🔁 VisionList render', { visionsCount: visions.length, visions });
-
   useEffect(() => {
-    const load = async () => {
-      console.log('📥 VisionList → loading /vision/list');
-      try {
-        const data = await apiRequest('vision/list');
-        console.log('📊 /vision/list RESPONSE:', data);
-        setVisions(data || []);
-      } catch (e) {
-        console.error('❌ Erreur chargement liste visions', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadVisions();
   }, []);
 
-  if (loading) return <div>Chargement des visions...</div>;
+  const loadVisions = async () => {
+    try {
+      const data = await apiRequest('vision/list');
+      setVisions(data || []);
+    } catch (err) {
+      console.error('Erreur chargement visions:', err);
+      setVisions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Supprimer cette vision ?')) return;
+    
+    try {
+      await apiRequest(`vision/${id}`, { method: 'DELETE' });
+      await loadVisions();
+    } catch (err) {
+      console.error('Erreur suppression:', err);
+      alert('Erreur lors de la suppression');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="text-center py-8 bg-slate-50 rounded-xl border-2 border-slate-200">
+        <p className="text-slate-600 font-semibold">Chargement des visions...</p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ border: '2px solid green', padding: 16, marginTop: 8 }}>
-      <h3 style={{ marginBottom: 8, fontSize: 18 }}>MES VISIONS</h3>
-
+    <div className="space-y-4">
+      {/* Bouton Créer */}
       <button
-        onClick={() => {
-          console.log('🖱️ VisionList → onCreate clicked');
-          onCreate();
-        }}
-        style={{
-          marginBottom: 12,
-          padding: '4px 8px',
-          background: '#4f46e5',
-          color: 'white',
-          borderRadius: 4,
-          border: 'none',
-          cursor: 'pointer',
-        }}
+        onClick={onCreate}
+        className="flex items-center justify-center gap-2 w-full h-12 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-sm hover:from-purple-700 hover:to-pink-700 transition-all shadow-md"
       >
-        Nouvelle vision
+        <Plus size={18} strokeWidth={3} />
+        Créer une nouvelle vision
       </button>
 
-      <div style={{ marginBottom: 8 }}>
-        Nbre de vision = {visions.length}
-      </div>
-
-      <ul style={{ listStyle: 'none', padding: 0 }}>
-        {visions.map((v) => (
-          <li
+      {/* Liste */}
+      {visions.length === 0 ? (
+        <div className="text-center py-8 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300">
+          <p className="text-slate-600 font-semibold">Aucune vision créée.</p>
+        </div>
+      ) : (
+        visions.map((v) => (
+          <div
             key={v.id}
-            onClick={() => {
-              console.log('🖱️ VisionList → onSelect clicked', v);
-              onSelect(v);
-            }}
-            style={{
-              border: '1px solid blue',
-              borderRadius: 4,
-              padding: 8,
-              marginBottom: 8,
-              cursor: 'pointer',
-              background: '#f9fafb',
-            }}
+            className="flex items-center justify-between bg-white/90 backdrop-blur-sm rounded-xl shadow-md border-2 border-slate-200 px-5 py-4 hover:border-purple-600 hover:shadow-lg transition-all group"
           >
-            <div style={{ fontWeight: 'bold' }}>
-              #{v.id} — {(v.content || '').slice(0, 80) || 'Vision sans contenu'}
+            <div className="flex-1">
+              <p className="font-bold text-slate-900 text-base line-clamp-2">
+                {v.content?.substring(0, 80) || 'Vision sans contenu'}...
+              </p>
+              <p className="mt-2 text-xs text-slate-500 font-semibold">
+                Créée le {new Date(v.created_at).toLocaleString('fr-FR')}
+              </p>
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>
-              {v.created_at &&
-                new Date(v.created_at).toLocaleString('fr-FR')}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onSelect(v)}
+                className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-sm hover:from-purple-700 hover:to-pink-700 transition-all shadow-md"
+              >
+                <Edit size={16} strokeWidth={2.5} />
+                Éditer
+              </button>
+
+              <button
+                onClick={() => handleDelete(v.id)}
+                className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white font-bold text-sm hover:from-red-600 hover:to-rose-700 transition-all shadow-md"
+              >
+                <Trash2 size={16} strokeWidth={2.5} />
+              </button>
             </div>
-          </li>
-        ))}
-      </ul>
+          </div>
+        ))
+      )}
     </div>
   );
 }

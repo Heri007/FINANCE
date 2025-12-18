@@ -33,7 +33,6 @@ export function ProjectPlannerModal({
     return null;
   }
 
-  console.log('🔍 createTransaction type:', typeof createTransaction);
   // --- ÉTATS DU FORMULAIRE ---
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');

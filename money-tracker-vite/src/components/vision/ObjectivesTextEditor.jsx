@@ -1,267 +1,234 @@
 // src/components/vision/ObjectivesTextEditor.jsx
 import React, { useState } from 'react';
-import { Plus, Save, X, Edit2, CheckCircle2, Circle } from 'lucide-react';
-
-const CATEGORIES = [
-  { id: 'short', label: 'Court Terme', subtitle: '3-6 mois' },
-  { id: 'medium', label: 'Moyen Terme', subtitle: '6-12 mois' },
-  { id: 'long', label: 'Long Terme', subtitle: '1-3 ans' },
-];
+import { Plus, Save, Trash2, CheckCircle, Edit, X } from 'lucide-react';
 
 export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete }) {
-  const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState({});
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    deadline: '',
+    priority: 'medium',
+  });
+
+  const [editingId, setEditingId] = useState(null); // ✅ État pour savoir quel objectif est en édition
+  const [editData, setEditData] = useState(null);   // ✅ Données de l'objectif en édition
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.title.trim()) return;
+
+    await onCreate(formData);
+    setFormData({ title: '', description: '', deadline: '', priority: 'medium' });
+  };
 
   const startEdit = (obj) => {
+    console.log('✏️ Start edit objective', obj.id);
     setEditingId(obj.id);
-    setDraft({
+    setEditData({
       title: obj.title,
       description: obj.description || '',
-      deadline: obj.deadline ? obj.deadline.slice(0, 10) : '',
-      budget: obj.budget || 0,
-      progress: obj.progress || 0,
+      deadline: obj.deadline || '',
+      priority: obj.priority || 'medium',
     });
   };
 
   const cancelEdit = () => {
+    console.log('❌ Cancel edit');
     setEditingId(null);
-    setDraft({});
+    setEditData(null);
   };
 
-  const saveEdit = async (id) => {
-    await onUpdate(id, draft);
-    cancelEdit();
-  };
-
-  const addObjective = async (category) => {
-    await onCreate({
-      title: 'Nouvel objectif',
-      description: '',
-      category,
-      deadline: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10),
-      budget: 0,
-    });
+  const saveEdit = async (objId) => {
+    console.log('💾 Save edit objective', objId, editData);
+    await onUpdate(objId, editData);
+    setEditingId(null);
+    setEditData(null);
   };
 
   const toggleComplete = async (obj) => {
-    await onUpdate(obj.id, {
-      completed: !obj.completed,
-      progress: !obj.completed ? 100 : 0,
-    });
+    await onUpdate(obj.id, { ...obj, completed: !obj.completed });
   };
-
-  const getByCategory = (cat) =>
-    objectives.filter((o) => o.category === cat);
 
   return (
     <div className="space-y-6">
-      {CATEGORIES.map((cat) => {
-        const list = getByCategory(cat.id);
-        return (
-          <div key={cat.id}>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="font-bold text-gray-900">{cat.label}</h3>
-                <p className="text-sm text-gray-600">{cat.subtitle}</p>
-              </div>
-              <button
-                onClick={() => addObjective(cat.id)}
-                className="inline-flex items-center gap-1 px-3 py-1 text-sm rounded-lg bg-gray-100 hover:bg-gray-200"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter
-              </button>
-            </div>
+      {/* Formulaire d'ajout - Style ReceivablesScreen */}
+      <form onSubmit={handleSubmit} className="bg-slate-50 rounded-xl p-4 border-2 border-slate-200 space-y-4">
+        <input
+          type="text"
+          placeholder="Titre de l'objectif *"
+          value={formData.title}
+          onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+          className="w-full h-10 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
+        />
 
-            {list.length === 0 ? (
-              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-center text-gray-500 text-sm">
-                Aucun objectif {cat.label.toLowerCase()} pour le moment
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {list.map((obj) => (
-                  <div
-                    key={obj.id}
-                    className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm"
-                  >
-                    {editingId === obj.id ? (
-                      <div className="space-y-3">
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border rounded-lg font-semibold"
-                          value={draft.title}
-                          onChange={(e) =>
-                            setDraft({ ...draft, title: e.target.value })
-                          }
-                        />
-                        <textarea
-                          className="w-full px-3 py-2 border rounded-lg text-sm resize-none"
-                          rows={2}
-                          value={draft.description}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              description: e.target.value,
-                            })
-                          }
-                          placeholder="Description"
-                        />
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div>
-                            <label className="text-gray-600">
-                              Deadline
-                            </label>
-                            <input
-                              type="date"
-                              className="w-full px-2 py-1 border rounded"
-                              value={draft.deadline}
-                              onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  deadline: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="text-gray-600">
-                              Budget (Ar)
-                            </label>
-                            <input
-                              type="number"
-                              className="w-full px-2 py-1 border rounded"
-                              value={draft.budget}
-                              onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  budget: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div>
-                            <label className="text-gray-600">
-                              Progression: {draft.progress}%
-                            </label>
-                            <input
-                              type="range"
-                              min={0}
-                              max={100}
-                              className="w-full"
-                              value={draft.progress}
-                              onChange={(e) =>
-                                setDraft({
-                                  ...draft,
-                                  progress: parseInt(
-                                    e.target.value,
-                                    10,
-                                  ),
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={cancelEdit}
-                            className="px-3 py-1 text-sm bg-gray-200 rounded"
-                          >
-                            Annuler
-                          </button>
-                          <button
-                            onClick={() => saveEdit(obj.id)}
-                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded inline-flex items-center gap-1"
-                          >
-                            <Save className="w-4 h-4" />
-                            Sauvegarder
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start justify-between gap-3">
-                        <button
-                          onClick={() => toggleComplete(obj)}
-                          className="mt-1"
-                        >
-                          {obj.completed ? (
-                            <CheckCircle2 className="w-5 h-5 text-green-500" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-blue-500" />
-                          )}
-                        </button>
-                        <div className="flex-1">
-                          <h4
-                            className={`font-semibold mb-1 ${
-                              obj.completed
-                                ? 'line-through text-gray-500'
-                                : 'text-gray-900'
-                            }`}
-                          >
-                            {obj.title}
-                          </h4>
-                          {obj.description && (
-                            <p className="text-sm text-gray-600 mb-1">
-                              {obj.description}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-500 mb-1">
-                            {obj.deadline &&
-                              `Deadline: ${new Date(
-                                obj.deadline,
-                              ).toLocaleDateString('fr-FR')}`}
-                            {obj.budget
-                              ? ` • Budget: ${(obj.budget / 1_000_000).toFixed(
-                                  1,
-                                )}M Ar`
-                              : ''}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500"
-                                style={{
-                                  width: `${obj.progress || 0}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs text-gray-600">
-                              {obj.progress || 0}%
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-2">
-                          <button
-                            onClick={() => startEdit(obj)}
-                            className="text-blue-500 hover:text-blue-700"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  'Supprimer cet objectif ?',
-                                )
-                              ) {
-                                onDelete(obj.id);
-                              }
-                            }}
-                            className="text-gray-400 hover:text-red-500"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+        <textarea
+          placeholder="Description (optionnel)"
+          value={formData.description}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          rows={3}
+          className="w-full rounded-lg border-2 border-slate-200 text-sm px-3 py-2 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all resize-none font-semibold"
+        />
+
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            type="date"
+            value={formData.deadline}
+            onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+            className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
+          />
+
+          <select
+            value={formData.priority}
+            onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+            className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 bg-white focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
+          >
+            <option value="low">Basse</option>
+            <option value="medium">Moyenne</option>
+            <option value="high">Haute</option>
+          </select>
+        </div>
+
+        <button
+          type="submit"
+          className="flex items-center justify-center gap-2 w-full h-10 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold text-sm hover:from-purple-700 hover:to-pink-700 transition-all shadow-md"
+        >
+          <Plus size={16} strokeWidth={3} />
+          Ajouter l'objectif
+        </button>
+      </form>
+
+      {/* Liste des objectifs - Style ReceivablesScreen */}
+      <div className="space-y-3">
+        {objectives.length === 0 ? (
+          <div className="text-center py-8 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300">
+            <p className="text-slate-600 font-semibold">Aucun objectif défini.</p>
+          </div>
+        ) : (
+          objectives.map((obj) => (
+            <div
+              key={obj.id}
+              className={`rounded-xl shadow-md border-2 px-5 py-4 transition-all ${
+                obj.completed
+                  ? 'bg-green-50 border-green-300'
+                  : 'bg-white/90 border-slate-200 hover:border-purple-600'
+              }`}
+            >
+              {editingId === obj.id ? (
+                // ✅ MODE ÉDITION
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    value={editData.title}
+                    onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                    className="w-full h-10 rounded-lg border-2 border-purple-600 text-sm px-3 focus:ring-2 focus:ring-purple-600/20 transition-all font-bold"
+                  />
+
+                  <textarea
+                    value={editData.description}
+                    onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                    rows={2}
+                    className="w-full rounded-lg border-2 border-slate-200 text-sm px-3 py-2 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all resize-none font-semibold"
+                    placeholder="Description..."
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="date"
+                      value={editData.deadline}
+                      onChange={(e) => setEditData({ ...editData, deadline: e.target.value })}
+                      className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
+                    />
+
+                    <select
+                      value={editData.priority}
+                      onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
+                      className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 bg-white focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
+                    >
+                      <option value="low">Basse</option>
+                      <option value="medium">Moyenne</option>
+                      <option value="high">Haute</option>
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => saveEdit(obj.id)}
+                      className="flex-1 flex items-center justify-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-sm hover:from-green-600 hover:to-emerald-700 transition-all shadow-md"
+                    >
+                      <Save size={16} strokeWidth={2.5} />
+                      Sauvegarder
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="flex items-center justify-center h-10 px-4 rounded-lg bg-gradient-to-r from-slate-400 to-slate-500 text-white font-bold text-sm hover:from-slate-500 hover:to-slate-600 transition-all shadow-md"
+                    >
+                      <X size={16} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                // ✅ MODE AFFICHAGE
+                <>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <p className={`font-bold text-base ${obj.completed ? 'line-through text-green-700' : 'text-slate-900'}`}>
+                        {obj.title}
+                      </p>
+                      {obj.description && (
+                        <p className="text-sm text-slate-600 mt-1 font-semibold">{obj.description}</p>
+                      )}
+                    </div>
+                    {obj.priority && (
+                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                        obj.priority === 'high' ? 'bg-red-100 text-red-700' :
+                        obj.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {obj.priority === 'high' ? 'Haute' : obj.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                      </span>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+
+                  {obj.deadline && (
+                    <p className="text-xs text-slate-500 mb-3 font-semibold">
+                      📅 {new Date(obj.deadline).toLocaleDateString('fr-FR')}
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleComplete(obj)}
+                      className={`flex items-center gap-2 h-10 px-4 rounded-lg font-bold text-sm transition-all shadow-md ${
+                        obj.completed
+                          ? 'bg-gradient-to-r from-slate-400 to-slate-500 text-white hover:from-slate-500 hover:to-slate-600'
+                          : 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700'
+                      }`}
+                    >
+                      <CheckCircle size={16} strokeWidth={2.5} />
+                      {obj.completed ? 'Rouvrir' : 'Compléter'}
+                    </button>
+
+                    <button
+                      onClick={() => startEdit(obj)}
+                      className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-sm hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md"
+                    >
+                      <Edit size={16} strokeWidth={2.5} />
+                      Éditer
+                    </button>
+
+                    <button
+                      onClick={() => onDelete(obj.id)}
+                      className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 text-white font-bold text-sm hover:from-red-600 hover:to-rose-700 transition-all shadow-md"
+                    >
+                      <Trash2 size={16} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

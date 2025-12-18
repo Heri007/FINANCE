@@ -54,7 +54,19 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const { person, description, amount, source_account_id } = req.body;
+    const { 
+  person, 
+  description, 
+  amount, 
+  sourceaccountid,
+  source_account_id  // Accepte aussi snake_case
+} = req.body;
+
+const finalSourceAccountId = sourceaccountid || source_account_id;
+
+if (!finalSourceAccountId) {
+  return res.status(400).json({ error: 'source_account_id requis' });
+}
     const userId = req.user.id;
 
     const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();

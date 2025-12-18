@@ -1,7 +1,6 @@
 // src/components/charts/FinancialChart.jsx
 import React, { useMemo } from 'react';
 import { 
-  LineChart, 
   Line, 
   XAxis, 
   YAxis, 
@@ -9,18 +8,15 @@ import {
   Tooltip, 
   Legend, 
   ResponsiveContainer,
-  Area,
   ComposedChart
 } from 'recharts';
 
 const FinancialChart = ({ transactions = [] }) => {
-  // Préparer les données pour le graphique
   const chartData = useMemo(() => {
     if (!Array.isArray(transactions) || transactions.length === 0) {
       return [];
     }
 
-    // Grouper par date
     const grouped = {};
     transactions.forEach(t => {
       const date = t.date?.split('T')[0] || t.transaction_date?.split('T')[0];
@@ -39,13 +35,11 @@ const FinancialChart = ({ transactions = [] }) => {
       grouped[date].net = grouped[date].income - grouped[date].expense;
     });
 
-    // Trier par date et prendre les 30 derniers jours
     return Object.values(grouped)
       .sort((a, b) => new Date(a.date) - new Date(b.date))
       .slice(-30);
   }, [transactions]);
 
-  // Message si pas de données
   if (chartData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
@@ -61,16 +55,10 @@ const FinancialChart = ({ transactions = [] }) => {
     );
   }
 
-  // Custom Tooltip
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="
-          bg-white/95 backdrop-blur-sm 
-          border-2 border-slate-300 
-          rounded-xl p-4 
-          shadow-xl
-        ">
+        <div className="bg-white/95 backdrop-blur-sm border-2 border-slate-300 rounded-xl p-4 shadow-xl">
           <p className="font-bold text-slate-900 mb-2 text-sm">
             📅 {new Date(label).toLocaleDateString('fr-FR', { 
               day: 'numeric', 
@@ -80,26 +68,20 @@ const FinancialChart = ({ transactions = [] }) => {
           </p>
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-semibold text-emerald-700">
-                ↗️ Revenus:
-              </span>
+              <span className="text-xs font-semibold text-emerald-700">↗️ Revenus:</span>
               <span className="text-sm font-black text-emerald-900">
                 {parseFloat(payload[0]?.value || 0).toLocaleString('fr-FR')} Ar
               </span>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <span className="text-xs font-semibold text-rose-700">
-                ↘️ Dépenses:
-              </span>
+              <span className="text-xs font-semibold text-rose-700">↘️ Dépenses:</span>
               <span className="text-sm font-black text-rose-900">
                 {parseFloat(payload[1]?.value || 0).toLocaleString('fr-FR')} Ar
               </span>
             </div>
             <div className="pt-2 mt-2 border-t-2 border-slate-200">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-xs font-semibold text-slate-700">
-                  💰 Net:
-                </span>
+                <span className="text-xs font-semibold text-slate-700">💰 Net:</span>
                 <span className={`text-sm font-black ${
                   (payload[0]?.value - payload[1]?.value) >= 0 
                     ? 'text-emerald-900' 
@@ -122,36 +104,21 @@ const FinancialChart = ({ transactions = [] }) => {
         data={chartData}
         margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
       >
-        {/* Grille */}
-        <CartesianGrid 
-          strokeDasharray="3 3" 
-          stroke="#e2e8f0" 
-          vertical={false}
-        />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
         
-        {/* Axes */}
+        {/* ✅ AXES SANS PROPRIÉTÉS PROBLÉMATIQUES */}
         <XAxis 
-          dataKey="date" 
-          tick={{ 
-            fill: '#64748b', 
-            fontSize: '11px',
-            fontWeight: 600
-          }}
-          tickLine={{ stroke: '#cbd5e1' }}
-          axisLine={{ stroke: '#cbd5e1' }}
+          dataKey="date"
+          stroke="#cbd5e1"
+          tick={{ fill: '#64748b' }}
           tickFormatter={(date) => {
             const d = new Date(date);
             return `${d.getDate()}/${d.getMonth() + 1}`;
           }}
         />
         <YAxis 
-          tick={{ 
-            fill: '#64748b', 
-            fontSize: '11px',
-            fontWeight: 600
-          }}
-          tickLine={{ stroke: '#cbd5e1' }}
-          axisLine={{ stroke: '#cbd5e1' }}
+          stroke="#cbd5e1"
+          tick={{ fill: '#64748b' }}
           tickFormatter={(value) => {
             if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
             if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
@@ -159,85 +126,32 @@ const FinancialChart = ({ transactions = [] }) => {
           }}
         />
         
-        {/* Tooltip personnalisé */}
         <Tooltip content={<CustomTooltip />} />
         
-        {/* Légende */}
         <Legend 
-          wrapperStyle={{ 
-            paddingTop: '15px',
-            fontSize: '12px',
-            fontWeight: 600
-          }}
+          wrapperStyle={{ paddingTop: '15px' }}
           iconType="line"
           iconSize={16}
         />
         
-        {/* Zone de fond pour les revenus (optionnel) */}
-        <defs>
-          <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
-            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-          </linearGradient>
-          <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1}/>
-            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
-        
-        {/* Aire de fond (optionnel - pour effet visuel) */}
-        <Area
-          type="monotone"
-          dataKey="income"
-          fill="url(#colorIncome)"
-          stroke="none"
-        />
-        <Area
-          type="monotone"
-          dataKey="expense"
-          fill="url(#colorExpense)"
-          stroke="none"
-        />
-        
-        {/* Ligne Revenus (Vert Émeraude) */}
+        {/* ✅ LIGNES SIMPLES SANS GRADIENTS */}
         <Line 
           type="monotone" 
           dataKey="income" 
           stroke="#10b981" 
           strokeWidth={3}
-          dot={{ 
-            fill: '#10b981', 
-            strokeWidth: 2,
-            stroke: '#fff',
-            r: 5 
-          }}
-          activeDot={{ 
-            r: 7,
-            fill: '#059669',
-            stroke: '#fff',
-            strokeWidth: 3
-          }}
+          dot={{ fill: '#10b981', strokeWidth: 2, stroke: '#fff', r: 5 }}
+          activeDot={{ r: 7, fill: '#059669', stroke: '#fff', strokeWidth: 3 }}
           name="💰 Revenus"
         />
         
-        {/* Ligne Dépenses (Rose) */}
         <Line 
           type="monotone" 
           dataKey="expense" 
           stroke="#f43f5e" 
           strokeWidth={3}
-          dot={{ 
-            fill: '#f43f5e', 
-            strokeWidth: 2,
-            stroke: '#fff',
-            r: 5 
-          }}
-          activeDot={{ 
-            r: 7,
-            fill: '#e11d48',
-            stroke: '#fff',
-            strokeWidth: 3
-          }}
+          dot={{ fill: '#f43f5e', strokeWidth: 2, stroke: '#fff', r: 5 }}
+          activeDot={{ r: 7, fill: '#e11d48', stroke: '#fff', strokeWidth: 3 }}
           name="💸 Dépenses"
         />
       </ComposedChart>
