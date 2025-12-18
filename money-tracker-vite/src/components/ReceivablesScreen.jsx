@@ -1,6 +1,7 @@
 // src/components/ReceivablesScreen.jsx
 import React, { useEffect, useState, useMemo } from "react";
 import { receivablesService } from "../services/receivablesService";
+import { Users, TrendingUp, CheckCircle, Clock, Plus } from 'lucide-react';
 
 const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => {
   const [items, setItems] = useState([]);
@@ -27,22 +28,18 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
     fetchReceivables();
   }, []);
 
-  // Total des receivables ouverts
   const totalOpen = useMemo(
     () => items.reduce((sum, i) => sum + Number(i.amount || 0), 0),
     [items]
   );
 
-  // Calcul des soldes ACTUELS et PRÉVISIONNELS
   const coffreAccount = accounts.find(a => a.name === "Coffre");
   const currentCoffreBalance = Number(coffreAccount?.balance || 0);
   const currentTotalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
 
-  // PRÉVISIONS : soldes APRÈS règlement de TOUS les receivables
   const coffreForecast = currentCoffreBalance + totalOpen;
   const totalForecast = currentTotalBalance + totalOpen;
 
-  // Vérification si tous les receivables sont "récoltés"
   const receivablesTousRecoltes = currentCoffreBalance >= totalOpen;
 
   useEffect(() => {
@@ -51,7 +48,6 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
     }
   }, [totalOpen, onTotalsChange]);
 
-  // Comptes possibles pour le déboursement
   const sourceAccounts = accounts.filter((a) =>
     ["Argent Liquide", "Coffre"].includes(a.name)
   );
@@ -101,164 +97,201 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Receivables</h2>
-          <p className="text-sm text-gray-500">
-            Avances d&apos;argent que tu fais depuis tes comptes vers d&apos;autres personnes,
-            remboursées plus tard dans le Coffre.
-          </p>
+      {/* Header avec dégradé premium */}
+      <div className="bg-gradient-to-r from-[#807D9E] to-[#6f6c8d] rounded-2xl p-6 shadow-lg border-2 border-[#807D9E]">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl">
+              <Users className="w-8 h-8 text-white" strokeWidth={2.5} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white">Receivables</h2>
+              <p className="text-sm text-white/80 mt-1 font-semibold">
+                Avances d&apos;argent remboursées plus tard dans le Coffre
+              </p>
+            </div>
+          </div>
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl px-4 py-2 border-2 border-white/30">
+            <p className="text-xs font-bold text-white uppercase tracking-wider">
+              Compte Créances
+            </p>
+          </div>
         </div>
-        <div className="rounded-full bg-indigo-50 px-4 py-1 text-xs font-medium text-indigo-600 border border-indigo-100">
-          Compte RECEIVABLES · créances
+      </div>
+
+      {/* Layout 3 colonnes avec hauteurs alignées */}
+      <div className="grid gap-4 lg:grid-cols-[240px,1fr,380px]">
+        
+        {/* COLONNE 1 : Cards Total & Nombre superposées avec flex-1 */}
+        <div className="flex flex-col gap-2">
+          
+          {/* Card 1 : Total receivables (flex-1 pour occuper la moitié) */}
+          <div className="flex-1 bg-gradient-to-br from-[#807D9E] to-[#6f6c8d] rounded-lg shadow-md border-2 border-[#807D9E] p-3 flex flex-col justify-center">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="bg-white/20 p-1 rounded">
+                <TrendingUp className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+              </div>
+              <p className="text-[15px] font-bold text-white uppercase tracking-wider leading-tight">
+                Total Receivables
+              </p>
+            </div>
+            <p className="text-xl font-black text-white leading-none">
+              {totalOpen.toLocaleString("fr-FR")} Ar
+            </p>
+          </div>
+
+          {/* Card 2 : Nombre de lignes (flex-1 pour occuper la moitié) */}
+          <div className="flex-1 bg-gradient-to-br from-[#9A8D8A] to-[#8a7d7a] rounded-lg shadow-md border-2 border-[#9A8D8A] p-3 flex flex-col justify-center">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="bg-white/20 p-1 rounded">
+                <Users className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+              </div>
+              <p className="text-[15px] font-bold text-white uppercase tracking-wider leading-tight">
+                Nombre de Lignes
+              </p>
+            </div>
+            <p className="text-xl font-black text-white leading-none">{items.length}</p>
+          </div>
         </div>
-      </div>
 
-      {/* Summary cards */}
-<div className="grid gap-4 md:grid-cols-3">
-  {/* Card 1 : Total receivables */}
-  <div className="rounded-2xl border border-indigo-100 bg-white/80 shadow-sm px-5 py-4">
-    <p className="text-xs font-medium text-gray-500 uppercase">
-      Total des receivables ouverts
-    </p>
-    <p className="mt-1 text-2xl font-bold text-indigo-600">
-      {totalOpen.toLocaleString("fr-FR")} Ar
-    </p>
-  </div>
+        {/* COLONNE 2 : Card "En Cours" */}
+        <div className={`rounded-lg shadow-md border-2 p-3 flex flex-col ${
+          receivablesTousRecoltes 
+            ? 'bg-gradient-to-br from-[#6D9C6D] to-[#5a8a5a] border-[#6D9C6D]' 
+            : 'bg-gradient-to-br from-[#C09858] to-[#b08748] border-[#C09858]'
+        }`}>
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-3">
+            <div className="bg-white/20 p-1 rounded">
+              {receivablesTousRecoltes ? (
+                <CheckCircle className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+              ) : (
+                <Clock className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+              )}
+            </div>
+            <p className="text-lg font-bold text-white uppercase tracking-wider">
+              {receivablesTousRecoltes ? "✅ Tout Récolté" : "📊 En Cours"}
+            </p>
+          </div>
+          
+          {/* Contenu avec flex-1 pour remplir */}
+          <div className="flex-1 flex flex-col justify-between space-y-2">
+            {/* Coffre prévu */}
+            <div className="flex justify-between items-baseline">
+              <span className="text-xl text-white font-bold uppercase">Coffre (+ Receivables)</span>
+              <span className="text-2xl font-black text-white leading-none">
+                {coffreForecast.toLocaleString("fr-FR")} Ar
+              </span>
+            </div>
+            
+            {/* Total prévu */}
+            <div className="flex justify-between items-baseline pt-2 border-t border-white/20">
+              <span className="text-xl text-white font-bold uppercase">TOTAL (+ TOUS LES COMPTES)</span>
+              <span className="text-2xl font-black text-white leading-none">
+                {totalForecast.toLocaleString("fr-FR")} Ar
+              </span>
+            </div>
+            
+            {/* Badge */}
+            <div className="pt-2 border-t border-white/20">
+              <span className="inline-block text-lg px-2 py-1 rounded bg-yellow-200 text-black font-bold">
+                +{totalOpen.toLocaleString("fr-FR")} Ar attendus
+              </span>
+            </div>
+            
+            {/* Message */}
+            <p className="text-xs text-white italic font-semibold leading-tight pt-1">
+              {receivablesTousRecoltes 
+                ? "Le Coffre couvre tous les receivables" 
+                : "Débourse depuis Argent Liquide ou Coffre"}
+            </p>
+          </div>
+        </div>
 
-  {/* Card 2 : Nombre de lignes */}
-  <div className="rounded-2xl border border-gray-100 bg-white/70 px-5 py-4">
-    <p className="text-xs font-medium text-gray-500 uppercase">
-      Nombre de lignes
-    </p>
-    <p className="mt-1 text-2xl font-semibold text-gray-800">{items.length}</p>
-  </div>
-
-  {/* Card 3 : Prévisions TOUJOURS AFFICHÉES */}
-  <div className={`rounded-2xl border px-5 py-4 shadow-sm ${receivablesTousRecoltes ? 'border-emerald-200 bg-emerald-50/80' : 'border-indigo-100 bg-indigo-50/70'}`}>
-    <p className={`text-xs font-medium uppercase ${receivablesTousRecoltes ? 'text-emerald-700' : 'text-indigo-600'}`}>
-      {receivablesTousRecoltes ? "✅ Prévisions (Tout récolté)" : "📊 Prévisions (En cours)"}
-    </p>
-    
-    <div className="mt-2 space-y-2">
-      {/* Ligne 1 : COFFRE prévu */}
-      <div className="flex justify-between items-baseline pt-1">
-        <span className="text-xs text-gray-600">COFFRE (prévu)</span>
-        <span className={`text-lg font-bold tracking-tight ${receivablesTousRecoltes ? 'text-emerald-700' : 'text-indigo-700'}`}>
-          {coffreForecast.toLocaleString("fr-FR")} Ar
-        </span>
-      </div>
-      
-      {/* Ligne 2 : TOTAL GÉNÉRAL prévu */}
-      <div className="flex justify-between items-baseline border-t border-gray-200 pt-2">
-        <span className="text-xs text-gray-600">TOTAL GÉNÉRAL (prévu)</span>
-        <span className={`text-xl font-black ${receivablesTousRecoltes ? 'text-emerald-800' : 'text-indigo-800'}`}>
-          {totalForecast.toLocaleString("fr-FR")} Ar
-        </span>
-      </div>
-      
-      {/* Ligne 3 : Détails */}
-      <div className="mt-2 pt-2 border-t border-gray-200">
-        <p className={`text-xs px-2 py-1 rounded inline-block ${receivablesTousRecoltes ? 'text-emerald-700 bg-emerald-100' : 'text-indigo-700 bg-indigo-100'}`}>
-          +{totalOpen.toLocaleString("fr-FR")} Ar de remboursements attendus
-        </p>
-      </div>
-      
-      {/* Ligne 4 : Message explicatif */}
-      <div className="mt-2 pt-2 border-t border-gray-200">
-        <p className="text-xs text-gray-600 italic">
-          {receivablesTousRecoltes 
-            ? "✅ Le Coffre couvre tous les receivables" 
-            : "⏳ Débourse depuis Argent Liquide ou Coffre, encaisse dans Coffre"}
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-      {/* Form */}
-      <div className="rounded-2xl border border-gray-100 bg-white/90 px-4 py-3 shadow-sm">
-        <form
-          onSubmit={handleAdd}
-          className="grid gap-3 md:grid-cols-[1.2fr,0.8fr,1.3fr,1.1fr,auto] items-center"
-        >
-          <input
-            type="text"
-            placeholder="Personne / source"
-            value={person}
-            onChange={(e) => setPerson(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 text-sm shadow-inner px-3 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300"
-          />
-          <input
-            type="number"
-            placeholder="Montant"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            step="0.01"
-            className="h-9 rounded-lg border border-gray-200 text-sm shadow-inner px-3 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300"
-          />
-          <input
-            type="text"
-            placeholder="Description (optionnel)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 text-sm shadow-inner px-3 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300"
-          />
-          <select
-            value={sourceAccountId}
-            onChange={(e) => setSourceAccountId(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 text-sm px-3 bg-white focus:border-indigo-400 focus:ring-1 focus:ring-indigo-300"
-          >
-            <option value="">Déboursé depuis...</option>
-            {sourceAccounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name} ({Number(acc.balance).toLocaleString("fr-FR")} Ar)
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="ml-2 inline-flex h-9 items-center rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-            disabled={!person || !amount || !sourceAccountId}
-          >
-            Ajouter
-          </button>
-        </form>
+        {/* COLONNE 3 : Formulaire d'ajout */}
+        <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border-2 border-slate-200 p-3 flex flex-col">
+          <form onSubmit={handleAdd} className="flex-1 flex flex-col justify-between space-y-2">
+            <input
+              type="text"
+              placeholder="Personne / source"
+              value={person}
+              onChange={(e) => setPerson(e.target.value)}
+              className="h-9 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-[#807D9E] focus:ring-2 focus:ring-[#807D9E]/20 transition-all"
+            />
+            <input
+              type="number"
+              placeholder="Montant"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              step="0.01"
+              className="h-9 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-[#807D9E] focus:ring-2 focus:ring-[#807D9E]/20 transition-all"
+            />
+            <input
+              type="text"
+              placeholder="Description (optionnel)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="h-9 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-[#807D9E] focus:ring-2 focus:ring-[#807D9E]/20 transition-all"
+            />
+            <select
+              value={sourceAccountId}
+              onChange={(e) => setSourceAccountId(e.target.value)}
+              className="h-9 rounded-lg border-2 border-slate-200 text-sm px-3 bg-white focus:border-[#807D9E] focus:ring-2 focus:ring-[#807D9E]/20 transition-all"
+            >
+              <option value="">Déboursé depuis...</option>
+              {sourceAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({Number(acc.balance).toLocaleString("fr-FR")} Ar)
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-[#807D9E] to-[#6f6c8d] text-white font-bold text-sm hover:from-[#6f6c8d] hover:to-[#5e5b7c] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={!person || !amount || !sourceAccountId}
+            >
+              <Plus size={16} strokeWidth={3} />
+              Ajouter
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Liste des receivables */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         {loading ? (
-          <p className="text-gray-500">Chargement des receivables...</p>
+          <div className="text-center py-8 bg-slate-50 rounded-xl border-2 border-slate-200">
+            <p className="text-slate-600 font-semibold">Chargement des receivables...</p>
+          </div>
         ) : items.length === 0 ? (
-          <p className="text-gray-500">Aucun receivable ouvert.</p>
+          <div className="text-center py-8 bg-slate-50 rounded-xl border-2 border-dashed border-slate-300">
+            <p className="text-slate-600 font-semibold">Aucun receivable ouvert.</p>
+          </div>
         ) : (
           items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white/90 px-4 py-3 shadow-sm"
+              className="flex items-center justify-between bg-white/90 backdrop-blur-sm rounded-xl shadow-md border-2 border-slate-200 px-5 py-4 hover:border-[#807D9E] hover:shadow-lg transition-all group"
             >
-              <div>
-                <p className="font-medium text-gray-900">{item.person}</p>
+              <div className="flex-1">
+                <p className="font-bold text-slate-900 text-base">{item.person}</p>
                 {item.description && (
-                  <p className="text-sm text-gray-500">{item.description}</p>
+                  <p className="text-sm text-slate-600 mt-1 font-semibold">{item.description}</p>
                 )}
-                <p className="mt-1 text-xs text-gray-400">
-                  Créé le{" "}
-                  {new Date(item.created_at).toLocaleString("fr-FR")}
+                <p className="mt-2 text-xs text-slate-500 font-semibold">
+                  Créé le {new Date(item.created_at).toLocaleString("fr-FR")}
                 </p>
               </div>
-              <div className="flex items-center space-x-4">
-                <p className="text-lg font-semibold text-indigo-600">
+              <div className="flex items-center gap-4">
+                <p className="text-2xl font-black text-[#807D9E]">
                   {Number(item.amount).toLocaleString("fr-FR")} Ar
                 </p>
                 <button
                   onClick={() => handleClose(item.id)}
-                  className="inline-flex h-8 items-center rounded-lg bg-emerald-600 px-3 text-sm font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-[#6D9C6D] to-[#5a8a5a] text-white font-bold text-sm hover:from-[#5a8a5a] hover:to-[#4a7a4a] transition-all shadow-md"
                 >
-                  Marquer comme payé
+                  <CheckCircle size={16} strokeWidth={2.5} />
+                  Marquer payé
                 </button>
               </div>
             </div>

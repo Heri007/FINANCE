@@ -8,7 +8,9 @@ import {
   CartesianGrid, 
   Tooltip, 
   Legend, 
-  ResponsiveContainer 
+  ResponsiveContainer,
+  Area,
+  ComposedChart
 } from 'recharts';
 
 const FinancialChart = ({ transactions = [] }) => {
@@ -25,7 +27,7 @@ const FinancialChart = ({ transactions = [] }) => {
       if (!date) return;
 
       if (!grouped[date]) {
-        grouped[date] = { date, income: 0, expense: 0 };
+        grouped[date] = { date, income: 0, expense: 0, net: 0 };
       }
 
       const amount = parseFloat(t.amount) || 0;
@@ -34,6 +36,7 @@ const FinancialChart = ({ transactions = [] }) => {
       } else {
         grouped[date].expense += amount;
       }
+      grouped[date].net = grouped[date].income - grouped[date].expense;
     });
 
     // Trier par date et prendre les 30 derniers jours
@@ -42,67 +45,202 @@ const FinancialChart = ({ transactions = [] }) => {
       .slice(-30);
   }, [transactions]);
 
-  // Afficher un message si pas de données
+  // Message si pas de données
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96 text-gray-500">
-        Aucune transaction à afficher
+      <div className="flex flex-col items-center justify-center h-96">
+        <div className="bg-slate-100 p-6 rounded-xl border-2 border-slate-300">
+          <p className="text-slate-600 font-semibold text-center mb-2">
+            📊 Aucune transaction à afficher
+          </p>
+          <p className="text-slate-500 text-sm text-center">
+            Les données apparaîtront ici une fois les transactions enregistrées
+          </p>
+        </div>
       </div>
     );
   }
 
+  // Custom Tooltip
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="
+          bg-white/95 backdrop-blur-sm 
+          border-2 border-slate-300 
+          rounded-xl p-4 
+          shadow-xl
+        ">
+          <p className="font-bold text-slate-900 mb-2 text-sm">
+            📅 {new Date(label).toLocaleDateString('fr-FR', { 
+              day: 'numeric', 
+              month: 'short', 
+              year: 'numeric' 
+            })}
+          </p>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold text-emerald-700">
+                ↗️ Revenus:
+              </span>
+              <span className="text-sm font-black text-emerald-900">
+                {parseFloat(payload[0]?.value || 0).toLocaleString('fr-FR')} Ar
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs font-semibold text-rose-700">
+                ↘️ Dépenses:
+              </span>
+              <span className="text-sm font-black text-rose-900">
+                {parseFloat(payload[1]?.value || 0).toLocaleString('fr-FR')} Ar
+              </span>
+            </div>
+            <div className="pt-2 mt-2 border-t-2 border-slate-200">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs font-semibold text-slate-700">
+                  💰 Net:
+                </span>
+                <span className={`text-sm font-black ${
+                  (payload[0]?.value - payload[1]?.value) >= 0 
+                    ? 'text-emerald-900' 
+                    : 'text-rose-900'
+                }`}>
+                  {((payload[0]?.value - payload[1]?.value) || 0).toLocaleString('fr-FR')} Ar
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart
+      <ComposedChart
         data={chartData}
-        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+        margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+        {/* Grille */}
+        <CartesianGrid 
+          strokeDasharray="3 3" 
+          stroke="#e2e8f0" 
+          vertical={false}
+        />
+        
+        {/* Axes */}
         <XAxis 
           dataKey="date" 
-          tick={{ fill: '#6b7280', fontSize: '12px' }}  // ✅ CORRIGÉ
+          tick={{ 
+            fill: '#64748b', 
+            fontSize: '11px',
+            fontWeight: 600
+          }}
+          tickLine={{ stroke: '#cbd5e1' }}
+          axisLine={{ stroke: '#cbd5e1' }}
           tickFormatter={(date) => {
             const d = new Date(date);
             return `${d.getDate()}/${d.getMonth() + 1}`;
           }}
         />
         <YAxis 
-          tick={{ fill: '#6b7280', fontSize: '12px' }}  // ✅ CORRIGÉ
-          tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-        />
-        <Tooltip 
-          contentStyle={{ 
-            backgroundColor: 'white', 
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+          tick={{ 
+            fill: '#64748b', 
+            fontSize: '11px',
+            fontWeight: 600
           }}
-          formatter={(value) => `${parseFloat(value).toLocaleString('fr-FR')} Ar`}
-          labelFormatter={(label) => `Date: ${label}`}
+          tickLine={{ stroke: '#cbd5e1' }}
+          axisLine={{ stroke: '#cbd5e1' }}
+          tickFormatter={(value) => {
+            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+            if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+            return value;
+          }}
         />
+        
+        {/* Tooltip personnalisé */}
+        <Tooltip content={<CustomTooltip />} />
+        
+        {/* Légende */}
         <Legend 
-          wrapperStyle={{ paddingTop: '10px' }}
+          wrapperStyle={{ 
+            paddingTop: '15px',
+            fontSize: '12px',
+            fontWeight: 600
+          }}
           iconType="line"
+          iconSize={16}
         />
+        
+        {/* Zone de fond pour les revenus (optionnel) */}
+        <defs>
+          <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
+            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+          </linearGradient>
+          <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1}/>
+            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        
+        {/* Aire de fond (optionnel - pour effet visuel) */}
+        <Area
+          type="monotone"
+          dataKey="income"
+          fill="url(#colorIncome)"
+          stroke="none"
+        />
+        <Area
+          type="monotone"
+          dataKey="expense"
+          fill="url(#colorExpense)"
+          stroke="none"
+        />
+        
+        {/* Ligne Revenus (Vert Émeraude) */}
         <Line 
           type="monotone" 
           dataKey="income" 
           stroke="#10b981" 
-          strokeWidth={2}
-          dot={{ fill: '#10b981', r: 4 }}
-          activeDot={{ r: 6 }}
-          name="Revenus"
+          strokeWidth={3}
+          dot={{ 
+            fill: '#10b981', 
+            strokeWidth: 2,
+            stroke: '#fff',
+            r: 5 
+          }}
+          activeDot={{ 
+            r: 7,
+            fill: '#059669',
+            stroke: '#fff',
+            strokeWidth: 3
+          }}
+          name="💰 Revenus"
         />
+        
+        {/* Ligne Dépenses (Rose) */}
         <Line 
           type="monotone" 
           dataKey="expense" 
-          stroke="#ef4444" 
-          strokeWidth={2}
-          dot={{ fill: '#ef4444', r: 4 }}
-          activeDot={{ r: 6 }}
-          name="Dépenses"
+          stroke="#f43f5e" 
+          strokeWidth={3}
+          dot={{ 
+            fill: '#f43f5e', 
+            strokeWidth: 2,
+            stroke: '#fff',
+            r: 5 
+          }}
+          activeDot={{ 
+            r: 7,
+            fill: '#e11d48',
+            stroke: '#fff',
+            strokeWidth: 3
+          }}
+          name="💸 Dépenses"
         />
-      </LineChart>
+      </ComposedChart>
     </ResponsiveContainer>
   );
 };

@@ -724,7 +724,7 @@ const handleProjectUpdated = async (projectId) => {
       />
     )}
 
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
+   <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-50">
       <Header
         onAddTransaction={() => setShowAdd(true)}
         onLogout={handleLogout}
@@ -768,76 +768,135 @@ const handleProjectUpdated = async (projectId) => {
 
              {/* --- 2. KPI CARDS --- */}
 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-  {/* Solde Total - 1 colonne */}
-  <StatCard
-    icon={Wallet}
-    label="Solde Total"
-    value={formatCurrency(totalBalance)}
-    color="indigo"
-  />
+  
+  {/* 1️⃣ Solde Total - Card Premium Noire */}
+  <div className="
+    bg-gradient-to-br from-slate-700 to-slate-900 
+    p-5 rounded-xl shadow-lg 
+    border-2 border-slate-600
+    hover:shadow-xl 
+    transition-all duration-300
+  ">
+    <div className="flex items-center gap-3 mb-3">
+      <div className="bg-slate-600 p-2.5 rounded-lg">
+        <Wallet className="w-5 h-5 text-white" strokeWidth={2.5} />
+      </div>
+      <h3 className="text-slate-300 text-xs font-bold uppercase tracking-wider">
+        Solde Total
+      </h3>
+    </div>
+    <p className="text-3xl font-black text-white tracking-tight">
+      {formatCurrency(totalBalance)}
+    </p>
+  </div>
 
-  {/* Encaissements - 1 colonne */}
+  {/* 2️⃣ Encaissements - Vert Émeraude */}
   <button
     onClick={() => openTransactionDetails("income")}
-    className="bg-gradient-to-br from-green-50 to-emerald-50 p-3 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left border-gray-700"
+    className="
+      bg-gradient-to-br from-emerald-50 to-teal-50 
+      p-5 rounded-xl shadow-md 
+      border-2 border-emerald-300
+      hover:shadow-lg hover:scale-[1.02] 
+      transition-all duration-300 
+      text-left
+    "
   >
-    <div className="flex items-center justify-between mb-1">
-      <div className="bg-green-100 p-1.5 rounded">
-        <TrendingUp className="w-3 h-3 text-green-600" />
+    <div className="flex items-center justify-between mb-2">
+      <div className="bg-emerald-100 p-2 rounded-lg">
+        <TrendingUp className="w-4 h-4 text-emerald-700" strokeWidth={2.5} />
       </div>
-      <span className="text-lg font-bold text-green-600">
+      <span className="text-sm font-extrabold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-md">
         {transactionStats.income} trx
       </span>
     </div>
-    <h3 className="text-gray-600 text-xs font-bold mb-1">Encaissements</h3>
-    <p className="text-2xl font-bold text-green-600">{formatCurrency(income)}</p>
+    <h3 className="text-emerald-700 text-[10px] font-bold mb-1.5 uppercase tracking-widest">
+      Encaissements
+    </h3>
+    <p className="text-2xl font-black text-emerald-900">
+      {formatCurrency(income)}
+    </p>
   </button>
 
-  {/* Dépenses - 1 colonne */}
+  {/* 3️⃣ Dépenses - Rose Doux */}
   <button
     onClick={() => openTransactionDetails("expense")}
-    className="bg-gradient-to-br from-red-50 to-rose-50 p-3 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+    className="
+      bg-gradient-to-br from-rose-50 to-pink-50 
+      p-5 rounded-xl shadow-md 
+      border-2 border-rose-300
+      hover:shadow-lg hover:scale-[1.02] 
+      transition-all duration-300 
+      text-left
+    "
   >
-    <div className="flex items-center justify-between mb-1">
-      <div className="bg-red-100 p-1.5 rounded">
-        <TrendingDown className="w-3 h-3 text-red-600" />
+    <div className="flex items-center justify-between mb-2">
+      <div className="bg-rose-100 p-2 rounded-lg">
+        <TrendingDown className="w-4 h-4 text-rose-700" strokeWidth={2.5} />
       </div>
-      <span className="text-lg font-bold text-red-600">
+      <span className="text-sm font-extrabold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-md">
         {transactionStats.expense} trx
       </span>
     </div>
-    <h3 className="text-gray-600 text-xs font-bold mb-1">Dépenses</h3>
-    <p className="text-2xl font-bold text-red-600">{formatCurrency(expense)}</p>
+    <h3 className="text-rose-700 text-[10px] font-bold mb-1.5 uppercase tracking-widest">
+      Dépenses
+    </h3>
+    <p className="text-2xl font-black text-rose-900">
+      {formatCurrency(expense)}
+    </p>
   </button>
 
-  {/* MY TEAM - 1 colonne */}
+  {/* 4️⃣ MY TEAM - Bleu Professionnel */}
   <button
     onClick={() => setActiveTab('hr')}
-    className="bg-lime-200 p-4 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+    className="
+      bg-gradient-to-br from-blue-50 to-indigo-50 
+      p-5 rounded-xl shadow-md 
+      border-2 border-blue-300
+      hover:shadow-lg hover:scale-[1.02] 
+      transition-all duration-300 
+      text-left
+    "
   >
     <div className="flex items-center justify-center mb-2">
-      <div className="bg-purple-100 p-2 rounded-lg">
-        <Briefcase className="w-4 h-4 text-purple-600" />
+      <div className="bg-blue-100 p-2.5 rounded-lg">
+        <Briefcase className="w-5 h-5 text-blue-700" strokeWidth={2.5} />
       </div>
     </div>
-    <h3 className="text-gray-600 text-xs font-bold mb-1 text-center">Ressources Humaines</h3>
-    <p className="text-xl font-bold text-blue-600 text-center">MY TEAM</p>
+    <h3 className="text-blue-700 text-[10px] font-bold mb-1.5 text-center uppercase tracking-widest">
+      Ressources Humaines
+    </h3>
+    <p className="text-xl font-black text-blue-900 text-center">
+      MY TEAM
+    </p>
   </button>
 
-  {/* VISION & OBJECTIFS - 1 colonne */}
+  {/* 5️⃣ VISION & OBJECTIFS - Ambre Chaleureux */}
   <button
     onClick={() => setActiveTab('vision')}
-    className="bg-pink-400 p-4 rounded-lg shadow hover:shadow-lg transition-all transform hover:scale-105 text-left"
+    className="
+      bg-gradient-to-br from-amber-50 to-orange-50 
+      p-5 rounded-xl shadow-md 
+      border-2 border-amber-300
+      hover:shadow-lg hover:scale-[1.02] 
+      transition-all duration-300 
+      text-left
+    "
   >
     <div className="flex items-center justify-center mb-2">
-      <div className="bg-gradient-to-br from-purple-100 to-pink-100 p-2 rounded-lg">
-        <Target className="w-4 h-4 text-purple-600" />
+      <div className="bg-amber-100 p-2.5 rounded-lg">
+        <Target className="w-5 h-5 text-amber-700" strokeWidth={2.5} />
       </div>
     </div>
-    <h3 className="text-gray-600 text-xs font-bold mb-1 text-center">Stratégie & Croissance</h3>
-    <p className="text-xl font-bold text-indigo-600 text-center">VISION & OBJECTIFS</p>
+    <h3 className="text-amber-700 text-[10px] font-bold mb-1.5 text-center uppercase tracking-widest">
+      Stratégie & Croissance
+    </h3>
+    <p className="text-xl font-black text-amber-900 text-center">
+      VISION & OBJECTIFS
+    </p>
   </button>
 </div>
+
 
               {/* --- 3. PREVISIONS --- */}
             <TreasuryForecast 

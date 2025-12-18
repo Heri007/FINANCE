@@ -6,7 +6,7 @@ export function Navigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: "overview", label: "Vue d'ensemble" },
     { id: "transactions", label: "Transactions" },
-    { id: "receivables", label: "Receivables" },    // ✅ Renommé
+    { id: "receivables", label: "Receivables" }, 
   ];
 
   return (
@@ -23,7 +23,7 @@ export function Navigation({ activeTab, onTabChange }) {
                   "px-4 py-2 rounded-full text-sm font-medium transition-all",
                   isActive
                     ? "bg-indigo-600 text-white shadow"
-                    : "text-gray-600 hover:bg-gray-100"
+                    : "text-gray-600 hover:bg-indigo-200"
                 ].join(" ")}
               >
                 {tab.label}

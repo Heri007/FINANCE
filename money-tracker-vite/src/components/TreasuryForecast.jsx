@@ -78,97 +78,193 @@ const TreasuryForecast = ({ accounts = [], projects = [] }) => {
   };
 
   return (
-    <section
-      className="
-  mt-6 rounded-xl border-2 border-[#2c2c2c] p-4 
-  shadow-[0_10px_30px_-10px_rgba(218,165,32,0.6)]
-  relative overflow-hidden
-  bg-[#f7eae5]
-"
->
-  {/* Texture métal brossé subtile */}
-  <div
-    className="
-      pointer-events-none absolute inset-0 opacity-[0.15]
-      [background:repeating-linear-gradient(115deg,transparent_0px,transparent_2px,rgba(101,67,33,0.3)_2px,rgba(101,67,33,0.3)_4px)]
-      mix-blend-overlay
-    "
-  />
+    <section className="
+      mt-6 rounded-xl border-2 border-slate-400 p-5 
+      shadow-lg
+      relative overflow-hidden
+      bg-gradient-to-br from-slate-100 to-slate-200
+    ">
+      {/* Texture subtile (optionnel - peut être supprimé pour plus de sobriété) */}
+      <div className="
+        pointer-events-none absolute inset-0 opacity-[0.08]
+        [background:repeating-linear-gradient(45deg,transparent_0px,transparent_2px,rgba(71,85,105,0.4)_2px,rgba(71,85,105,0.4)_4px)]
+        mix-blend-overlay
+      " />
 
-      {/* Header compact avec effet métallisé */}
-      <div className="flex items-center justify-between mb-3 relative">
-        <div className="flex items-center gap-2">
-          <div className="bg-slate-400/80 p-1.5 rounded-lg shadow-inner">
-            <TrendingUp className="w-4 h-4 text-white" />
+      {/* Header avec icône et badge projets */}
+      <div className="flex items-center justify-between mb-4 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="bg-slate-600 p-2 rounded-lg shadow-md">
+            <TrendingUp className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
-          <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide drop-shadow-sm">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
             Prévisions Complètes
           </h3>
         </div>
         
-        <span className="text-xs font-extrabold text-green-900 bg-green-100/90 border border-green-200/60 px-3 py-1.5 rounded-md shadow-sm backdrop-blur-sm">
+        <span className="
+          text-xs font-extrabold 
+          text-emerald-900 bg-emerald-100 
+          border-2 border-emerald-300 
+          px-3 py-1.5 rounded-lg 
+          shadow-sm
+        ">
           {activeProjects.length} PROJET{activeProjects.length > 1 ? 'S' : ''} ACTIF{activeProjects.length > 1 ? 'S' : ''}
         </span>
       </div>
 
-      {/* Grille compacte 4 colonnes avec effet verre sur métal */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative">
-        {/* 1. Solde Actuel (Coffre) */}
-        <div className="bg-white/70 backdrop-blur-sm rounded-lg p-3 border border-slate-300 shadow-md">
-          <p className="text-xs text-slate-600 font-bold mb-1">SOLDE ACTUEL</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre)</p>
-          <p className="text-lg font-bold text-slate-900">{formatCurrency(solde1_Coffre)}</p>
+      {/* Grille 4 colonnes - Soldes progressifs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 relative z-10">
+        
+        {/* 1️⃣ Solde Actuel (Coffre seul) */}
+        <div className="
+          bg-white/90 backdrop-blur-sm 
+          rounded-xl p-4 
+          border-2 border-slate-300 
+          shadow-md hover:shadow-lg 
+          transition-all
+        ">
+          <p className="text-[10px] text-slate-600 font-bold mb-1 uppercase tracking-widest">
+            Solde Actuel
+          </p>
+          <p className="text-xs font-semibold text-slate-500 mb-1.5">
+            (Coffre)
+          </p>
+          <p className="text-xl font-black text-slate-900">
+            {formatCurrency(solde1_Coffre)}
+          </p>
         </div>
 
-        {/* 2. Coffre + Receivables */}
-        <div className="bg-white/70 backdrop-blur-sm rounded-lg p-3 border border-green-200 shadow-md">
-          <p className="text-xs text-slate-600 font-bold mb-1">+ CREANCES</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre + Receivables)</p>
-          <p className="text-lg font-bold text-green-800">{formatCurrency(solde2_CoffreReceivables)}</p>
+        {/* 2️⃣ Coffre + Receivables */}
+        <div className="
+          bg-gradient-to-br from-emerald-50 to-teal-50 
+          backdrop-blur-sm 
+          rounded-xl p-4 
+          border-2 border-emerald-300 
+          shadow-md hover:shadow-lg 
+          transition-all
+        ">
+          <p className="text-[10px] text-emerald-700 font-bold mb-1 uppercase tracking-widest">
+            + Créances
+          </p>
+          <p className="text-xs font-semibold text-emerald-600 mb-1.5">
+            (Coffre + Receivables)
+          </p>
+          <p className="text-xl font-black text-emerald-900">
+            {formatCurrency(solde2_CoffreReceivables)}
+          </p>
         </div>
 
-        {/* 3. Coffre + Receivables + Projets */}
-        <div className="bg-gradient-to-br from-purple-100/80 to-pink-100/80 backdrop-blur-sm rounded-lg p-3 border border-purple-300 shadow-md">
-          <p className="text-xs text-slate-600 font-bold mb-1">+ PROJETS</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(Coffre+Receivables+Projets)</p>
-          <p className="text-lg font-bold text-purple-800">{formatCurrency(solde3_CoffreReceivablesProjets)}</p>
+        {/* 3️⃣ Coffre + Receivables + Projets */}
+        <div className="
+          bg-gradient-to-br from-blue-50 to-indigo-50 
+          backdrop-blur-sm 
+          rounded-xl p-4 
+          border-2 border-blue-300 
+          shadow-md hover:shadow-lg 
+          transition-all
+        ">
+          <p className="text-[10px] text-blue-700 font-bold mb-1 uppercase tracking-widest">
+            + Projets
+          </p>
+          <p className="text-xs font-semibold text-blue-600 mb-1.5">
+            (Coffre+Receivables+Projets)
+          </p>
+          <p className="text-xl font-black text-blue-900">
+            {formatCurrency(solde3_CoffreReceivablesProjets)}
+          </p>
         </div>
 
-        {/* 4. Solde Total (Tous les comptes) */}
-        <div className="bg-gradient-to-br from-indigo-100/80 to-blue-100/80 backdrop-blur-sm rounded-lg p-3 border-2 border-indigo-400 shadow-lg">
-          <p className="text-xs text-indigo-700 font-bold mb-1">SOLDE TOTAL</p>
-          <p className="text-sm font-medium text-red-500 mb-0.5">(+ Autres Comptes)</p>
-          <p className="text-xl font-bold text-indigo-900">{formatCurrency(solde4_Total)}</p>
+        {/* 4️⃣ Solde Total (Tous comptes) */}
+        <div className="
+          bg-gradient-to-br from-slate-700 to-slate-900 
+          backdrop-blur-sm 
+          rounded-xl p-4 
+          border-2 border-slate-600 
+          shadow-xl hover:shadow-2xl 
+          transition-all
+        ">
+          <p className="text-[10px] text-slate-300 font-bold mb-1 uppercase tracking-widest">
+            Solde Total
+          </p>
+          <p className="text-xs font-semibold text-slate-400 mb-1.5">
+            (+ Autres Comptes)
+          </p>
+          <p className="text-2xl font-black text-white">
+            {formatCurrency(solde4_Total)}
+          </p>
         </div>
       </div>
 
-      {/* Détails des ajouts avec effet verre */}
-      <div className="mt-3 grid grid-cols-3 gap-2 text-xs relative">
-        <div className="bg-red-50 backdrop-blur-sm rounded px-2 py-1 flex justify-between border border-slate-200">
+      {/* Détails des composants (ligne compacte) */}
+      <div className="mt-4 grid grid-cols-3 gap-2 text-xs relative z-10">
+        
+        {/* Receivables */}
+        <div className="
+          bg-gradient-to-r from-pink-100 to-rose-100 
+          backdrop-blur-sm 
+          rounded-lg px-3 py-2 
+          flex justify-between items-center
+          border border-pink-200 
+          shadow-sm
+        ">
           <span className="text-slate-700 font-bold">+ Receivables:</span>
-          <span className="font-bold text-green-700">{formatCurrency(receivables)}</span>
+          <span className="font-black text-pink-700">
+            {formatCurrency(receivables)}
+          </span>
         </div>
-        <div className="bg-yellow-50 backdrop-blur-sm rounded px-2 py-1 flex justify-between border border-slate-200">
+
+        {/* Projets */}
+        <div className="
+          bg-gradient-to-r from-amber-100 to-yellow-100 
+          backdrop-blur-sm 
+          rounded-lg px-3 py-2 
+          flex justify-between items-center
+          border border-amber-200 
+          shadow-sm
+        ">
           <span className="text-slate-700 font-bold">+ Projets:</span>
-          <span className={`font-bold ${totalNetProfitDb >= 0 ? 'text-purple-700' : 'text-red-700'}`}>
+          <span className={`font-black ${totalNetProfitDb >= 0 ? 'text-blue-700' : 'text-rose-700'}`}>
             {formatCurrency(totalNetProfitDb)}
           </span>
         </div>
-        <div className="bg-blue-200 backdrop-blur-sm rounded px-2 py-1 flex justify-between border border-slate-200">
+
+        {/* Autres comptes */}
+        <div className="
+          bg-gradient-to-r from-cyan-100 to-blue-100 
+          backdrop-blur-sm 
+          rounded-lg px-3 py-2 
+          flex justify-between items-center
+          border border-cyan-200 
+          shadow-sm
+        ">
           <span className="text-slate-700 font-bold">+ Autres:</span>
-          <span className="font-bold text-blue-700">{formatCurrency(autresComptes)}</span>
+          <span className="font-black text-cyan-700">
+            {formatCurrency(autresComptes)}
+          </span>
         </div>
       </div>
 
-      {/* Flèche de progression */}
-      <div className="mt-3 flex items-center justify-center gap-2 text-large text-slate-700 relative">
-        <span className="font-extrabold text-slate-900">{formatCurrency(solde1_Coffre)}</span>
-        <ArrowRight className="w-3 h-3" />
-        <span className="font-extrabold text-green-800">{formatCurrency(solde2_CoffreReceivables)}</span>
-        <ArrowRight className="w-3 h-3" />
-        <span className="font-extrabold text-purple-800">{formatCurrency(solde3_CoffreReceivablesProjets)}</span>
-        <ArrowRight className="w-3 h-3" />
-        <span className="font-extrabold text-red-400">{formatCurrency(solde4_Total)}</span>
+      {/* Flèche de progression visuelle */}
+      <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-700 relative z-10">
+        <span className="font-black text-slate-900 px-2 py-1 bg-white/60 rounded-md">
+          {formatCurrency(solde1_Coffre)}
+        </span>
+        <ArrowRight className="w-4 h-4 text-slate-500" strokeWidth={3} />
+        
+        <span className="font-black text-emerald-800 px-2 py-1 bg-emerald-100/60 rounded-md">
+          {formatCurrency(solde2_CoffreReceivables)}
+        </span>
+        <ArrowRight className="w-4 h-4 text-slate-500" strokeWidth={3} />
+        
+        <span className="font-black text-blue-800 px-2 py-1 bg-blue-100/60 rounded-md">
+          {formatCurrency(solde3_CoffreReceivablesProjets)}
+        </span>
+        <ArrowRight className="w-4 h-4 text-slate-500" strokeWidth={3} />
+        
+        <span className="font-black text-white px-2 py-1 bg-slate-800 rounded-md shadow-md">
+          {formatCurrency(solde4_Total)}
+        </span>
       </div>
     </section>
   );

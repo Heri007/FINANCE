@@ -1,6 +1,6 @@
 // src/components/transactions/CategoryBreakdown.jsx
 import React, { useMemo, useState } from 'react';
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 import { categoryIcons } from '../../utils/constants';
 
@@ -31,26 +31,36 @@ const CategoryTransactionsModal = ({
   const total = transactions.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0);
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-slate-300">
         
         {/* Header */}
-        <div className={`p-6 border-b border-gray-100 bg-gradient-to-r ${
-          type === 'income' ? 'from-green-50 to-emerald-50' : 'from-red-50 to-rose-50'
+        <div className={`p-6 border-b-2 border-slate-200 bg-gradient-to-r ${
+          type === 'income' 
+            ? 'from-emerald-50 to-teal-50' 
+            : 'from-rose-50 to-pink-50'
         }`}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl ${
-                type === 'income' ? 'bg-green-100' : 'bg-red-100'
-              }`}>
+              <div className={`
+                w-16 h-16 
+                rounded-2xl 
+                flex items-center justify-center 
+                text-3xl
+                border-2
+                ${type === 'income' 
+                  ? 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-300' 
+                  : 'bg-gradient-to-br from-rose-100 to-pink-100 border-rose-300'
+                }
+              `}>
                 {categoryIcons[category] || '📦'}
               </div>
               
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">
+                <h2 className="text-2xl font-black text-slate-900">
                   {category}
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-slate-600 mt-1 font-semibold">
                   {transactions.length} transaction{transactions.length > 1 ? 's' : ''} • {formatCurrency(total)}
                 </p>
               </div>
@@ -58,15 +68,22 @@ const CategoryTransactionsModal = ({
 
             <button
               onClick={onClose}
-              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              className="
+                p-2.5 
+                hover:bg-slate-100 
+                rounded-lg 
+                transition-all
+                border-2 border-transparent
+                hover:border-slate-300
+              "
             >
-              <X className="w-6 h-6 text-gray-600" />
+              <X className="w-6 h-6 text-slate-600" strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
         {/* Liste des transactions scrollable */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           <div className="space-y-2">
             {transactions.map((tx) => (
               <div
@@ -75,25 +92,55 @@ const CategoryTransactionsModal = ({
                   onClose();
                   if (onTransactionClick) onTransactionClick(tx);
                 }}
-                className="flex justify-between items-center p-4 hover:bg-gray-50 rounded-xl cursor-pointer transition-all border border-gray-100 hover:border-gray-200 hover:shadow-sm"
+                className="
+                  flex justify-between items-center 
+                  p-4 
+                  hover:bg-slate-50 
+                  rounded-xl 
+                  cursor-pointer 
+                  transition-all duration-200
+                  border-2 border-transparent
+                  hover:border-slate-200 
+                  hover:shadow-md
+                  group
+                "
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800 truncate">
+                  <p className="font-bold text-slate-900 truncate">
                     {tx.description || tx.category}
                   </p>
-                  <p className="text-sm text-gray-500 truncate">
+                  <p className="text-sm text-slate-600 truncate font-semibold">
                     {formatDate(tx.transactiondate || tx.date || tx.transaction_date)}
                   </p>
                 </div>
                 
                 <div className="text-right ml-4 flex-shrink-0">
-                  <p className={`font-bold text-lg ${
-                    type === 'income' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
-                  </p>
+                  <div className="flex items-center justify-end gap-2">
+                    {type === 'income' ? (
+                      <ArrowUpRight className="text-emerald-600" size={18} strokeWidth={3} />
+                    ) : (
+                      <ArrowDownRight className="text-rose-600" size={18} strokeWidth={3} />
+                    )}
+                    <p className={`
+                      font-black text-lg tracking-tight
+                      ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
+                    `}>
+                      {type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    </p>
+                  </div>
                   {!tx.is_posted && !tx.isposted && (
-                    <span className="text-xs text-orange-500">⚠ Non validé</span>
+                    <span className="
+                      inline-flex items-center gap-1
+                      text-xs font-bold 
+                      text-amber-700 
+                      bg-amber-100 
+                      border border-amber-300
+                      px-2 py-0.5 
+                      rounded-md 
+                      mt-1
+                    ">
+                      ⚠ Non validé
+                    </span>
                   )}
                 </div>
               </div>
@@ -102,12 +149,13 @@ const CategoryTransactionsModal = ({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-100 p-6 bg-gray-50">
+        <div className="border-t-2 border-slate-200 p-6 bg-slate-50">
           <div className="flex justify-between items-center">
-            <span className="text-gray-700 font-semibold">Total</span>
-            <span className={`text-2xl font-bold ${
-              type === 'income' ? 'text-green-600' : 'text-red-600'
-            }`}>
+            <span className="text-slate-700 font-bold text-base">Total</span>
+            <span className={`
+              text-3xl font-black tracking-tight
+              ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
+            `}>
               {formatCurrency(total)}
             </span>
           </div>
@@ -121,7 +169,7 @@ const CategoryTransactionsModal = ({
 export default function CategoryBreakdown({ 
   transactions = [], 
   type = 'expense',
-  onTransactionClick  // ✅ Nouveau prop
+  onTransactionClick
 }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -158,12 +206,24 @@ export default function CategoryBreakdown({
 
   if (breakdown.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
-        <h3 className="text-lg font-bold text-gray-800 mb-4">
-          Répartition par catégorie
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-slate-200 p-8">
+        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+          📊 Répartition par catégorie
         </h3>
-        <div className="text-center text-gray-500 py-8">
-          Aucune {type === 'expense' ? 'dépense' : 'revenu'} à afficher.
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="
+            bg-slate-100 
+            w-20 h-20 
+            rounded-full 
+            flex items-center justify-center 
+            mb-4
+            border-2 border-slate-300
+          ">
+            <span className="text-4xl">📭</span>
+          </div>
+          <p className="text-slate-600 font-semibold">
+            Aucune {type === 'expense' ? 'dépense' : 'revenu'} à afficher
+          </p>
         </div>
       </div>
     );
@@ -171,33 +231,46 @@ export default function CategoryBreakdown({
 
   return (
     <>
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-slate-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
+        
         {/* Header fixe */}
-        <div className="p-6 pb-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-purple-50">
+        <div className={`
+          p-6 pb-4 
+          border-b-2 border-slate-200 
+          bg-gradient-to-r 
+          ${type === 'income' 
+            ? 'from-emerald-50 to-teal-50' 
+            : 'from-rose-50 to-pink-50'
+          }
+        `}>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-bold text-gray-800">
-                Transaction par catégorie
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                📊 Transaction par catégorie
               </h3>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-slate-600 mt-1 font-semibold">
                 {breakdown.length} {breakdown.length > 1 ? 'catégories' : 'catégorie'} • {formatCurrency(total)}
               </p>
             </div>
             
-            <div className={`p-3 rounded-xl ${
-              type === 'income' ? 'bg-green-100' : 'bg-red-100'
-            }`}>
+            <div className={`
+              p-3 rounded-xl border-2
+              ${type === 'income' 
+                ? 'bg-emerald-100 border-emerald-300' 
+                : 'bg-rose-100 border-rose-300'
+              }
+            `}>
               {type === 'income' ? (
-                <TrendingUp className={`w-6 h-6 ${type === 'income' ? 'text-green-600' : 'text-red-600'}`} />
+                <TrendingUp className="w-6 h-6 text-emerald-700" strokeWidth={2.5} />
               ) : (
-                <TrendingDown className={`w-6 h-6 text-red-600`} />
+                <TrendingDown className="w-6 h-6 text-rose-700" strokeWidth={2.5} />
               )}
             </div>
           </div>
         </div>
 
         {/* Conteneur avec scroll indépendant */}
-        <div className="overflow-y-auto max-h-96 p-6 pt-4">
+        <div className="overflow-y-auto max-h-96 p-6 pt-4 custom-scrollbar">
           <div className="space-y-3">
             {breakdown.map(item => {
               const percentage = total > 0 ? ((item.total / total) * 100).toFixed(1) : 0;
@@ -206,29 +279,81 @@ export default function CategoryBreakdown({
                 <button
                   key={item.category}
                   onClick={() => setSelectedCategory(item)}
-                  className="w-full bg-gray-50 rounded-xl p-3 hover:bg-gray-100 transition-all cursor-pointer text-left hover:shadow-md"
+                  className="
+                    w-full 
+                    bg-slate-50 
+                    rounded-xl 
+                    p-4 
+                    hover:bg-slate-100 
+                    transition-all duration-200
+                    cursor-pointer 
+                    text-left 
+                    hover:shadow-md
+                    border-2 border-transparent
+                    hover:border-slate-200
+                    group
+                  "
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xl">{categoryIcons[item.category] || '📦'}</span>
-                      <span className="font-medium text-gray-800">{item.category}</span>
-                      <span className="text-xs text-gray-500">
-                        ({item.transactions.length} trx)
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="
+                        text-2xl 
+                        group-hover:scale-110 
+                        transition-transform duration-200
+                      ">
+                        {categoryIcons[item.category] || '📦'}
                       </span>
+                      <div>
+                        <span className="font-bold text-slate-900 text-base">
+                          {item.category}
+                        </span>
+                        <span className="
+                          text-xs 
+                          text-slate-600 
+                          ml-2 
+                          bg-slate-200 
+                          px-2 py-0.5 
+                          rounded-md
+                          font-semibold
+                        ">
+                          {item.transactions.length} trx
+                        </span>
+                      </div>
                     </div>
+                    
                     <div className="text-right">
-                      <span className={`font-bold ${type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {formatCurrency(item.total)}
-                      </span>
-                      <span className="text-sm text-gray-500 ml-2">
-                        {percentage}%
-                      </span>
+                      <div className="flex items-baseline gap-2">
+                        <span className={`
+                          font-black text-lg tracking-tight
+                          ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
+                        `}>
+                          {formatCurrency(item.total)}
+                        </span>
+                        <span className="
+                          text-sm 
+                          font-bold 
+                          text-slate-500
+                          bg-slate-200
+                          px-2 py-0.5
+                          rounded-md
+                        ">
+                          {percentage}%
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  
                   {/* Barre de progression */}
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
                     <div 
-                      className={`h-full transition-all duration-500 ${type === 'income' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                      className={`
+                        h-full 
+                        transition-all duration-500 
+                        ${type === 'income' 
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
+                          : 'bg-gradient-to-r from-rose-500 to-pink-500'
+                        }
+                      `}
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -239,10 +364,15 @@ export default function CategoryBreakdown({
         </div>
 
         {/* Footer fixe */}
-        <div className="border-t border-gray-100 p-6 pt-4 bg-gray-50">
-          <div className="flex justify-between items-center font-bold">
-            <span className="text-gray-800">Total des {type === 'expense' ? 'dépenses' : 'revenus'}</span>
-            <span className={`text-xl ${type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+        <div className="border-t-2 border-slate-200 p-6 pt-4 bg-slate-50">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-800 font-bold text-base">
+              Total des {type === 'expense' ? 'dépenses' : 'revenus'}
+            </span>
+            <span className={`
+              text-2xl font-black tracking-tight
+              ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
+            `}>
               {formatCurrency(total)}
             </span>
           </div>
