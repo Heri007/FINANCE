@@ -1,10 +1,8 @@
-// src/components/ImportModal.jsx - VERSION AVEC SIGNATURE LOCALE ANTI-DOUBLONS
+// src/components/ImportModal.jsx - VERSION AUTOMATIQUE AVEC LAST_IMPORT_DATE
 
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import { parseJSONSafe, normalizeDate } from './domain/finance/parsers';
 import { buildTransactionSignature } from './domain/finance/signature';
-import { receivablesService } from './services/receivablesService';
 
 const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -48,9 +46,6 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
       redotpay: 6
     };
 
-    // ⚠️ Idéalement: injecter CUTOFF_DATE par compte depuis le backend
-    // const CUTOFF_DATE = '2025-12-10';
-
     // 1) Mapping fichiers → comptes
     const fileMappings = {};
 
@@ -70,7 +65,13 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
         const account = accounts.find(a => a.id === explicitId);
         if (account) {
           fileMappings[file.name] = explicitId;
-          addLog(`✅ ${file.name} → ${account.name} (ID ${explicitId})`, 'success');
+          
+          // ✅ Afficher last_import_date si disponible
+          const lastImport = account.last_import_date 
+            ? ` (Dernier import: ${account.last_import_date})`
+            : '';
+          
+          addLog(`✅ ${file.name} → ${account.name} (ID ${explicitId})${lastImport}`, 'success');
           return;
         }
       }
@@ -85,7 +86,12 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
       if (matchedAccount) {
         fileMappings[file.name] = matchedAccount.id;
-        addLog(`✅ ${file.name} → ${matchedAccount.name} (auto-détecté)`, 'success');
+        
+        const lastImport = matchedAccount.last_import_date 
+          ? ` (Dernier import: ${matchedAccount.last_import_date})`
+          : '';
+        
+        addLog(`✅ ${file.name} → ${matchedAccount.name}${lastImport}`, 'success');
       } else {
         addLog(`⚠️ ${file.name} → Aucun compte correspondant`, 'warning');
       }
@@ -188,10 +194,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
                   return null;
                 }
 
-                // Filtre date de coupure
-                //if (cleanDate <= CUTOFF_DATE) {
-                //  return null;
-               // }
+                // ✅ Le filtrage par date se fait maintenant côté backend avec last_import_date
 
                 return {
                   accountId: targetAccountId,
@@ -219,7 +222,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
     if (allTransactions.length === 0) {
       addLog('⚠️ Aucune transaction valide trouvée', 'warning');
-      alert('Aucune transaction valide trouvée dans les fichiers (ou toutes avant la date de coupure)');
+      alert('Aucune transaction valide trouvée dans les fichiers');
       setIsImporting(false);
       return;
     }
@@ -236,10 +239,10 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
     addLog(`📊 Total extrait: ${allTransactions.length} transactions`);
     addLog(`🧹 Après dédoublonnage local: ${uniqueTransactions.length} transactions`);
-    addLog('🔄 Vérification des doublons côté serveur en cours...');
+    addLog('🔄 Envoi au serveur en cours...');
 
     try {
-      await onImport(uniqueTransactions); // le backend élimine aussi ce qui est déjà en base
+      await onImport(uniqueTransactions);
       addLog('✅ Import terminé avec succès !', 'success');
 
       setTimeout(() => {
@@ -253,7 +256,6 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     }
   };
 
-  // ✅ FONCTION HELPER: Créer signature locale
   const createLocalSig = (t) => {
     return buildTransactionSignature({
       accountId: t.accountId,
@@ -265,9 +267,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     });
   };
 
-// transactions bulk creation is handled via onImport(...) inside handleImport,
-// so we must not perform await calls during render; keep rendering the component.
-return (
+  return (
     <div 
       style={{
         position: 'fixed',
@@ -305,7 +305,7 @@ return (
           paddingBottom: '15px',
           borderBottom: '2px solid #e0e0e0'
         }}>
-          <h2 style={{ margin: 0 }}>Import CSV Incrémental</h2>
+          <h2 style={{ margin: 0 }}>Import CSV Automatique</h2>
           <button
             style={{
               background: 'none',
@@ -385,11 +385,13 @@ return (
             maxHeight: '300px'
           }}>
             {logs.map((log, index) => (
-              <div key={index} style={{
+                            <div key={index} style={{
                 padding: '4px 0',
                 color: log.type === 'error' ? '#d32f2f' :
                        log.type === 'warning' ? '#f57c00' :
-                       log.type === 'success' ? '#388e3c' : '#333'
+                       log.type === 'success' ? '#388e3c' :
+                       log.type === 'transfer' ? '#0288d1' :
+                       '#333'
               }}>
                 <span style={{ color: '#999', marginRight: '8px' }}>{log.time}</span>
                 {log.msg}
@@ -412,8 +414,8 @@ return (
               <li>Le nom du fichier doit correspondre au nom d'un compte</li>
               <li>Colonnes détectées automatiquement: DATE, MONTANT, DESCRIPTION, CATÉGORIE</li>
               <li><strong>Les doublons sont ignorés automatiquement</strong></li>
-              <li>Seules les nouvelles transactions seront importées</li>
-              <li>Les lignes antérieures ou égales au 2025‑12‑03 sont ignorées (évite les doublons avec le backup)</li>
+              <li><strong>Seules les transactions postérieures au dernier import sont acceptées</strong></li>
+              <li>Le système met à jour automatiquement la date du dernier import</li>
             </ul>
           </div>
         )}

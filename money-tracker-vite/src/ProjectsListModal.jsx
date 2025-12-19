@@ -125,6 +125,40 @@ export function ProjectsListModal({
   // 8. ✅ Solde TOTAL GÉNÉRAL après terminaison de tous les projets
   const totalBalanceAfterCompletion = totalBalanceAllAccounts + totalNetProfitDb;
 
+  const getStatusBadge = (status) => {
+  const badges = {
+    active: { 
+      label: 'Actif', 
+      color: 'bg-green-100 text-green-800 border-green-200' 
+    },
+    draft: { 
+      label: 'Brouillon', 
+      color: 'bg-gray-100 text-gray-800 border-gray-200' 
+    },
+    paused: { 
+      label: 'En pause', 
+      color: 'bg-orange-100 text-orange-800 border-orange-200' 
+    },
+    completed: { 
+      label: '✅ Terminé', 
+      color: 'bg-blue-100 text-blue-800 border-blue-200' 
+    },
+    archived: { 
+      label: 'Archivé', 
+      color: 'bg-purple-100 text-purple-800 border-purple-200' 
+    },
+  };
+  
+  const badge = badges[status] || badges.draft;
+  
+  return (
+    <span className={`px-2 py-1 text-xs font-medium rounded-full border ${badge.color}`}>
+      {badge.label}
+    </span>
+  );
+};
+
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col h-[90vh]">
@@ -322,6 +356,28 @@ export function ProjectsListModal({
       <CheckCircle className="w-5 h-5" />
     </button>
     )}
+    {/* Bouton Compléter (seulement si actif) */}
+      {project.status === 'active' && (
+        <button
+          onClick={async () => {
+            if (!window.confirm(`Marquer "${project.name}" comme terminé ?\n\nCette action va :\n- Changer le statut en "completed"\n- Définir la date de fin à aujourd'hui\n- Exclure le projet des calculs actifs`)) {
+              return;
+            }
+            
+            try {
+              await onCompleteProject(project.id);
+              alert('✅ Projet complété avec succès !');
+            } catch (e) {
+              alert('❌ Erreur: ' + e.message);
+            }
+          }}
+          className="p-2 text-green-600 hover:bg-green-50 rounded"
+          title="Marquer comme terminé"
+        >
+          <CheckCircle size={16} />
+        </button>
+      )}
+
   <button 
     onClick={() => onDeleteProject(project.id)} 
     className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 

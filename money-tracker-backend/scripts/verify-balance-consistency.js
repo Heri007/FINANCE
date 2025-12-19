@@ -79,6 +79,22 @@ async function verifyBalanceConsistency() {
           });
         } else {
           console.log(`   ✅ Cohérent avec receivables`);
+          
+          // Vérifier l'écart avec transactions (pour info)
+          const txResult = await client.query(`
+            SELECT 
+              COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) as tx_balance
+            FROM transactions
+            WHERE account_id = $1 AND is_posted = true
+          `, [account.id]);
+          
+          const txBalance = parseFloat(txResult.rows[0].tx_balance || 0);
+          const txDiff = Math.abs(receivablesTotal - txBalance);
+          
+          if (txDiff > 1) {
+            console.log(`\n   ℹ️  Info: Écart transactions vs receivables = ${formatCurrency(txDiff)}`);
+            console.log(`      (Créances migrées sans transactions correspondantes)`);
+          }
         }
 
         // Lister les receivables avec détails
@@ -90,6 +106,7 @@ async function verifyBalanceConsistency() {
             description,
             status,
             source_account_id,
+            account_id,
             created_at
           FROM receivables
           ORDER BY status DESC, created_at DESC
@@ -98,17 +115,21 @@ async function verifyBalanceConsistency() {
         if (receivablesList.rows.length > 0) {
           const openCount = receivablesList.rows.filter(r => r.status === 'open').length;
           const closedCount = receivablesList.rows.filter(r => r.status === 'closed').length;
+          const openReceivables = receivablesList.rows.filter(r => r.status === 'open');
+          const migratedCount = openReceivables.filter(r => !r.source_account_id).length;
+          const trackedCount = openReceivables.filter(r => r.source_account_id).length;
 
           console.log(`\n   📋 Receivables: ${receivablesList.rows.length} total (${openCount} ouverts, ${closedCount} fermés)`);
+          console.log(`      • Migrés: ${migratedCount} | Tracés: ${trackedCount}`);
           
           // Afficher les receivables ouverts
-          const openReceivables = receivablesList.rows.filter(r => r.status === 'open');
           if (openReceivables.length > 0) {
             console.log(`\n   🟢 Receivables OUVERTS:`);
             openReceivables.forEach(r => {
               const sourceAccount = accounts.find(a => a.id === r.source_account_id);
+              const sourceLabel = sourceAccount?.name || (r.source_account_id ? `Compte ${r.source_account_id} (invalide)` : 'Migration');
               console.log(`      • ${r.person}: ${formatCurrency(r.amount)}`);
-              console.log(`        Source: ${sourceAccount?.name || 'Inconnu'} | ${r.description || 'Sans description'}`);
+              console.log(`        Source: ${sourceLabel} | ${r.description || 'Sans description'}`);
             });
           }
 
@@ -118,6 +139,17 @@ async function verifyBalanceConsistency() {
             console.log(`\n   ⚫ Derniers receivables FERMÉS:`);
             closedReceivables.forEach(r => {
               console.log(`      • ${r.person}: ${formatCurrency(r.amount)} (fermé)`);
+            });
+          }
+          
+          // Vérifier l'account_id des receivables
+          const wrongAccountId = receivablesList.rows.filter(r => r.account_id !== account.id);
+          if (wrongAccountId.length > 0) {
+            console.log(`\n   ⚠️  ${wrongAccountId.length} receivable(s) avec account_id incorrect`);
+            issues.push({
+              type: 'WRONG_RECEIVABLE_ACCOUNT_ID',
+              count: wrongAccountId.length,
+              details: wrongAccountId.map(r => ({ id: r.id, person: r.person, account_id: r.account_id }))
             });
           }
         } else {
@@ -195,30 +227,6 @@ async function verifyBalanceConsistency() {
         console.log(`   ✅ Cohérent`);
       }
 
-      // Vérifier les transactions en double (même signature)
-      const duplicatesResult = await client.query(`
-        SELECT 
-          account_id,
-          type,
-          amount,
-          description,
-          transaction_date,
-          COUNT(*) as duplicate_count,
-          array_agg(id) as transaction_ids
-        FROM transactions
-        WHERE account_id = $1 AND is_posted = true
-        GROUP BY account_id, type, amount, description, transaction_date
-        HAVING COUNT(*) > 1
-      `, [account.id]);
-
-      if (duplicatesResult.rows.length > 0) {
-        console.log(`   ⚠️  ${duplicatesResult.rows.length} groupe(s) de doublons potentiels détectés`);
-        duplicatesResult.rows.slice(0, 3).forEach(dup => {
-          console.log(`      • ${dup.description}: ${formatCurrency(dup.amount)} (${dup.duplicate_count}x)`);
-          console.log(`        IDs: ${dup.transaction_ids.join(', ')}`);
-        });
-      }
-
       // Vérifier les receivables payés vers ce compte
       if (account.name === 'Coffre') {
         const receivablesPaidToThisAccount = await client.query(`
@@ -236,7 +244,7 @@ async function verifyBalanceConsistency() {
       }
     }
 
-    // ========================================
+       // ========================================
     // 3. VÉRIFICATION GLOBALE
     // ========================================
     console.log('\n═══════════════════════════════════════════════════════════════');

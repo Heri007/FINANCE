@@ -285,7 +285,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <p className="text-lgfont-black text-[#807D9E]">
+                <p className="text-lg font-bold text-[#202023]">
                   {Number(item.amount).toLocaleString("fr-FR")} Ar
                 </p>
                 <button

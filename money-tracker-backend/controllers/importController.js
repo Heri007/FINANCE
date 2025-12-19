@@ -1,197 +1,171 @@
-// controllers/importController.js - VERSION OPTIMISÉE AVEC LOGGER
+// controllers/importController.js - VERSION AUTOMATIQUE
+
 const pool = require('../config/database');
-const logger = require('../config/logger'); // ✅ Import logger
+const logger = require('../config/logger');
 
-/**
- * Fonction utilitaire partagée pour créer la signature d'une transaction
- * Utilisée à la fois par checkDuplicates et importTransactions
- */
-const normalizeDate = (d) => {
-  if (!d) return null;
-  if (typeof d === 'string') return d.split('T')[0];
-  if (d instanceof Date) return d.toISOString().split('T')[0];
-  return String(d).split('T')[0];
-};
-
-const createSig = (t) => {
-  const cleanDesc = (t.description || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/[.,;:!?@#$%^&*()]/g, '')
-    .substring(0, 40);
-
-  const date = normalizeDate(t.transaction_date || t.date);
-  const amount = Math.abs(parseFloat(t.amount)).toFixed(2);
-
-  return `${t.account_id}|${date}|${amount}|${t.type}|${cleanDesc}`;
-};
-
-/**
- * Vérifier les doublons avant import (pré-validation)
- * POST /api/import/check-duplicates
- */
-exports.checkDuplicates = async (req, res, next) => {
-  try {
-    const { transactions } = req.body;
-
-    if (!transactions || transactions.length === 0) {
-      return res.json({
-        total: 0,
-        duplicates: 0,
-        unique: 0,
-        duplicatesList: [],
-        uniqueList: [],
-      });
-    }
-
-    logger.debug(`🔍 Vérification doublons pour ${transactions.length} transactions`);
-
-    // Récupérer toutes les transactions existantes postées
-    const existingResult = await pool.query(`
-      SELECT account_id, type, amount, description, transaction_date
-      FROM transactions
-      WHERE is_posted = true
-    `);
-
-    const existing = existingResult.rows;
-    const existingSigs = new Set(existing.map(createSig));
-
-    const duplicates = [];
-    const unique = [];
-
-    transactions.forEach((trx, index) => {
-      const sig = createSig(trx);
-      if (existingSigs.has(sig)) {
-        duplicates.push({ index, transaction: trx });
-      } else {
-        unique.push({ index, transaction: trx });
-        existingSigs.add(sig); // Éviter doublons internes au batch actuel
-      }
-    });
-
-    logger.info(`✅ Résultat check: ${unique.length} uniques / ${duplicates.length} doublons`);
-
-    res.json({
-      total: transactions.length,
-      duplicates: duplicates.length,
-      unique: unique.length,
-      duplicatesList: duplicates.slice(0, 10), // On renvoie juste un échantillon
-      uniqueList: unique,
-    });
-  } catch (error) {
-    logger.error('❌ Erreur checkDuplicates:', { error: error.message });
-    next(error);
-  }
-};
-
-/**
- * Import incrémental des transactions CSV
- * POST /api/transactions/import
- * Body: { transactions: [...] }
- */
-exports.importTransactions = async (req, res, next) => {
+exports.importTransactions = async (req, res) => {
   const client = await pool.connect();
-
+  
   try {
-    const { transactions } = req.body || {};
-
-    if (!transactions || transactions.length === 0) {
-      return res.json({ imported: 0, duplicates: 0, unique: 0 });
-    }
-
-    logger.info(`📥 Demande d'import pour ${transactions.length} transactions`);
-
-    // 1) Récupérer toutes les transactions existantes postées pour le dédoublonnage final
-    const existingResult = await client.query(`
-      SELECT account_id, type, amount, description, transaction_date
-      FROM transactions
-      WHERE is_posted = true
-    `);
-
-    const existing = existingResult.rows;
-    const existingSigs = new Set(existing.map(createSig));
-
-    // 2) Filtrer les uniques à insérer
-    const uniqueToInsert = [];
-    let duplicatesCount = 0;
-
-    transactions.forEach((trx) => {
-      const sig = createSig(trx);
-      if (existingSigs.has(sig)) {
-        duplicatesCount += 1;
-      } else {
-        uniqueToInsert.push(trx);
-        existingSigs.add(sig);
-      }
-    });
-
-    if (uniqueToInsert.length === 0) {
-      logger.info('⚠️ Aucun import nécessaire (tous doublons)');
-      return res.json({
-        imported: 0,
-        duplicates: duplicatesCount,
-        unique: 0,
+    await client.query('BEGIN');
+    
+    const { transactions } = req.body;
+    
+    if (!Array.isArray(transactions) || transactions.length === 0) {
+      return res.status(400).json({ 
+        message: 'Format invalide', 
+        status: 400 
       });
     }
 
-    // 3) Insertion + mise à jour des soldes
-    await client.query('BEGIN');
-    logger.info(`📝 Insertion de ${uniqueToInsert.length} transactions...`);
+    logger.info(`📥 Import de ${transactions.length} transactions`);
 
-    for (const t of uniqueToInsert) {
-      const finalDate = t.transaction_date || t.date;
+    // ✅ 1. Récupérer la dernière date d'import pour chaque compte
+    const accountsResult = await client.query(`
+      SELECT id, name, last_import_date 
+      FROM accounts
+    `);
+    
+    const accountCutoffs = {};
+    accountsResult.rows.forEach(row => {
+      accountCutoffs[row.id] = {
+        name: row.name,
+        cutoffDate: row.last_import_date
+      };
+    });
 
-      // Création de la transaction
-      const insertResult = await client.query(
-        `INSERT INTO transactions
-          (account_id, type, amount, category, description, transaction_date,
-           is_planned, is_posted, project_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         RETURNING *`,
-        [
-          t.account_id,
-          t.type,
-          t.amount,
-          t.category,
-          t.description,
-          finalDate,
-          t.is_planned || false,
-          true,                 // Import CSV = posté directement
-          t.project_id || null,
-        ]
-      );
-
-      const trx = insertResult.rows[0];
-
-      // Mise à jour immédiate du solde
-      if (trx.type === 'income') {
-        await client.query(
-          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
-          [trx.amount, trx.account_id]
-        );
-      } else if (trx.type === 'expense') {
-        await client.query(
-          'UPDATE accounts SET balance = balance - $1 WHERE id = $2',
-          [trx.amount, trx.account_id]
-        );
+    // ✅ 2. Grouper les transactions par compte
+    const transactionsByAccount = {};
+    transactions.forEach(tx => {
+      if (!transactionsByAccount[tx.account_id]) {
+        transactionsByAccount[tx.account_id] = [];
       }
+      transactionsByAccount[tx.account_id].push(tx);
+    });
+
+    let totalImported = 0;
+    let totalSkipped = 0;
+    let totalBeforeCutoff = 0;
+    const importSummary = [];
+
+    // ✅ 3. Traiter chaque compte séparément
+    for (const [accountId, accountTransactions] of Object.entries(transactionsByAccount)) {
+      const accountInfo = accountCutoffs[accountId];
+      const cutoffDate = accountInfo?.cutoffDate;
+      
+      logger.info(`📦 Compte: ${accountInfo?.name || accountId} (${accountTransactions.length} transactions)`);
+      if (cutoffDate) {
+        logger.info(`   📅 Cutoff automatique: ${cutoffDate}`);
+      }
+
+      let imported = 0;
+      let skipped = 0;
+      let beforeCutoff = 0;
+      let maxDateImported = null;
+
+      for (const tx of accountTransactions) {
+        try {
+          const type = tx.type || 'expense';
+          const amount = parseFloat(tx.amount);
+          const category = tx.category || 'Autre';
+          const description = tx.description || null;
+          const transactionDate = tx.transaction_date;
+          const isPlanned = tx.is_planned || false;
+          const isPosted = tx.is_posted !== undefined ? tx.is_posted : true;
+          const projectId = tx.project_id || null;
+          const remarks = tx.remarks || '';
+
+          // Validation basique
+          if (!accountId || !transactionDate || isNaN(amount)) {
+            skipped++;
+            continue;
+          }
+
+          // ✅ FILTRE AUTOMATIQUE : Ignorer si <= last_import_date
+          if (cutoffDate && transactionDate <= cutoffDate) {
+            beforeCutoff++;
+            continue;
+          }
+
+          // Insertion
+          await client.query(
+            `INSERT INTO transactions (
+              account_id, type, amount, category, description,
+              transaction_date, is_planned, is_posted, project_id, remarks,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())`,
+            [accountId, type, amount, category, description, transactionDate, isPlanned, isPosted, projectId, remarks]
+          );
+          
+          imported++;
+          
+          // Tracker la date max importée
+          if (!maxDateImported || transactionDate > maxDateImported) {
+            maxDateImported = transactionDate;
+          }
+          
+        } catch (txError) {
+          if (txError.code === '23505') {
+            skipped++;
+            continue;
+          }
+          throw txError;
+        }
+      }
+
+      // ✅ 4. Mettre à jour last_import_date si des transactions ont été importées
+      if (imported > 0 && maxDateImported) {
+        await client.query(
+          `UPDATE accounts 
+           SET last_import_date = $1 
+           WHERE id = $2`,
+          [maxDateImported, accountId]
+        );
+        
+        logger.info(`   ✅ ${imported} importées, last_import_date mis à jour: ${maxDateImported}`);
+      } else {
+        logger.info(`   ℹ️  Aucune nouvelle transaction`);
+      }
+
+      totalImported += imported;
+      totalSkipped += skipped;
+      totalBeforeCutoff += beforeCutoff;
+
+      importSummary.push({
+        accountId,
+        accountName: accountInfo?.name || `Compte ${accountId}`,
+        imported,
+        duplicates: skipped,
+        beforeCutoff,
+        newCutoffDate: maxDateImported
+      });
     }
 
     await client.query('COMMIT');
-    logger.info(`✅ Import réussi : ${uniqueToInsert.length} importées`);
-
+    
+    logger.info(`\n✅ IMPORT TERMINÉ:`);
+    logger.info(`   • Importées: ${totalImported}`);
+    logger.info(`   • Doublons: ${totalSkipped}`);
+    logger.info(`   • Avant cutoff: ${totalBeforeCutoff}`);
+    
     res.json({
-      imported: uniqueToInsert.length,
-      duplicates: duplicatesCount,
-      unique: uniqueToInsert.length,
+      message: `${totalImported} transactions importées`,
+      imported: totalImported,
+      duplicates: totalSkipped,
+      beforeCutoff: totalBeforeCutoff,
+      summary: importSummary,
+      status: 200
     });
+
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
-    logger.error('❌ Erreur importTransactions:', { error: error.message });
-    next(error);
+    await client.query('ROLLBACK');
+    logger.error('❌ Erreur import:', error);
+    
+    res.status(500).json({ 
+      message: 'Erreur serveur', 
+      status: 500
+    });
+    
   } finally {
     client.release();
   }

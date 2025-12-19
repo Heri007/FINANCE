@@ -492,9 +492,8 @@ const handleImportTransactions = async (importedTransactions) => {
   }
 };
 
-  // ✅ Envoyer toutes les données du projet
 // ✅ VERSION DEBUG pour voir l'erreur exacte
-const handleDeactivateProject = async (projectId) => {
+  const handleDeactivateProject = async (projectId) => {
   try {
     const project = projects.find(p => p.id === projectId);
     
@@ -527,10 +526,10 @@ const handleDeactivateProject = async (projectId) => {
     
     throw error;
   }
-};
+  };
 
   // ✅ VERSION CORRIGÉE COMPLÈTE
-const activateProjectPhase = async (projectId, phaseName) => {
+  const activateProjectPhase = async (projectId, phaseName) => {
   const project = projects.find((p) => p.id === projectId);
   const phaseExpenses = JSON.parse(project.expenses).filter(
     (e) => e.phase === phaseName && e.account !== 'Futur' && parseFloat(e.amount) > 0
@@ -600,6 +599,29 @@ const activateProjectPhase = async (projectId, phaseName) => {
   } catch (error) {
     alert(`❌ Erreur: ${error.message}`);
   }
+    };
+  
+  // Fonction handleArchiveProject (ligne ~650-700)
+const handleArchiveProject = async (projectId) => {
+  if (!window.confirm('Archiver ce projet ?\n\nIl sera marqué comme terminé et conservé dans les archives.')) {
+    return;
+  }
+  
+  try {
+    // ✅ Récupérer le projet complet avant de l'archiver
+    const project = projects.find(p => p.id === projectId);
+    if (!project) {
+      throw new Error('Projet introuvable');
+    }
+
+    // ✅ Utiliser completeProject au lieu de archiveProject
+    await completeProject(projectId);
+    
+    alert('✅ Projet archivé avec succès !');
+  } catch (e) {
+    console.error('Erreur archivage:', e);
+    alert('❌ Erreur: ' + e.message);
+  }
 };
 
   const handleCompleteProject = async (projectId) => {
@@ -621,7 +643,6 @@ const handleProjectUpdated = async (projectId) => {
   await refreshTransactions();
   await refreshAccounts();
 };
-
 
   // ==========================================================================
   // HANDLERS - BACKUP ET RESTAURATION

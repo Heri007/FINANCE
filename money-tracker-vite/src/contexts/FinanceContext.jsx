@@ -290,6 +290,31 @@ export function FinanceProvider({ children }) {
     }
   }, [refreshProjects]);
 
+  const completeProject = useCallback(async (projectId) => {
+  try {
+    console.log('✅ Complétion projet ID:', projectId);
+    
+    // Appeler l'endpoint backend
+    const response = await apiRequest(`/projects/${projectId}/complete`, {
+      method: 'POST',
+    });
+    
+    console.log('✅ Projet complété:', response);
+    
+    // Rafraîchir les projets
+    await refreshProjects();
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Erreur completeProject:', error);
+    if (error.details) {
+      console.error('📋 Détails validation:', error.details);
+    }
+    throw error;
+  }
+}, [refreshProjects]);
+
+
   const activateProject = useCallback(async (projectId) => {
     try {
       const project = projects.find(p => String(p.id) === String(projectId));
@@ -364,13 +389,6 @@ export function FinanceProvider({ children }) {
       throw error;
     }
   }, [projects, accounts, createTransaction, updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
-
-  const archiveProject = useCallback(async (projectId) => {
-    await updateProject(projectId, { status: 'archived' });
-    await refreshProjects();
-    await refreshTransactions();
-    await refreshAccounts();
-  }, [updateProject, refreshProjects, refreshTransactions, refreshAccounts]);
 
 const deactivateProject = useCallback(async (projectId) => {
   try {
@@ -472,6 +490,11 @@ const reactivateProject = useCallback(async (projectId) => {
     throw error;
   }
 }, [projects, refreshProjects]);
+
+  const archiveProject = useCallback(async (projectId) => {
+  // ✅ archiveProject = completeProject (même comportement)
+  return await completeProject(projectId);
+}, [completeProject]);
 
 // --- IMPORT BULK TRANSACTIONS ---
 const importTransactions = useCallback(async (importedTransactions) => {
@@ -697,27 +720,19 @@ const payload = newTransactions.map(t => ({
     return list;
   }, [transactions, projectFilterId, accountFilterId]);
 
-  const { income, expense } = useMemo(() => {
-    const seen = new Set();
-    const unique = [];
-    (transactions || []).forEach((t) => {
-      const date = (t.date || '').split('T')[0];
-      const sig = `${t.account_id}|${date}|${t.amount}|${t.type}`;
-      if (!seen.has(sig)) {
-        seen.add(sig);
-        unique.push(t);
-      }
-    });
-    return unique.reduce(
-      (tot, t) => {
-        const a = parseFloat(t.amount || 0);
-        if (t.type === 'income') tot.income += a;
-        else tot.expense += a;
-        return tot;
-      },
-      { income: 0, expense: 0 }
-    );
-  }, [transactions]);
+  // APRÈS (sans filtre)
+const { income, expense } = useMemo(() => {
+  return (transactions || []).reduce(
+    (tot, t) => {
+      const a = parseFloat(t.amount || 0);
+      if (t.type === 'income') tot.income += a;
+      else tot.expense += a;
+      return tot;
+    },
+    { income: 0, expense: 0 }
+  );
+}, [transactions]);
+
 
   const accountsWithCorrectReceivables = useMemo(() => {
   return (accounts || []).map((acc) => {
@@ -891,12 +906,13 @@ const totalBalance = useMemo(() => {
 
     // ✅ Mutations Projects
     createProject,
-    updateProject,
-    deleteProject,
-    activateProject,
-    archiveProject,
-    deactivateProject,
-    reactivateProject,
+  updateProject,
+  deleteProject,
+  activateProject,
+  archiveProject,
+  deactivateProject,
+  reactivateProject,
+  completeProject,
   }), [
     accountsWithCorrectReceivables,
     transactions,
@@ -940,6 +956,7 @@ const totalBalance = useMemo(() => {
     archiveProject,
     deactivateProject,
     reactivateProject,
+    completeProject,
   ]);
 
   return (
