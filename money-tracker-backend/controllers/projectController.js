@@ -14,6 +14,7 @@ exports.getProjects = async (req, res) => {
         total_cost, total_revenues, net_profit, roi,
         remaining_budget, total_available,
         expenses, revenues, allocation, revenue_allocation,
+        metadata, 
         created_at, updated_at
       FROM projects 
       ORDER BY created_at DESC
@@ -54,6 +55,8 @@ exports.getProjects = async (req, res) => {
         roi: parseFloat(project.roi) || 0,
         remainingBudget: parseFloat(project.remaining_budget) || 0,
         totalAvailable: parseFloat(project.total_available) || 0,
+
+        metadata: project.metadata,
         
         // ✅ Exposer les lignes normalisées
         expenseLines: expLines.rows.map(r => ({
@@ -122,6 +125,7 @@ exports.getProjectById = async (req, res) => {
         revenues,
         allocation,
         revenue_allocation AS "revenueAllocation",
+        metadata, 
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM projects WHERE id = $1
@@ -213,9 +217,10 @@ exports.createProject = async (req, res) => {
       name, description, type, status, startDate, endDate, frequency, occurrencesCount,
       totalCost, totalRevenues, netProfit, roi,
       expenses, revenues, allocation, revenueAllocation, revenue_allocation,
-      remainingBudget, totalAvailable
+      remainingBudget, totalAvailable, metadata 
     } = req.body;
 
+    const metadataJson = safeJson(metadata); 
     const finalStatus = status || 'draft';
     const occCount = parseInt(occurrencesCount || 1, 10);
     const finalRevenueAllocation = revenue_allocation || revenueAllocation || {};
@@ -227,35 +232,37 @@ exports.createProject = async (req, res) => {
 
     // 1. Créer le projet
     const projectResult = await client.query(
-      `INSERT INTO projects 
-        (name, description, type, status,
-         start_date, end_date, frequency, occurrences_count,
-         total_cost, total_revenues, net_profit, roi,
-         remaining_budget, total_available,
-         expenses, revenues, allocation, revenue_allocation)
-       VALUES
-        ($1,  $2,  $3,  $4,
-         $5,  $6,  $7,  $8,
-         $9,  $10, $11, $12,
-         $13, $14,
-         $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb)
-       RETURNING id, name, description, type, status,
-         start_date AS "startDate", end_date AS "endDate",
-         frequency, occurrences_count AS "occurrencesCount",
-         total_cost AS "totalCost", total_revenues AS "totalRevenues",
-         net_profit AS "netProfit", roi,
-         remaining_budget AS "remainingBudget", total_available AS "totalAvailable",
-         expenses, revenues, allocation, revenue_allocation AS "revenueAllocation",
-         created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [
-        name, description, type || 'ponctuel', finalStatus,
-        startDate || null, endDate || null, frequency || null, occCount,
-        parseFloat(totalCost || 0), parseFloat(totalRevenues || 0),
-        parseFloat(netProfit || 0), parseFloat(roi || 0),
-        parseFloat(remainingBudget || 0), parseFloat(totalAvailable || 0),
-        expensesJson, revenuesJson, allocationJson, revAllocationJson
-      ]
-    );
+  `INSERT INTO projects
+  (name, description, type, status,
+   start_date, end_date, frequency, occurrences_count,
+   total_cost, total_revenues, net_profit, roi,
+   remaining_budget, total_available,
+   expenses, revenues, allocation, revenue_allocation, metadata)  -- ✅ AJOUTER metadata
+  VALUES
+  ($1, $2, $3, $4,
+   $5, $6, $7, $8,
+   $9, $10, $11, $12,
+   $13, $14,
+   $15::jsonb, $16::jsonb, $17::jsonb, $18::jsonb, $19::jsonb)  -- ✅ Passer à $19
+  RETURNING id, name, description, type, status,
+   start_date AS "startDate", end_date AS "endDate",
+   frequency, occurrences_count AS "occurrencesCount",
+   total_cost AS "totalCost", total_revenues AS "totalRevenues",
+   net_profit AS "netProfit", roi,
+   remaining_budget AS "remainingBudget", total_available AS "totalAvailable",
+   expenses, revenues, allocation, revenue_allocation AS "revenueAllocation",
+   metadata,  -- ✅ AJOUTER ICI
+   created_at AS "createdAt", updated_at AS "updatedAt"`,
+  [
+    name, description, type || 'ponctuel', finalStatus,
+    startDate || null, endDate || null, frequency || null, occCount,
+    parseFloat(totalCost || 0), parseFloat(totalRevenues || 0),
+    parseFloat(netProfit || 0), parseFloat(roi || 0),
+    parseFloat(remainingBudget || 0), parseFloat(totalAvailable || 0),
+    expensesJson, revenuesJson, allocationJson, revAllocationJson,
+    metadataJson  // ✅ AJOUTER ICI
+  ]
+);
     
     const projectId = projectResult.rows[0].id;
     
@@ -338,8 +345,10 @@ exports.updateProject = async (req, res) => {
       name, description, type, status, startDate, endDate, frequency, occurrencesCount,
       totalCost, totalRevenues, netProfit, roi,
       expenses, revenues, allocation, revenueAllocation, revenue_allocation,
-      remainingBudget, totalAvailable
+      remainingBudget, totalAvailable, metadata
     } = req.body;
+
+    const metadataJson = safeJson(metadata); 
 
     const finalStatus = status || 'active';
     const occCount = parseInt(occurrencesCount || 1, 10);
@@ -352,21 +361,23 @@ exports.updateProject = async (req, res) => {
 
     // 1. Mise à jour Projet principal
     const result = await client.query(
-      `UPDATE projects 
-       SET name=$1, description=$2, type=$3, status=$4, start_date=$5, end_date=$6,
-           frequency=$7, occurrences_count=$8, total_cost=$9, total_revenues=$10,
-           net_profit=$11, roi=$12, remaining_budget=$13, total_available=$14,
-           expenses=$15::jsonb, revenues=$16::jsonb, allocation=$17::jsonb, 
-           revenue_allocation=$18::jsonb, updated_at=NOW()
-       WHERE id=$19
-       RETURNING *`,
-      [
-        name, description, type, finalStatus, startDate || null, endDate || null,
-        frequency || null, occCount, parseFloat(totalCost || 0), parseFloat(totalRevenues || 0),
-        parseFloat(netProfit || 0), parseFloat(roi || 0), parseFloat(remainingBudget || 0),
-        parseFloat(totalAvailable || 0), expensesJson, revenuesJson, allocationJson, revAllocationJson, id
-      ]
-    );
+  `UPDATE projects
+   SET name=$1, description=$2, type=$3, status=$4, start_date=$5, end_date=$6,
+       frequency=$7, occurrences_count=$8, total_cost=$9, total_revenues=$10,
+       net_profit=$11, roi=$12, remaining_budget=$13, total_available=$14,
+       expenses=$15::jsonb, revenues=$16::jsonb, allocation=$17::jsonb,
+       revenue_allocation=$18::jsonb, metadata=$19::jsonb, updated_at=NOW()  -- ✅ AJOUTER metadata
+   WHERE id=$20  -- ✅ Passer à $20
+   RETURNING *`,
+  [
+    name, description, type, finalStatus, startDate || null, endDate || null,
+    frequency || null, occCount, parseFloat(totalCost || 0), parseFloat(totalRevenues || 0),
+    parseFloat(netProfit || 0), parseFloat(roi || 0), parseFloat(remainingBudget || 0),
+    parseFloat(totalAvailable || 0), expensesJson, revenuesJson, allocationJson, revAllocationJson,
+    metadataJson,  // ✅ AJOUTER ICI
+    id
+  ]
+);
 
     if (result.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -644,5 +655,60 @@ exports.archiveProject = async (req, res) => {
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
+  }
+};
+
+// ============================================================================
+// 9. POST - Compléter un projet
+// ============================================================================
+exports.completeProject = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    
+    const result = await pool.query(
+      `UPDATE projects 
+       SET status = 'completed', 
+           end_date = COALESCE(end_date, NOW()), 
+           updated_at = NOW() 
+       WHERE id = $1 
+       RETURNING *`,
+      [id]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'Projet non trouvé' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ completeProject:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+};
+
+// ============================================================================
+// 10. POST - Réactiver un projet
+// ============================================================================
+exports.reactivateProject = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    
+    const result = await pool.query(
+      `UPDATE projects 
+       SET status = 'active', 
+           updated_at = NOW() 
+       WHERE id = $1 
+       RETURNING *`,
+      [id]
+    );
+
+    if (!result.rows[0]) {
+      return res.status(404).json({ error: 'Projet non trouvé' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ reactivateProject:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
   }
 };

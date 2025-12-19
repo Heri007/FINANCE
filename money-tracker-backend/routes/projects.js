@@ -31,5 +31,7 @@ router.patch('/:id/status', projectsController.updateProjectStatus);
 router.post('/:id/update-status', projectsController.updateProjectStatus);
 router.patch('/:id/toggle-status', projectsController.toggleProjectActive);
 router.post('/:id/archive', projectsController.archiveProject);
+router.post('/:id/complete', projectsController.completeProject);
+router.post('/:id/reactivate', projectsController.reactivateProject);
 
 module.exports = router;

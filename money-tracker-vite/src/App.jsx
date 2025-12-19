@@ -124,7 +124,8 @@ import BookkeeperDashboard from "./BookkeeperDashboard";
 import { OperatorDashboard } from "./OperatorDashboard";
 import { ContentReplicator } from "./ContentReplicator";
 import { ReportsModal } from "./ReportsModal";
-import { ProjectPlannerModal } from "./ProjectPlannerModal";
+import { ProjectPlannerHub } from "./components/projects/ProjectPlannerHub";
+//import { ProjectPlannerModal } from "./ProjectPlannerModal";
 import { ProjectsListModal } from "./ProjectsListModal";
 import backupService from "./services/backupService";
 
@@ -179,6 +180,7 @@ export default function App() {
   projectsForecastCoffre,
   projectsForecastTotal,
   projectFilterId,
+  completeProject,
   setProjectFilterId,
   accountFilterId,
   setAccountFilterId,
@@ -1046,7 +1048,7 @@ const handleProjectUpdated = async (projectId) => {
         totalBalance={totalBalance}
       />
 
-      <ProjectPlannerModal
+    <ProjectPlannerHub
   isOpen={showProjectPlanner}
   onClose={() => {
     setShowProjectPlanner(false);
@@ -1054,12 +1056,9 @@ const handleProjectUpdated = async (projectId) => {
   }}
   accounts={accounts}
   project={editingProject}
-  onProjectSaved={async () => {
-    await refreshProjects();
-    setEditingProject(null);
-  }}
+  onProjectSaved={handleProjectUpdated}
   onProjectUpdated={handleProjectUpdated}
-  createTransaction={createTransaction} // ✅ Devrait être là (déjà présent)
+  createTransaction={createTransaction}
 />
 
       {editingTransaction && (
