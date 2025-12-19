@@ -176,58 +176,81 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
 // ✅ POST /pay (sans body = OK)
 router.post('/:id/pay', async (req, res) => {
   const client = await pool.connect();
+  
   try {
     await client.query('BEGIN');
-
+    
     const { id } = req.params;
     const userId = req.user.id;
-
+    
+    // 1. Récupérer le receivable
     const { rows } = await client.query(
       `SELECT * FROM receivables WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
-
+    
     if (rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Receivable introuvable ou non autorisé' });
+      return res.status(404).json({ error: 'Receivable introuvable' });
     }
-
+    
     const rec = rows[0];
-
     const { COFFRE_ACCOUNT_ID } = getAccountIds();
-
+    
     if (!COFFRE_ACCOUNT_ID) {
       await client.query('ROLLBACK');
       return res.status(500).json({ error: 'Compte COFFRE non configuré' });
     }
-
-    // 1) Marquer payé
+    
+    // 2. Marquer comme payé
     await client.query(
-      `UPDATE receivables SET status = 'closed', updated_at = NOW()
+      `UPDATE receivables SET status = 'closed', updated_at = NOW() 
        WHERE id = $1 AND user_id = $2`,
       [id, userId]
     );
-
-    // 2) Encaisser COFFRE (avec user_id)
+    
+    // 3. Créer transaction d'encaissement dans COFFRE
     await client.query(
-      `INSERT INTO transactions
+      `INSERT INTO transactions 
        (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
        VALUES ($1, 'income', $2, 'Remboursement Receivables', $3, NOW()::date, true, false, $4)`,
-      [COFFRE_ACCOUNT_ID, rec.amount, `Remboursement ${rec.person}${rec.description ? ' - ' + rec.description : ''}`, userId]
+      [
+        COFFRE_ACCOUNT_ID,
+        rec.amount,
+        `Remboursement ${rec.person}${rec.description ? ' - ' + rec.description : ''}`,
+        userId
+      ]
     );
-
-    // 3) Recalcul RECEIVABLES (avec user_id)
+    
+    // 4. ✅ AJOUT : Recalculer le solde du COFFRE
     await client.query(
-      `UPDATE accounts SET balance = (
+      `UPDATE accounts 
+       SET balance = (
+         SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0)
+         FROM transactions
+         WHERE account_id = $1 AND user_id = $2 AND is_posted = true
+       ),
+       updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2`,
+      [COFFRE_ACCOUNT_ID, userId]
+    );
+    
+    // 5. Recalculer le solde RECEIVABLES
+    await client.query(
+      `UPDATE accounts 
+       SET balance = (
          SELECT COALESCE(SUM(amount), 0)
-         FROM receivables WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
-       ), updated_at = CURRENT_TIMESTAMP
+         FROM receivables
+         WHERE account_id = $1 AND user_id = $2 AND status = 'open'
+       ),
+       updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND user_id = $2`,
       [rec.account_id, userId]
     );
-
+    
     await client.query('COMMIT');
     res.json({ success: true });
+    
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('❌ Erreur pay receivable:', err);
@@ -236,6 +259,7 @@ router.post('/:id/pay', async (req, res) => {
     client.release();
   }
 });
+
 
 // ✅ POST restore (backup)
 router.post('/restore', validate('receivableRestore'), async (req, res) => {
