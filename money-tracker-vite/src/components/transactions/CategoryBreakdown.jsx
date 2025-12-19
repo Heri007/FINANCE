@@ -37,8 +37,8 @@ const CategoryTransactionsModal = ({
         {/* Header */}
         <div className={`p-6 border-b-2 border-slate-200 bg-gradient-to-r ${
           type === 'income' 
-            ? 'from-emerald-50 to-teal-50' 
-            : 'from-rose-50 to-pink-50'
+            ? 'from-emerald-100 to-teal-100' 
+            : 'from-rose-100 to-pink-100'
         }`}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
@@ -364,7 +364,8 @@ export default function CategoryBreakdown({
         </div>
 
         {/* Footer fixe */}
-        <div className="border-t-2 border-slate-200 p-6 pt-4 bg-slate-50">
+        <div className="border-t-2 border-slate-200 p-6 pt-4 bg-gradient-to-r 
+          from-rose-50 to-pink-50">
           <div className="flex justify-between items-center">
             <span className="text-slate-800 font-bold text-base">
               Total des {type === 'expense' ? 'dépenses' : 'revenus'}

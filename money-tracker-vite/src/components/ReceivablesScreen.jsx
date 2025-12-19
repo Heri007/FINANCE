@@ -158,7 +158,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         <div className={`rounded-lg shadow-md border-2 p-3 flex flex-col ${
           receivablesTousRecoltes 
             ? 'bg-gradient-to-br from-[#6D9C6D] to-[#5a8a5a] border-[#6D9C6D]' 
-            : 'bg-gradient-to-br from-[#C09858] to-[#b08748] border-[#C09858]'
+            : 'bg-gradient-to-br from-[#b85b03] to-[#fcb169] border-[#C09858]'
         }`}>
           {/* Header */}
           <div className="flex items-center gap-2 mb-3">
@@ -178,16 +178,18 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
           <div className="flex-1 flex flex-col justify-between space-y-2">
             {/* Coffre prévu */}
             <div className="flex justify-between items-baseline">
-              <span className="text-xl text-white font-bold uppercase">Coffre (+ Receivables)</span>
-              <span className="text-2xl font-black text-white leading-none">
+              <span className="text-lg text-white font-bold uppercase">Coffre</span>
+              <span className="text-xs text-white font-bold justify-self-center uppercase">(+ Receivables)</span>
+              <span className="text-lg font-black text-white leading-none">
                 {coffreForecast.toLocaleString("fr-FR")} Ar
               </span>
             </div>
             
             {/* Total prévu */}
             <div className="flex justify-between items-baseline pt-2 border-t border-white/20">
-              <span className="text-xl text-white font-bold uppercase">TOTAL (+ TOUS LES COMPTES)</span>
-              <span className="text-2xl font-black text-white leading-none">
+              <span className="text-lg text-white font-bold uppercase">TOTAL</span>
+              <span className="text-xs text-white justify-self-center font-bold uppercase">(+ TOUS LES COMPTES)</span>
+              <span className="text-lg font-black text-white leading-none">
                 {totalForecast.toLocaleString("fr-FR")} Ar
               </span>
             </div>
@@ -247,7 +249,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
             </select>
             <button
               type="submit"
-              className="flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-[#807D9E] to-[#6f6c8d] text-white font-bold text-sm hover:from-[#6f6c8d] hover:to-[#5e5b7c] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 h-9 rounded-lg bg-gradient-to-r from-[#484342] to-[#625c5b] text-white font-bold text-sm hover:from-[#6f6c8d] hover:to-[#5e5b7c] transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={!person || !amount || !sourceAccountId}
             >
               <Plus size={16} strokeWidth={3} />
@@ -283,12 +285,12 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <p className="text-2xl font-black text-[#807D9E]">
+                <p className="text-lgfont-black text-[#807D9E]">
                   {Number(item.amount).toLocaleString("fr-FR")} Ar
                 </p>
                 <button
                   onClick={() => handleClose(item.id)}
-                  className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-[#6D9C6D] to-[#5a8a5a] text-white font-bold text-sm hover:from-[#5a8a5a] hover:to-[#4a7a4a] transition-all shadow-md"
+                  className="flex items-center gap-2 h-10 px-4 rounded-lg bg-gradient-to-r from-[#b85b03] to-[#f4c953] text-white font-bold text-sm hover:from-[#5a8a5a] hover:to-[#4a7a4a] transition-all shadow-md"
                 >
                   <CheckCircle size={16} strokeWidth={2.5} />
                   Marquer payé
