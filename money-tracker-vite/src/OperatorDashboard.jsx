@@ -1,11 +1,12 @@
 // OperatorDashboard.jsx - VERSION COMPLÃˆTE CORRIGÃ‰E
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  X, Settings, CheckSquare, Clock, Target, FileText, 
-  Plus, Edit, Trash2, Play, Pause, AlertCircle, TrendingUp 
-} from 'lucide-react';
+import { X, Settings, CheckSquare, Clock, Target, FileText, Plus, Edit, Trash2, Play, Pause, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, differenceInDays, parseISO, isWithinInterval, isSameDay, addDays } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import operatorService from './services/operatorService';
-import {CopyButton} from './components/common/CopyButton';
+import { CopyButton } from './components/common/CopyButton';
+import GanttTimelineModal from './components/operator/GanttTimelineModal';
+
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) + ' Ar';
@@ -19,6 +20,8 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedSOP, setSelectedSOP] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+ const [showGanttTimeline, setShowGanttTimeline] = useState(false);
+
 
   // Charger les donnÃ©es au montage
   useEffect(() => {
@@ -64,6 +67,34 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
       setLoading(false);
     }
   };
+
+  const handleUpdateProject = async (projectId, updates) => {
+  try {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/api/operator/projects/${projectId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(updates)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur lors de la mise à jour du projet');
+    }
+
+    // Recharger les projets
+    await loadProjects();
+    
+    return true;
+  } catch (error) {
+    console.error('Erreur de mise à jour:', error);
+    alert(`Erreur lors de la mise à jour du projet: ${error.message}`);
+    return false;
+  }
+};
 
   // CRUD SOPs
   const handleCreateSOP = async (sopData) => {
@@ -344,6 +375,19 @@ const calculateInvestedAmount = (project) => {
               <p className="text-purple-100 mt-1">Execution • SOPs • Tâches • Projets Actifs</p>
             </div>
             <div className="flex items-center gap-3">
+              <button
+  onClick={() => {
+    console.log('🖱️ CLIC sur bouton Gantt Timeline');
+    console.log('📊 Projets disponibles:', projects);
+    console.log('📊 Nombre de projets:', projects?.length);
+    setShowGanttTimeline(true);
+    console.log('✅ showGanttTimeline mis à true');
+  }}
+  className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors shadow-md"
+>
+  <Calendar size={20} />
+  Gantt Timeline
+</button>
               <CopyButton textToCopy={generateCopyText()} />
               <button
                 onClick={onClose}
@@ -351,6 +395,7 @@ const calculateInvestedAmount = (project) => {
               >
                 <X size={24} />
               </button>
+              
             </div>
           </div>
         </div>
@@ -851,6 +896,16 @@ const calculateInvestedAmount = (project) => {
           sops={sops}
         />
       )}
+
+      {showGanttTimeline && (
+  <GanttTimelineModal
+    isOpen={showGanttTimeline}
+    onClose={() => setShowGanttTimeline(false)}
+    projects={projects}
+    onUpdateProject={handleUpdateProject}
+    onRefresh={null}
+  />
+)}
     </div>
   );
 }

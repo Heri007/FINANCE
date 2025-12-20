@@ -20,7 +20,7 @@ const transactionSchema = Joi.object({
   is_planned: Joi.boolean().default(false),
   is_posted: Joi.boolean().default(true),
   project_id: Joi.number().integer().allow(null).optional(),
-  project_line_id: Joi.number().integer().allow(null).optional(),  // ✅ AJOUTÉ
+  project_line_id: Joi.string().allow(null).optional(), // ← CHANGER : number → string
   remarks: Joi.string().allow('', null).optional()
 })
 .or('date', 'transaction_date');

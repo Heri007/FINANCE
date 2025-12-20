@@ -314,4 +314,79 @@ router.get('/stats/tasks-by-project', async (req, res) => {
   }
 });
 
+// PUT /api/operator/projects/:id - Mettre à jour un projet
+router.put('/projects/:id', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    const { start_date, end_date, progress, status } = req.body;
+
+    // Vérifier que le projet appartient à cet opérateur
+    const checkProject = await client.query(
+      'SELECT id FROM projects WHERE id = $1 AND operator_id = $2',
+      [id, req.user.userId]
+    );
+
+    if (checkProject.rows.length === 0) {
+      return res.status(404).json({ error: 'Projet non trouvé ou non autorisé' });
+    }
+
+    // Construire la requête de mise à jour dynamiquement
+    const updates = [];
+    const values = [];
+    let paramCounter = 1;
+
+    if (start_date !== undefined) {
+      updates.push(`start_date = $${paramCounter}`);
+      values.push(start_date);
+      paramCounter++;
+    }
+
+    if (end_date !== undefined) {
+      updates.push(`end_date = $${paramCounter}`);
+      values.push(end_date);
+      paramCounter++;
+    }
+
+    if (progress !== undefined) {
+      updates.push(`progress = $${paramCounter}`);
+      values.push(progress);
+      paramCounter++;
+    }
+
+    if (status !== undefined) {
+      updates.push(`status = $${paramCounter}`);
+      values.push(status);
+      paramCounter++;
+    }
+
+    updates.push(`updated_at = $${paramCounter}`);
+    values.push(new Date());
+    paramCounter++;
+
+    values.push(id);
+
+    const query = `
+      UPDATE projects 
+      SET ${updates.join(', ')}
+      WHERE id = $${paramCounter}
+      RETURNING *
+    `;
+
+    const result = await client.query(query, values);
+
+    res.json({
+      message: 'Projet mis à jour avec succès',
+      project: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du projet:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la mise à jour du projet' });
+  } finally {
+    client.release();
+  }
+});
+
+
 module.exports = router;

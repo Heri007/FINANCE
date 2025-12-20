@@ -9,6 +9,7 @@ import { ProjectPlannerModal } from '../../ProjectPlannerModal';
 import { CarriereModal } from './modals/CarriereModal';
 import { ExportModal } from './modals/ExportModal';
 import { LivestockModal } from './modals/LivestockModal';
+import { ProductFlipModal } from './modals/ProductFlipModal';
 
 /**
  * ProjectPlannerHub - Hub intelligent de création/édition de projets
@@ -64,6 +65,9 @@ export function ProjectPlannerHub({
       case 'LIVESTOCK':
         return <LivestockModal {...commonProps} />;
       
+      case 'PRODUCTFLIP': // ← AJOUT
+        return <ProductFlipModal {...commonProps} />;
+      
       // ✅ FALLBACK: Types génériques (PRODUCTFLIP, REALESTATE, FISHING, etc.)
       default:
         return <ProjectPlannerModal {...commonProps} />;
@@ -93,6 +97,9 @@ export function ProjectPlannerHub({
       case 'LIVESTOCK':
         return <LivestockModal {...commonProps} />;
       
+      case 'PRODUCTFLIP': // ← AJOUT
+        return <ProductFlipModal {...commonProps} />;
+
       // ✅ FALLBACK: Types génériques
       case 'PRODUCTFLIP':
       default:
@@ -166,7 +173,7 @@ export function ProjectPlannerHub({
             </span>
           </button>
 
-          {/* ========== ACHAT/REVENTE ========== */}
+          {/* ========== PRODUCT FLIP (MODIFIÉ) ========== */}
           <button
             onClick={() => setSelectedType('PRODUCTFLIP')}
             className="group relative p-6 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all duration-200 flex flex-col items-center gap-4 hover:shadow-lg"
@@ -175,11 +182,12 @@ export function ProjectPlannerHub({
               <Package className="w-8 h-8 text-green-600" />
             </div>
             <div className="text-center">
-              <h3 className="font-bold text-lg text-gray-800 mb-1">Achat/Revente</h3>
-              <p className="text-sm text-gray-600">Stock rapide</p>
+              <h3 className="font-bold text-lg text-gray-800 mb-1">Product Flip</h3>
+              <p className="text-sm text-gray-600">Achat/Revente rapide</p>
             </div>
+            {/* CHANGÉ : Standard → Spécialisé */}
             <span className="absolute top-2 right-2 bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium">
-              Standard
+              Spécialisé
             </span>
           </button>
 
