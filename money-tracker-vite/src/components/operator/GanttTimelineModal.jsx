@@ -14,7 +14,7 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   const [draggedProject, setDraggedProject] = useState(null);
   const [hoveredDay, setHoveredDay] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
-  const { projects, accounts, receivables, transactions, plannedTransactions } = useFinance();
+  const { accounts, receivables, transactions, plannedTransactions } = useFinance();
 
 
   console.log('🎨 GanttTimelineModal - Projets reçus:', projects);
