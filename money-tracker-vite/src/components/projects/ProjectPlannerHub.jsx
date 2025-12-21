@@ -101,7 +101,6 @@ export function ProjectPlannerHub({
         return <ProductFlipModal {...commonProps} />;
 
       // ✅ FALLBACK: Types génériques
-      case 'PRODUCTFLIP':
       default:
         return (
           <ProjectPlannerModal 

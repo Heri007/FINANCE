@@ -36,6 +36,30 @@ export function FinanceProvider({ children }) {
   const [projectFilterId, setProjectFilterId] = useState(null);
   const [accountFilterId, setAccountFilterId] = useState(null);
 
+  const [projectExpenseLines, setProjectExpenseLines] = useState([]);
+  const [projectRevenueLines, setProjectRevenueLines] = useState([]);
+
+const refreshProjectLines = useCallback(async () => {
+  if (!isAuthenticated) return;
+
+  const [unpaidExpenses, pendingRevenues] = await Promise.all([
+    apiRequest('/projects/expense-lines/unpaid'),
+    apiRequest('/projects/revenue-lines/pending'),
+  ]);
+
+  console.log('🧪 RAW unpaidExpenses:', unpaidExpenses);
+console.log('🧪 RAW pendingRevenues:', pendingRevenues);
+
+  console.log('✅ Project lines chargées:', {
+    unpaidExpenses: unpaidExpenses.length,
+    pendingRevenues: pendingRevenues.length,
+  });
+
+
+  setProjectExpenseLines(Array.isArray(unpaidExpenses) ? unpaidExpenses : []);
+  setProjectRevenueLines(Array.isArray(pendingRevenues) ? pendingRevenues : []);
+}, [isAuthenticated]);
+
   // ============================================================
   // REFRESH FUNCTIONS
   // ============================================================
@@ -118,28 +142,33 @@ export function FinanceProvider({ children }) {
   // INITIAL LOAD
   // ============================================================
   useEffect(() => {
-    console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
+  console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
 
-    if (!isAuthenticated) {
-      console.log('❌ FinanceContext: Non authentifié, reset données');
-      setAccounts([]);
-      setTransactions([]);
-      setProjects([]);
-      setTotalOpenReceivables(0);
-      return;
-    }
-    console.log('✅ FinanceContext: Authentifié, chargement données...');
-    refreshAccounts();
-    refreshTransactions();
-    refreshProjects();
-    refreshReceivables();
-  }, [
-    isAuthenticated,
-    refreshAccounts,
-    refreshTransactions,
-    refreshProjects,
-    refreshReceivables,
-  ]);
+  if (!isAuthenticated) {
+    console.log('❌ FinanceContext: Non authentifié, reset données');
+    setAccounts([]);
+    setTransactions([]);
+    setProjects([]);
+    setTotalOpenReceivables(0);
+    setProjectExpenseLines([]);
+    setProjectRevenueLines([]);
+    return;
+  }
+  console.log('✅ FinanceContext: Authentifié, chargement données...');
+
+  refreshAccounts();
+  refreshTransactions();
+  refreshProjects();
+  refreshReceivables();
+  refreshProjectLines(); // ✅ AJOUT
+}, [
+  isAuthenticated,
+  refreshAccounts,
+  refreshTransactions,
+  refreshProjects,
+  refreshReceivables,
+  refreshProjectLines,
+]);
 
   // ============================================================
   // MUTATIONS - ACCOUNTS
@@ -313,7 +342,6 @@ export function FinanceProvider({ children }) {
     throw error;
   }
 }, [refreshProjects]);
-
 
   const activateProject = useCallback(async (projectId) => {
     try {
@@ -733,7 +761,6 @@ const { income, expense } = useMemo(() => {
   );
 }, [transactions]);
 
-
   const accountsWithCorrectReceivables = useMemo(() => {
   return (accounts || []).map((acc) => {
     if (acc?.name === 'Receivables') {
@@ -751,7 +778,6 @@ const totalBalance = useMemo(() => {
     0
   );
 }, [accountsWithCorrectReceivables]);
-
 
   const activeProjects = useMemo(() => {
   return (projects || []).filter((p) => {
@@ -792,6 +818,80 @@ const totalBalance = useMemo(() => {
   const receivablesForecastTotal = totalBalance + totalOpenReceivables;
   const projectsForecastCoffre = receivablesForecastCoffre + projectsNetImpact;
   const projectsForecastTotal = receivablesForecastTotal + projectsNetImpact;
+
+  // Prévisions détaillées par projet (à partir des lignes)
+// ============================================================
+// PLANNED TRANSACTIONS À PARTIR DES LIGNES PROJET
+// ============================================================
+const plannedTransactions = useMemo(() => {
+  const result = [];
+
+  // 1) Dépenses non payées (project_expense_lines)
+  (projectExpenseLines || [])
+    .filter(
+      (line) =>
+        line.isPaid === false ||
+        line.isPaid === null ||
+        line.isPaid === undefined
+    )
+    .forEach((line) => {
+      const rawDate = line.transactionDate || line.transaction_date || null;
+      if (!rawDate) return;
+
+      result.push({
+        project_id: line.projectId ?? line.project_id,
+        project_name: line.projectName ?? line.project_name,
+        type: 'planned_expense',
+        amount: Number(line.projectedAmount ?? line.projected_amount ?? 0),
+        date: rawDate,
+        account: line.account || 'Coffre',
+        category: line.category || 'Projet - Charge',
+        description: line.description || '',
+        line_id: line.id,
+      });
+    });
+
+    console.log('🧪 projectExpenseLines sample:', projectExpenseLines[0]);
+console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
+
+
+  // 2) Revenus non reçus (project_revenue_lines)
+  (projectRevenueLines || [])
+    .filter(
+      (line) =>
+        line.isReceived === false ||
+        line.isReceived === null ||
+        line.isReceived === undefined
+    )
+    .forEach((line) => {
+      const rawDate = line.transactionDate || line.transaction_date || null;
+      if (!rawDate) return;
+
+      result.push({
+        project_id: line.projectId ?? line.project_id,
+        project_name: line.projectName ?? line.project_name,
+        type: 'planned_income',
+        amount: Number(line.projectedAmount ?? line.projected_amount ?? 0),
+        date: rawDate,
+        account: line.account || 'Coffre',
+        category: line.category || 'Projet - Revenu',
+        description: line.description || '',
+        line_id: line.id,
+      });
+    });
+
+  console.log('📊 plannedTransactions (depuis project_*_lines):', result.length);
+  console.log(
+    ' - Dépenses à payer:',
+    result.filter((r) => r.type === 'planned_expense').length
+  );
+  console.log(
+    ' - Revenus à recevoir:',
+    result.filter((r) => r.type === 'planned_income').length
+  );
+
+  return result;
+}, [projectExpenseLines, projectRevenueLines]);
 
   const treasuryAlerts = useMemo(() => {
     const warnings = [];
@@ -851,12 +951,17 @@ const totalBalance = useMemo(() => {
   // ============================================================
   // ✅ CONTEXT VALUE - AVEC TOUTES LES MUTATIONS
   // ============================================================
-
-  const value = useMemo(() => ({
+  const value = useMemo(
+  () => ({
     // State
     accounts: accountsWithCorrectReceivables,
     transactions,
     projects,
+
+    // Lignes projet + prévisions
+    projectExpenseLines,
+    projectRevenueLines,
+    plannedTransactions,
 
     // Filters
     projectFilterId,
@@ -893,30 +998,34 @@ const totalBalance = useMemo(() => {
     refreshProjects,
     refreshReceivables,
 
-    // ✅ Mutations Accounts
+    // Mutations Accounts
     createAccount,
     updateAccount,
     deleteAccount,
 
-    // ✅ Mutations Transactions
+    // Mutations Transactions
     createTransaction,
     updateTransaction,
     deleteTransaction,
     importTransactions,
 
-    // ✅ Mutations Projects
+    // Mutations Projects
     createProject,
-  updateProject,
-  deleteProject,
-  activateProject,
-  archiveProject,
-  deactivateProject,
-  reactivateProject,
-  completeProject,
-  }), [
+    updateProject,
+    deleteProject,
+    activateProject,
+    archiveProject,
+    deactivateProject,
+    reactivateProject,
+    completeProject,
+  }),
+  [
     accountsWithCorrectReceivables,
     transactions,
     projects,
+    projectExpenseLines,
+    projectRevenueLines,
+    plannedTransactions,
     projectFilterId,
     accountFilterId,
     visibleTransactions,
@@ -957,15 +1066,15 @@ const totalBalance = useMemo(() => {
     deactivateProject,
     reactivateProject,
     completeProject,
-  ]);
+  ]
+);
 
   return (
-    <FinanceContext.Provider value={value}>
-      {children}
-    </FinanceContext.Provider>
-  );
+  <FinanceContext.Provider value={value}>
+    {children}
+  </FinanceContext.Provider>
+);
 }
-
 export function useFinance() {
   const ctx = useContext(FinanceContext);
   if (!ctx) throw new Error('useFinance doit être utilisé dans un FinanceProvider');

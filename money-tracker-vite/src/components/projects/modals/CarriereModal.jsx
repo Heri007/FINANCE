@@ -1,11 +1,15 @@
 // src/components/projects/modals/CarriereModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Trash2, Save, FileText, Calculator, Truck, TrendingDown, TrendingUp } from 'lucide-react';
 import DatePicker from 'react-datepicker';
-import "react-datepicker/dist/react-datepicker.css";
+import 'react-datepicker/dist/react-datepicker.css';
 import { v4 as uuidv4 } from 'uuid';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
+import projectsService from '../../../services/projectsService';
+import transactionsService from '../../../services/transactionsService';
+import { useFinance } from '../../../contexts/FinanceContext';
+
 
 // Taux selon le Code Minier 2023 (Loi n°2023-007)
 const TAUX_RISTOURNE = 0.02; // 2%
@@ -16,30 +20,37 @@ export function CarriereModal({
   isOpen, 
   onClose, 
   accounts = [], 
-  project = null,
-  onProjectSaved,
+  project = null, 
+  onProjectSaved, 
   onProjectUpdated,
-  createTransaction 
+  createTransaction  // ← IMPORTANT : Ajouter cette prop
 }) {
-  
-  // ===== ÉTATS DE BASE =====
+  // VÉRIFICATION SÉCURITÉ
+  if (!createTransaction) {
+    console.error('createTransaction manquant dans CarriereModal !');
+    return null;
+  }
+
+  // ÉTATS DE BASE
   const [projectName, setProjectName] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('active');
   const [startDate, setStartDate] = useState(new Date());
   const [endDate, setEndDate] = useState(null);
+  const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
+  const { addTransaction } = useFinance();
 
-  // ===== ÉTATS SPÉCIFIQUES CARRIÈRE =====
+  // ÉTATS SPÉCIFIQUES CARRIÈRE
   const [lieu, setLieu] = useState('');
   const [substances, setSubstances] = useState('');
   const [perimetre, setPerimetre] = useState('');
   const [numeroPermis, setNumeroPermis] = useState('');
   const [typePermis, setTypePermis] = useState('PRE'); // PRE, PE, etc.
 
-  // ===== GESTION DES LP1 =====
+  // GESTION DES LP1
   const [lp1List, setLp1List] = useState([]);
   const [showLP1Form, setShowLP1Form] = useState(false);
-  
+
   // Formulaire LP1
   const [newLP1, setNewLP1] = useState({
     numeroLP1: '',
@@ -48,71 +59,178 @@ export function CarriereModal({
     prixUnitaireUSD: 0,
     dateEmission: new Date(),
     numeroOV: '',
-    statut: 'En attente' // En attente, Payé, Exporté
+    statut: 'En attente', // En attente, Payé, Exporté
   });
 
-  // ===== CHARGES & VENTES =====
+  // CHARGES & VENTES
   const [expenses, setExpenses] = useState([]);
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ===== LISTE DES SUBSTANCES COMMUNES =====
+  // LISTE DES SUBSTANCES COMMUNES
   const substancesList = [
-    'Agate', 'Quartz', 'Améthyste', 'Citrine', 'Labradorite',
+    'Agate', 'Quartz', 'Améthyste', 'Citrine', 'Labradorite', 
     'Tourmaline', 'Béryl', 'Graphite', 'Mica', 'Feldspath',
     'Calcaire', 'Sable', 'Gravier', 'Argile', 'Autre'
   ];
 
-  // ===== CHARGEMENT PROJET EXISTANT =====
-  useEffect(() => {
-    if (project) {
-      setProjectName(project.name || '');
-      setDescription(project.description || '');
-      setStatus(project.status || 'active');
-      
-      const start = project.startDate || project.start_date;
-      const end = project.endDate || project.end_date;
-      setStartDate(start ? new Date(start) : new Date());
-      setEndDate(end ? new Date(end) : null);
+  const loadProjectData = useCallback(async () => {
+  if (!project?.id) return;
 
-      // Champs spécifiques carrière (stockés dans metadata JSON)
-      if (project.metadata) {
-        const meta = typeof project.metadata === 'string' 
-          ? JSON.parse(project.metadata) 
-          : project.metadata;
-        
+  try {
+    console.log('🔄 Rechargement du projet:', project.name, 'ID:', project.id);
+    
+    // ✅ 1. Récupérer le projet
+    const projects = await projectsService.getAll();
+    const currentProject = projects.find(p => p.id === project.id);
+    
+    if (!currentProject) {
+      console.error('❌ Projet non trouvé:', project.id);
+      return;
+    }
+
+    console.log('📦 PROJET COMPLET REÇU:', JSON.stringify(currentProject, null, 2).substring(0, 500));
+    console.log('📦 expenses brut (type):', typeof currentProject.expenses);
+    console.log('📦 expenses brut (valeur):', currentProject.expenses);
+    console.log('📦 revenues brut (type):', typeof currentProject.revenues);
+    console.log('📦 revenues brut (valeur):', currentProject.revenues);
+
+    // ✅ 2. Charger les champs de base du projet
+    setProjectName(currentProject.name || '');
+    setDescription(currentProject.description || '');
+    setStatus(currentProject.status || 'active');
+    
+    if (currentProject.startDate) {
+      setStartDate(new Date(currentProject.startDate));
+    }
+    if (currentProject.endDate) {
+      setEndDate(new Date(currentProject.endDate));
+    }
+
+    // ✅ 3. Parser le metadata
+    if (currentProject.metadata) {
+      const meta = typeof currentProject.metadata === 'string' 
+        ? JSON.parse(currentProject.metadata)
+        : currentProject.metadata;
+      
+      console.log('📦 Metadata parsé:', meta);
+      
+      // ✅ Vérifier que c'est un objet et pas un tableau
+      if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
         setLieu(meta.lieu || '');
         setSubstances(meta.substances || '');
         setPerimetre(meta.perimetre || '');
         setNumeroPermis(meta.numeroPermis || '');
         setTypePermis(meta.typePermis || 'PRE');
-        setLp1List(meta.lp1List || []);
+        setLp1List(Array.isArray(meta.lp1List) ? meta.lp1List : []);
+      } else {
+        console.warn('⚠️ Metadata invalide (pas un objet):', meta);
+      }
+    }
+
+    // ✅ 4. Récupérer les transactions pour vérifier les paiements
+    const allTransactions = await transactionsService.getAll();
+    const projectTransactions = allTransactions.filter(t => {
+      const txProjectId = t.project_id || t.projectid;
+      return String(txProjectId) === String(project.id);
+    });
+
+    console.log('💳 Transactions du projet:', projectTransactions.length);
+
+    // ✅ 5. Parser les expenses (JSONB qui arrive comme Array JavaScript)
+    const expensesRaw = Array.isArray(currentProject.expenses)
+      ? currentProject.expenses
+      : (currentProject.expenses ? [currentProject.expenses] : []);
+
+    const revenuesRaw = Array.isArray(currentProject.revenues)
+      ? currentProject.revenues
+      : (currentProject.revenues ? [currentProject.revenues] : []);
+
+    console.log('📦 Expenses brutes:', expensesRaw);
+    console.log('📦 Revenues brutes:', revenuesRaw);
+
+    // ✅ 6. Fusionner expenses avec transactions pour déterminer isPaid
+    const parsedExpenses = expensesRaw.map(exp => {
+      // Chercher une transaction correspondante
+      const matchingTx = projectTransactions.find(tx => {
+        const txLineId = tx.project_line_id || tx.projectlineid;
+        return String(txLineId) === String(exp.id) && tx.type === 'expense';
+      });
+
+      // Si transaction trouvée, récupérer le nom du compte
+      let accountName = 'Inconnu';
+      if (matchingTx) {
+        const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountid));
+        accountName = acc?.name || 'Inconnu';
+      } else if (exp.account) {
+        accountName = exp.account;
       }
 
-      // Charger expenses et revenues
-      const parseList = (data) => {
-        if (!data) return [];
-        if (Array.isArray(data)) return data;
-        try { return JSON.parse(data); } catch { return []; }
+      return {
+        id: exp.id || uuidv4(),
+        description: exp.description || '',
+        amount: parseFloat(exp.amount || 0),
+        category: exp.category || 'Permis & Admin',
+        date: exp.date ? new Date(exp.date) : new Date(),
+        account: accountName,
+        isPaid: !!matchingTx, // ✅ Vrai si transaction existe
+        isRecurring: !!exp.isRecurring
       };
+    });
 
-      setExpenses(parseList(project.expenses).map(e => ({
-        ...e,
-        id: e.id || uuidv4(),
-        date: e.date ? new Date(e.date) : new Date(),
-        amount: parseFloat(e.amount) || 0
-      })));
+    // ✅ 7. Fusionner revenues avec transactions
+    const parsedRevenues = revenuesRaw.map(rev => {
+      const matchingTx = projectTransactions.find(tx => {
+        const txLineId = tx.project_line_id || tx.projectlineid;
+        return String(txLineId) === String(rev.id) && tx.type === 'income';
+      });
 
-      setRevenues(parseList(project.revenues).map(r => ({
-        ...r,
-        id: r.id || uuidv4(),
-        date: r.date ? new Date(r.date) : new Date(),
-        amount: parseFloat(r.amount) || 0
-      })));
-    } else {
-      resetForm();
-    }
-  }, [project, isOpen]);
+      let accountName = 'Inconnu';
+      if (matchingTx) {
+        const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountid));
+        accountName = acc?.name || 'Inconnu';
+      } else if (rev.account) {
+        accountName = rev.account;
+      }
+
+      return {
+        id: rev.id || uuidv4(),
+        description: rev.description || '',
+        amount: parseFloat(rev.amount || 0),
+        category: rev.category || 'Autre',
+        date: rev.date ? new Date(rev.date) : new Date(),
+        account: accountName,
+        isPaid: !!matchingTx, // ✅ Vrai si transaction existe
+        isRecurring: !!rev.isRecurring
+      };
+    });
+
+    console.log('📋 Expenses parsées:', parsedExpenses.length, 'lignes');
+    console.log('📋 Revenues parsées:', parsedRevenues.length, 'lignes');
+    console.log('💰 Expenses payées:', parsedExpenses.filter(e => e.isPaid).length);
+    console.log('💵 Revenues encaissés:', parsedRevenues.filter(r => r.isPaid).length);
+
+    // ✅ 8. APPLIQUER au state
+    setExpenses(parsedExpenses);
+    setRevenues(parsedRevenues);
+
+    console.log('✅ Données appliquées au state');
+
+  } catch (error) {
+    console.error('❌ Erreur loadProjectData:', error);
+  }
+}, [project, accounts]); // ✅ Dépendances : project ET accounts
+
+  // CHARGEMENT PROJET EXISTANT
+useEffect(() => {
+  // ✅ NE PAS recharger si un paiement est en cours
+  if (isPaymentInProgress) {
+    console.log('⏸️ Rechargement bloqué : paiement en cours');
+    return;
+  }
+
+  loadProjectData();
+}, [project, isOpen, accounts, isPaymentInProgress]);
 
   const resetForm = () => {
     setProjectName('');
@@ -130,22 +248,16 @@ export function CarriereModal({
     setRevenues([]);
   };
 
-  // ===== CALCULS AUTOMATIQUES LP1 =====
+  // CALCULS AUTOMATIQUES LP1
   const calculateLP1Values = (lp1) => {
     const valeurTotale = lp1.quantiteKg * lp1.prixUnitaireUSD;
     const ristourne = valeurTotale * TAUX_RISTOURNE;
     const redevance = valeurTotale * TAUX_REDEVANCE;
     const totalDTSPM = valeurTotale * TAUX_TOTAL_DTSPM;
-
-    return {
-      valeurTotale,
-      ristourne,
-      redevance,
-      totalDTSPM
-    };
+    return { valeurTotale, ristourne, redevance, totalDTSPM };
   };
 
-  // ===== AJOUTER UN LP1 =====
+  // AJOUTER UN LP1
   const handleAddLP1 = () => {
     if (!newLP1.numeroLP1 || !newLP1.substance || newLP1.quantiteKg <= 0) {
       alert('Veuillez remplir tous les champs obligatoires du LP1');
@@ -179,7 +291,7 @@ export function CarriereModal({
     setShowLP1Form(false);
   };
 
-  // ===== AJOUTER CHARGE REDEVANCE/RISTOURNE =====
+  // AJOUTER CHARGE REDEVANCE/RISTOURNE
   const addRedevanceRistourneExpense = (lp1) => {
     const newExpense = {
       id: uuidv4(),
@@ -197,11 +309,10 @@ export function CarriereModal({
         valeurBase: lp1.valeurTotale
       }
     };
-
     setExpenses(prev => [...prev, newExpense]);
   };
 
-  // ===== AJOUTER REVENU CESSION LP1 =====
+  // AJOUTER REVENU CESSION LP1
   const addLP1Revenue = (lp1) => {
     const newRevenue = {
       id: uuidv4(),
@@ -220,11 +331,10 @@ export function CarriereModal({
         prixUnitaire: lp1.prixUnitaireUSD
       }
     };
-
     setRevenues(prev => [...prev, newRevenue]);
   };
 
-  // ===== SUPPRIMER LP1 =====
+  // SUPPRIMER LP1
   const handleDeleteLP1 = (lp1Id) => {
     if (!confirm('Supprimer ce LP1 et ses charges/revenus associés ?')) return;
 
@@ -238,7 +348,7 @@ export function CarriereModal({
     setRevenues(prev => prev.filter(r => r.lp1Id !== lp1Id));
   };
 
-  // ===== AJOUTER CHARGE MANUELLE =====
+  // AJOUTER CHARGE MANUELLE
   const addExpense = () => {
     setExpenses([...expenses, {
       id: uuidv4(),
@@ -252,7 +362,7 @@ export function CarriereModal({
     }]);
   };
 
-  // ===== AJOUTER VENTE MANUELLE =====
+  // AJOUTER VENTE MANUELLE
   const addRevenue = () => {
     setRevenues([...revenues, {
       id: uuidv4(),
@@ -266,30 +376,321 @@ export function CarriereModal({
     }]);
   };
 
-  // ===== CATÉGORIES =====
+  // UPDATE HELPERS
+  const updateExpense = (id, field, value) => {
+    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const updateRevenue = (id, field, value) => {
+    setRevenues(revenues.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  // CATÉGORIES
   const expenseCategories = [
-    { value: 'Exploitation', label: '⛏️ Exploitation' },
-    { value: 'Équipements', label: '🔧 Équipements' },
-    { value: 'Transport', label: '🚚 Transport' },
-    { value: 'Main d\'œuvre', label: '👷 Main d\'œuvre' },
-    { value: 'Redevances Minières', label: '📜 Redevances' },
-    { value: 'Permis & Admin', label: '📋 Permis & Admin' },
-    { value: 'Autre', label: '📦 Autre' }
+    { value: 'Exploitation', label: 'Exploitation' },
+    { value: 'Équipements', label: 'Équipements' },
+    { value: 'Transport', label: 'Transport' },
+    { value: "Main d'œuvre", label: "Main d'œuvre" },
+    { value: 'Redevances Minières', label: 'Redevances' },
+    { value: 'Permis & Admin', label: 'Permis & Admin' },
+    { value: 'Autre', label: 'Autre' }
   ];
 
   const revenueCategories = [
-    { value: 'Cession LP1', label: '📄 Cession LP1' },
-    { value: 'Vente Substance', label: '💎 Vente Substance' },
-    { value: 'Autre', label: '💰 Autre' }
+    { value: 'Cession LP1', label: 'Cession LP1' },
+    { value: 'Vente Substance', label: 'Vente Substance' },
+    { value: 'Autre', label: 'Autre' }
   ];
 
-  // ===== CALCULS FINANCIERS =====
-  const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+  // ==================== PAYER DÉPENSE ====================
+const handlePayExpense = async (expenseId) => {
+  const expense = expenses.find(e => e.id === expenseId);
+  if (!expense) return;
+
+  if (!expense.account) {
+    alert('Choisis un compte pour cette charge (ex: Coffre) avant de la payer.');
+    return;
+  }
+
+  try {
+    console.log('💳 Paiement de la ligne:', expenseId, expense.description);
+
+    // Nettoyer la description pour éviter duplication
+    let finalDescription = expense.description;
+
+    if (finalDescription.startsWith(`${project.name} - `)) {
+      finalDescription = finalDescription.replace(`${project.name} - `, '');
+    }
+    if (finalDescription.endsWith(' (Dépense)')) {
+      finalDescription = finalDescription.replace(' (Dépense)', '');
+    }
+
+    finalDescription = `${project.name} - ${finalDescription} (Dépense)`;
+
+    // Trouver le compte sélectionné (Coffre, etc.)
+    const accountObj = accounts.find(a => a.name === expense.account);
+    if (!accountObj) {
+      alert(`Compte introuvable: ${expense.account}`);
+      return;
+    }
+
+    // 1️⃣ Créer la transaction en base → mettra à jour le solde du Coffre
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'expense',
+      amount: parseFloat(expense.amount),
+      category: expense.category || 'Projet - Dépense',
+      description: finalDescription,
+      date: expense.date.toISOString().split('T')[0],
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: expenseId,
+    });
+
+    // 2️⃣ Mettre à jour l'état local de la ligne (visuel "payé")
+    setExpenses(prev =>
+      prev.map(e =>
+        e.id === expenseId
+          ? { ...e, isPaid: true, account: accountObj.name }
+          : e
+      )
+    );
+
+    console.log('📝 État mis à jour (ligne payée):', {
+      ...expense,
+      isPaid: true,
+      account: accountObj.name,
+    });
+
+    // 3️⃣ Sauvegarder l'état du projet (JSONB + lignes normalisées)
+    await saveProjectState(
+      expenses.map(e =>
+        e.id === expenseId ? { ...e, isPaid: true } : e
+      ),
+      revenues
+    );
+  } catch (error) {
+    console.error('❌ Erreur paiement:', error);
+    alert(`Erreur lors du paiement : ${error.message}`);
+  }
+};
+
+
+// ==================== ENCAISSER REVENU (MODIFIÉ) ====================
+const handleEncaisser = async (rev, index) => {
+  try {
+    if (!rev.account) return alert('Choisis un compte !');
+    
+    const accountObj = accounts.find(a => a.name === rev.account);
+    if (!accountObj) return alert('Compte introuvable');
+
+    if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) return;
+
+    if (!project || !project.id) {
+      alert('Erreur : Projet introuvable.');
+      return;
+    }
+
+    // ✅ 1. BLOQUER le rechargement automatique
+    setIsPaymentInProgress(true);
+
+    console.log('💰 Création transaction:', rev.description, formatCurrency(rev.amount));
+
+    // ✅ 2. Créer la transaction
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'income',
+      amount: parseFloat(rev.amount),
+      category: 'Projet - Revenu',
+      description: `${project.name} - ${rev.description} (Revenu)`,
+      date: new Date().toISOString().split('T')[0],
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: rev.id
+    });
+
+    // ✅ 3. Mettre à jour l'état local
+    const updated = revenues.map((r, i) => 
+      i === index ? { ...r, isPaid: true, account: accountObj.name } : r
+    );
+    setRevenues(updated);
+
+    console.log('📝 État local mis à jour:', updated.filter(r => r.isPaid).length, 'encaissés sur', updated.length);
+
+    // ✅ 4. Sauvegarder dans la BDD
+    await saveProjectState(expenses, updated);
+
+    // ✅ 5. Attendre que la BDD soit bien à jour
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // ✅ 6. Rafraîchir la liste des projets
+    if (onProjectUpdated) {
+      console.log('🔄 Rafraîchissement de la liste des projets');
+      onProjectUpdated();
+    }
+
+    alert('✅ Revenu encaissé !');
+
+  } catch (error) {
+    console.error('❌ Erreur handleEncaisser:', error);
+    alert(error?.message || 'Erreur encaissement');
+  } finally {
+    // ✅ 7. DÉBLOQUER le rechargement
+    setIsPaymentInProgress(false);
+  }
+};
+
+  // ==================== ANNULER PAIEMENT DÉPENSE ====================
+  const handleCancelPaymentExpense = async (exp, index) => {
+    try {
+      if (!project?.id) return alert('Projet non enregistré');
+      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
+
+      const allTx = await transactionsService.getAll();
+      let matches = allTx.filter(t => 
+        String(t.projectlineid) === String(exp.id) && t.isposted === true
+      );
+
+      if (matches.length === 0) {
+        matches = allTx.filter(t => 
+          String(t.projectid) === String(project.id) &&
+          t.type === 'expense' &&
+          Number(t.amount) === Number(exp.amount) &&
+          t.description.includes(exp.description)
+        );
+      }
+
+      for (const tx of matches) {
+        try {
+          await transactionsService.deleteTransaction(tx.id);
+        } catch (e) {
+          console.warn('Impossible de supprimer transaction', tx.id, e);
+        }
+      }
+
+      const updated = [...expenses];
+      updated[index] = { ...updated[index], isPaid: false };
+      setExpenses(updated);
+
+      await saveProjectState(updated, revenues);
+
+      if (onProjectUpdated) onProjectUpdated();
+      alert('✅ Paiement annulé.');
+
+    } catch (err) {
+      console.error('❌ Erreur handleCancelPaymentExpense:', err);
+      alert('Erreur annulation : ' + (err.message || err));
+    }
+  };
+
+  // ==================== ANNULER ENCAISSEMENT REVENU ====================
+  const handleCancelPaymentRevenue = async (rev, index) => {
+    try {
+      if (!project?.id) return alert('Projet non enregistré');
+      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+
+      const allTx = await transactionsService.getAll();
+      let matches = allTx.filter(t => 
+        String(t.projectlineid) === String(rev.id) && t.isposted === true
+      );
+
+      if (matches.length === 0) {
+        matches = allTx.filter(t => 
+          String(t.projectid) === String(project.id) &&
+          t.type === 'income' &&
+          Number(t.amount) === Number(rev.amount)
+        );
+      }
+
+      for (const tx of matches) {
+        try {
+          await transactionsService.deleteTransaction(tx.id);
+        } catch (e) {
+          console.warn('Impossible de supprimer transaction', tx.id, e);
+        }
+      }
+
+      const updated = [...revenues];
+      updated[index] = { ...updated[index], isPaid: false };
+      setRevenues(updated);
+
+      await saveProjectState(expenses, updated);
+
+      if (onProjectUpdated) onProjectUpdated();
+      alert('✅ Encaissement annulé.');
+
+    } catch (err) {
+      console.error('❌ Erreur handleCancelPaymentRevenue:', err);
+      alert('Erreur annulation : ' + (err.message || err));
+    }
+  };
+
+  // ==================== SAUVEGARDER L'ÉTAT DU PROJET ====================
+  const saveProjectState = async (currentExpenses, currentRevenues) => {
+  if (!project?.id) {
+    console.warn('⚠️ saveProjectState: Projet non enregistré');
+    return;
+  }
+
+  console.log('💾 saveProjectState démarré:', {
+    projectId: project.id,
+    expensesCount: currentExpenses.length,
+    revenuesCount: currentRevenues.length,
+    expensesPaid: currentExpenses.filter(e => e.isPaid).length 
+  });
+
+  const newTotalRevenues = currentRevenues.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const newTotalExpenses = currentExpenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const newNetProfit = newTotalRevenues - newTotalExpenses;
+  const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+
+  const payload = {
+    name: projectName.trim(),
+    type: 'CARRIERE',
+    description: description || '',
+    status: status || 'active',
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    endDate: endDate ? new Date(endDate).toISOString() : null,
+    totalCost: newTotalExpenses,
+    totalRevenues: newTotalRevenues,
+    netProfit: newNetProfit,
+    roi: parseFloat(newRoi),
+    expenses: JSON.stringify(currentExpenses),
+    revenues: JSON.stringify(currentRevenues),
+    metadata: JSON.stringify({
+      lieu,
+      substances,
+      perimetre,
+      numeroPermis,
+      typePermis,
+      lp1List
+    })
+  };
+
+  console.log('📤 Payload envoyé:', {
+    ...payload,
+    expenses: `${currentExpenses.length} lignes (${JSON.stringify(currentExpenses).length} bytes)`,
+    revenues: `${currentRevenues.length} lignes`
+  });
+
+  try {
+    const result = await projectsService.updateProject(project.id, payload);
+    console.log('✅ Projet sauvegardé:', result);
+  } catch (error) {
+    console.error('❌ Erreur saveProjectState:', error);
+    throw error;
+  }
+};
+
+  // CALCULS FINANCIERS
+  const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const totalRevenues = revenues.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
   const netProfit = totalRevenues - totalExpenses;
   const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : 0;
 
-  // ===== SAUVEGARDE =====
+  // SAUVEGARDE
   const handleSave = async () => {
     if (!projectName.trim()) {
       alert('Le nom du projet est obligatoire');
@@ -297,7 +698,6 @@ export function CarriereModal({
     }
 
     setLoading(true);
-
     try {
       const payload = {
         name: projectName.trim(),
@@ -331,7 +731,7 @@ export function CarriereModal({
       if (onProjectSaved) onProjectSaved();
       onClose();
     } catch (error) {
-      alert('Erreur lors de la sauvegarde : ' + error.message);
+      alert(`Erreur lors de la sauvegarde : ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -348,12 +748,8 @@ export function CarriereModal({
           <div className="flex items-center gap-3">
             <Truck className="w-8 h-8" />
             <div>
-              <h2 className="text-2xl font-bold">
-                {project ? 'Modifier' : 'Nouveau'} Projet Carrière
-              </h2>
-              <p className="text-amber-100 text-sm">
-                Gestion des LP1, Redevances & Ristournes automatiques
-              </p>
+              <h2 className="text-2xl font-bold">{project ? 'Modifier' : 'Nouveau'} Projet Carrière</h2>
+              <p className="text-amber-100 text-sm">Gestion des LP1, Redevances & Ristournes automatiques</p>
             </div>
           </div>
           <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-lg transition">
@@ -363,50 +759,46 @@ export function CarriereModal({
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
+
           {/* SECTION 1: INFORMATIONS GÉNÉRALES */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
               <FileText className="w-5 h-5" />
               Informations Générales
             </h3>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Nom du Projet *</label>
+                <label className="block text-sm font-medium mb-1">Nom du Projet</label>
                 <input
                   type="text"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
                   className="w-full p-2 border rounded"
-                  placeholder="Ex: Carrière Agate Ibity 2025"
+                  placeholder="Ex: Carrière MAROVOAY"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Statut</label>
-                <select
-                  value={status}
+                <select 
+                  value={status} 
                   onChange={(e) => setStatus(e.target.value)}
                   className="w-full p-2 border rounded"
                 >
-                  <option value="active">🟢 Actif</option>
-                  <option value="completed">✅ Terminé</option>
-                  <option value="paused">⏸️ En pause</option>
+                  <option value="active">Actif</option>
+                  <option value="completed">Terminé</option>
+                  <option value="paused">En pause</option>
                 </select>
               </div>
-
               <div className="col-span-2">
                 <label className="block text-sm font-medium mb-1">Description</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full p-2 border rounded"
-                  rows="2"
+                  rows={2}
                   placeholder="Description du projet..."
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Date Début</label>
                 <DatePicker
@@ -416,7 +808,6 @@ export function CarriereModal({
                   className="w-full p-2 border rounded"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Date Fin (Optionnelle)</label>
                 <DatePicker
@@ -434,9 +825,8 @@ export function CarriereModal({
           {/* SECTION 2: DONNÉES CARRIÈRE */}
           <div className="bg-amber-50 p-4 rounded-lg">
             <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
-              ⛏️ Données Spécifiques Carrière
+              Données Spécifiques Carrière
             </h3>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Lieu / Zone</label>
@@ -448,7 +838,6 @@ export function CarriereModal({
                   placeholder="Ex: Ibity, Antsirabe"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Substances Exploitées</label>
                 <input
@@ -460,10 +849,9 @@ export function CarriereModal({
                   list="substances-list"
                 />
                 <datalist id="substances-list">
-                  {substancesList.map(s => <option key={s} value={s} />)}
+                  {substancesList.map((s) => <option key={s} value={s} />)}
                 </datalist>
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-1">Périmètre</label>
                 <input
@@ -474,12 +862,11 @@ export function CarriereModal({
                   placeholder="Ex: 500 ha, Carré 1234"
                 />
               </div>
-
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-sm font-medium mb-1">Type Permis</label>
-                  <select
-                    value={typePermis}
+                  <select 
+                    value={typePermis} 
                     onChange={(e) => setTypePermis(e.target.value)}
                     className="w-full p-2 border rounded"
                   >
@@ -507,7 +894,7 @@ export function CarriereModal({
           <div className="bg-blue-50 p-4 rounded-lg">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg flex items-center gap-2">
-                📄 Laissez-Passer (LP1)
+                Laissez-Passer (LP1)
               </h3>
               <button
                 onClick={() => setShowLP1Form(!showLP1Form)}
@@ -528,60 +915,55 @@ export function CarriereModal({
                     <input
                       type="text"
                       value={newLP1.numeroLP1}
-                      onChange={(e) => setNewLP1({...newLP1, numeroLP1: e.target.value})}
+                      onChange={(e) => setNewLP1({ ...newLP1, numeroLP1: e.target.value })}
                       className="w-full p-2 border rounded"
                       placeholder="LP1-2025-001"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium mb-1">Substance *</label>
                     <input
                       type="text"
                       value={newLP1.substance}
-                      onChange={(e) => setNewLP1({...newLP1, substance: e.target.value})}
+                      onChange={(e) => setNewLP1({ ...newLP1, substance: e.target.value })}
                       className="w-full p-2 border rounded"
                       placeholder="Agate"
                       list="substances-list"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium mb-1">Quantité (kg) *</label>
                     <CalculatorInput
                       value={newLP1.quantiteKg}
-                      onChange={(val) => setNewLP1({...newLP1, quantiteKg: val})}
+                      onChange={(val) => setNewLP1({ ...newLP1, quantiteKg: val })}
                       placeholder="27000"
                       className="w-full p-2 border rounded"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium mb-1">Prix Unitaire (USD/kg) *</label>
                     <CalculatorInput
                       value={newLP1.prixUnitaireUSD}
-                      onChange={(val) => setNewLP1({...newLP1, prixUnitaireUSD: val})}
+                      onChange={(val) => setNewLP1({ ...newLP1, prixUnitaireUSD: val })}
                       placeholder="1.5"
                       className="w-full p-2 border rounded"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium mb-1">Date Émission</label>
                     <DatePicker
                       selected={newLP1.dateEmission}
-                      onChange={(date) => setNewLP1({...newLP1, dateEmission: date})}
+                      onChange={(date) => setNewLP1({ ...newLP1, dateEmission: date })}
                       dateFormat="dd/MM/yyyy"
                       className="w-full p-2 border rounded"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium mb-1">N° OV</label>
                     <input
                       type="text"
                       value={newLP1.numeroOV}
-                      onChange={(e) => setNewLP1({...newLP1, numeroOV: e.target.value})}
+                      onChange={(e) => setNewLP1({ ...newLP1, numeroOV: e.target.value })}
                       className="w-full p-2 border rounded"
                       placeholder="OV-2025-001"
                     />
@@ -614,15 +996,15 @@ export function CarriereModal({
                 )}
 
                 <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={handleAddLP1}
+                  <button 
+                    onClick={handleAddLP1} 
                     className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
                   >
                     <Save className="w-4 h-4" />
                     Enregistrer LP1
                   </button>
-                  <button
-                    onClick={() => setShowLP1Form(false)}
+                  <button 
+                    onClick={() => setShowLP1Form(false)} 
                     className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
                   >
                     Annuler
@@ -641,7 +1023,7 @@ export function CarriereModal({
                       <p className="text-xs text-gray-500">{lp1.substance}</p>
                     </div>
                     <div>
-                      <span className="text-gray-600">Qté:</span>
+                      <span className="text-gray-600">Qt:</span>
                       <p className="font-semibold">{lp1.quantiteKg} kg</p>
                     </div>
                     <div>
@@ -662,15 +1044,14 @@ export function CarriereModal({
                       </span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteLP1(lp1.id)}
+                  <button 
+                    onClick={() => handleDeleteLP1(lp1.id)} 
                     className="text-red-600 hover:bg-red-50 p-2 rounded"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
-              
               {lp1List.length === 0 && (
                 <p className="text-center text-gray-500 py-4">
                   Aucun LP1 enregistré. Cliquez sur "Ajouter LP1" pour commencer.
@@ -684,10 +1065,10 @@ export function CarriereModal({
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 <TrendingDown className="w-5 h-5 text-red-600" />
-                Charges
+                Charges ({expenses.length})
               </h3>
-              <button
-                onClick={addExpense}
+              <button 
+                onClick={addExpense} 
                 className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
               >
                 <Plus className="w-4 h-4" />
@@ -695,83 +1076,100 @@ export function CarriereModal({
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto">
               {expenses.map((exp, idx) => (
-                <div key={exp.id} className="bg-white p-3 rounded-lg border grid grid-cols-12 gap-2 items-center">
+                <div 
+                  key={exp.id} 
+                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
+                    exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+                  }`}
+                >
+                  {/* Description */}
                   <input
                     type="text"
                     value={exp.description}
-                    onChange={(e) => {
-                      const updated = [...expenses];
-                      updated[idx].description = e.target.value;
-                      setExpenses(updated);
-                    }}
-                    className="col-span-4 p-2 border rounded text-sm"
+                    onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
+                    className="col-span-3 p-2 border rounded text-sm"
                     placeholder="Description"
                     disabled={exp.lp1Id} // Ligne auto = non éditable
                   />
-                  
+
+                  {/* Catégorie */}
                   <select
                     value={exp.category}
-                    onChange={(e) => {
-                      const updated = [...expenses];
-                      updated[idx].category = e.target.value;
-                      setExpenses(updated);
-                    }}
+                    onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                     disabled={exp.lp1Id}
                   >
-                    {expenseCategories.map(cat => (
+                    {expenseCategories.map((cat) => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
                   </select>
 
+                  {/* Montant */}
                   <CalculatorInput
                     value={exp.amount}
-                    onChange={(val) => {
-                      const updated = [...expenses];
-                      updated[idx].amount = val;
-                      setExpenses(updated);
-                    }}
-                    className="col-span-2 p-2 border rounded text-sm"
+                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
+                    className="col-span-2 p-2 border rounded text-sm font-semibold"
                     disabled={exp.lp1Id}
                   />
 
+                  {/* Date */}
                   <DatePicker
                     selected={exp.date}
-                    onChange={(date) => {
-                      const updated = [...expenses];
-                      updated[idx].date = date;
-                      setExpenses(updated);
-                    }}
+                    onChange={(date) => updateExpense(exp.id, 'date', date)}
                     dateFormat="dd/MM/yy"
                     className="col-span-2 p-2 border rounded text-sm"
                   />
 
+                  {/* Compte */}
                   <select
                     value={exp.account}
-                    onChange={(e) => {
-                      const updated = [...expenses];
-                      updated[idx].account = e.target.value;
-                      setExpenses(updated);
-                    }}
-                    className="col-span-1 p-2 border rounded text-sm"
+                    onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
+                    className="col-span-2 p-2 border rounded text-sm"
                   >
                     <option value="">Compte</option>
-                    {accounts.map(acc => (
+                    {accounts.map((acc) => (
                       <option key={acc.id} value={acc.name}>{acc.name}</option>
                     ))}
                   </select>
 
+                  {/* BOUTONS PAYER/CANCEL */}
+                  {!exp.isPaid ? (
+                    <button
+                      onClick={() => handlePayExpense(exp.id)}  // ✅ Utiliser handlePayExpense
+                      disabled={!exp.account || !project?.id}
+                      className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
+                      title="Payer"
+                    >
+                      💰
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleCancelPaymentExpense(exp, idx)}
+                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+                      title="Annuler paiement"
+                    >
+                      ❌
+                    </button>
+                  )}
+
+                  {/* Supprimer */}
                   <button
-                    onClick={() => setExpenses(expenses.filter(e => e.id !== exp.id))}
+                    onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))}
                     className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
-                    disabled={exp.lp1Id && lp1List.some(lp => lp.id === exp.lp1Id)}
+                    disabled={exp.lp1Id || lp1List.some(lp => lp.id === exp.lp1Id)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
+
+              {expenses.length === 0 && (
+                <p className="text-center text-gray-500 py-8">
+                  Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
+                </p>
+              )}
             </div>
 
             <div className="mt-3 text-right">
@@ -785,10 +1183,10 @@ export function CarriereModal({
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-green-600" />
-                Ventes & Revenus
+                Ventes & Revenus ({revenues.length})
               </h3>
-              <button
-                onClick={addRevenue}
+              <button 
+                onClick={addRevenue} 
                 className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
               >
                 <Plus className="w-4 h-4" />
@@ -796,83 +1194,100 @@ export function CarriereModal({
               </button>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 max-h-96 overflow-y-auto">
               {revenues.map((rev, idx) => (
-                <div key={rev.id} className="bg-white p-3 rounded-lg border grid grid-cols-12 gap-2 items-center">
+                <div 
+                  key={rev.id} 
+                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
+                    rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
+                  }`}
+                >
+                  {/* Description */}
                   <input
                     type="text"
                     value={rev.description}
-                    onChange={(e) => {
-                      const updated = [...revenues];
-                      updated[idx].description = e.target.value;
-                      setRevenues(updated);
-                    }}
-                    className="col-span-4 p-2 border rounded text-sm"
+                    onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
+                    className="col-span-3 p-2 border rounded text-sm"
                     placeholder="Description"
                     disabled={rev.lp1Id}
                   />
-                  
+
+                  {/* Catégorie */}
                   <select
                     value={rev.category}
-                    onChange={(e) => {
-                      const updated = [...revenues];
-                      updated[idx].category = e.target.value;
-                      setRevenues(updated);
-                    }}
+                    onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                     disabled={rev.lp1Id}
                   >
-                    {revenueCategories.map(cat => (
+                    {revenueCategories.map((cat) => (
                       <option key={cat.value} value={cat.value}>{cat.label}</option>
                     ))}
                   </select>
 
+                  {/* Montant */}
                   <CalculatorInput
                     value={rev.amount}
-                    onChange={(val) => {
-                      const updated = [...revenues];
-                      updated[idx].amount = val;
-                      setRevenues(updated);
-                    }}
-                    className="col-span-2 p-2 border rounded text-sm"
+                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+                    className="col-span-2 p-2 border rounded text-sm font-semibold"
                     disabled={rev.lp1Id}
                   />
 
+                  {/* Date */}
                   <DatePicker
                     selected={rev.date}
-                    onChange={(date) => {
-                      const updated = [...revenues];
-                      updated[idx].date = date;
-                      setRevenues(updated);
-                    }}
+                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
                     dateFormat="dd/MM/yy"
                     className="col-span-2 p-2 border rounded text-sm"
                   />
 
+                  {/* Compte */}
                   <select
                     value={rev.account}
-                    onChange={(e) => {
-                      const updated = [...revenues];
-                      updated[idx].account = e.target.value;
-                      setRevenues(updated);
-                    }}
-                    className="col-span-1 p-2 border rounded text-sm"
+                    onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
+                    className="col-span-2 p-2 border rounded text-sm"
                   >
                     <option value="">Compte</option>
-                    {accounts.map(acc => (
+                    {accounts.map((acc) => (
                       <option key={acc.id} value={acc.name}>{acc.name}</option>
                     ))}
                   </select>
 
+                  {/* BOUTONS ENCAISSER/CANCEL */}
+                  {!rev.isPaid ? (
+                    <button
+                      onClick={() => handleEncaisser(rev, idx)}
+                      disabled={!rev.account || !project?.id}
+                      className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
+                      title="Encaisser"
+                    >
+                      💵
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleCancelPaymentRevenue(rev, idx)}
+                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+                      title="Annuler encaissement"
+                    >
+                      ❌
+                    </button>
+                  )}
+
+                  {/* Supprimer */}
                   <button
-                    onClick={() => setRevenues(revenues.filter(r => r.id !== rev.id))}
+                    onClick={() => setRevenues(revenues.filter((r) => r.id !== rev.id))}
                     className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
-                    disabled={rev.lp1Id && lp1List.some(lp => lp.id === rev.lp1Id)}
+                    disabled={rev.lp1Id || lp1List.some(lp => lp.id === rev.lp1Id)}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
+
+              {revenues.length === 0 && (
+                <p className="text-center text-gray-500 py-8">
+                  Aucun revenu. Cliquez sur "Ajouter Vente" pour commencer.
+                </p>
+              )}
             </div>
 
             <div className="mt-3 text-right">
@@ -890,7 +1305,7 @@ export function CarriereModal({
                 <p className="text-2xl font-bold">{formatCurrency(totalExpenses)}</p>
               </div>
               <div>
-                <p className="text-blue-100 text-sm">Total Revenus</p>
+                <p className="text-blue-100 text-sm">Total Revenu</p>
                 <p className="text-2xl font-bold">{formatCurrency(totalRevenues)}</p>
               </div>
               <div>
@@ -911,15 +1326,14 @@ export function CarriereModal({
 
         {/* FOOTER */}
         <div className="bg-gray-100 p-4 flex justify-between items-center">
-          <button
-            onClick={onClose}
+          <button 
+            onClick={onClose} 
             className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-200"
           >
             Annuler
           </button>
-          
-          <button
-            onClick={handleSave}
+          <button 
+            onClick={handleSave} 
             disabled={loading}
             className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-8 py-2 rounded-lg flex items-center gap-2 hover:from-amber-700 hover:to-orange-700 disabled:opacity-50"
           >

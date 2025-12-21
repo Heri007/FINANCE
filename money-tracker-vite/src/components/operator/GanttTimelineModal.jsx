@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, Search, Download, Plus, Edit2, Trash2, CheckCircle, AlertCircle, Clock, DollarSign, Users, Package, TrendingUp } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, differenceInDays, parseISO, isWithinInterval, isSameDay, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import TreasuryTimeline from '../TreasuryTimeline';
+import { useFinance } from '../../contexts/FinanceContext';
 
 const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefresh }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -12,13 +14,15 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   const [draggedProject, setDraggedProject] = useState(null);
   const [hoveredDay, setHoveredDay] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
+  const { projects, accounts, receivables, transactions, plannedTransactions } = useFinance();
+
 
   console.log('🎨 GanttTimelineModal - Projets reçus:', projects);
 
   // Normaliser les données des projets
   const normalizedProjects = useMemo(() => {
     console.log('🔍 Projets bruts reçus:', projects);
-    
+  
     return projects.map(p => {
       const start_date = p.start_date || p.startdate || p.startDate || null;
       const end_date = p.end_date || p.enddate || p.endDate || null;
@@ -56,6 +60,43 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   }, [projects]);
 
   console.log('📊 Total projets normalisés:', normalizedProjects.length);
+
+  // Au lieu de passer timelineStart/timelineEnd bruts
+//const focusStart = new Date();
+//focusStart.setDate(focusStart.getDate() - 45); // 45 jours avant
+//const focusEnd = new Date();
+//focusEnd.setDate(focusEnd.getDate() + 45); // 45 jours après
+
+  const coffreBalance = useMemo(() => {
+    return accounts?.find(a => a.name === 'Coffre')?.balance || 75000000;
+  }, [accounts]);
+
+  // 5️⃣ 🆕 Calculer les dates de timeline
+  const timelineStart = useMemo(() => {
+    if (normalizedProjects.length === 0) return startOfMonth(new Date());
+    
+    const dates = normalizedProjects
+      .map(p => new Date(p.start_date || p.startDate))
+      .filter(d => !isNaN(d.getTime()));
+    
+    if (dates.length === 0) return startOfMonth(new Date());
+    
+    const earliest = new Date(Math.min(...dates));
+    return startOfMonth(earliest);
+  }, [normalizedProjects]);
+
+  const timelineEnd = useMemo(() => {
+    if (normalizedProjects.length === 0) return endOfMonth(addMonths(new Date(), 3));
+    
+    const dates = normalizedProjects
+      .map(p => new Date(p.end_date || p.endDate))
+      .filter(d => !isNaN(d.getTime()));
+    
+    if (dates.length === 0) return endOfMonth(addMonths(new Date(), 3));
+    
+    const latest = new Date(Math.max(...dates));
+    return endOfMonth(addMonths(latest, 1));
+  }, [normalizedProjects]);
 
   // Calculer les statistiques globales
   const statistics = useMemo(() => {
@@ -265,6 +306,39 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
 
   if (!isOpen) return null;
 
+  // Fonction pour calculer le solde Coffre à une date donnée
+const getBalanceAtDate = (targetDate) => {
+  const targetStr = new Date(targetDate).toISOString().split('T')[0];
+  
+  // Solde actuel du compte Coffre
+  const currentBalance = accounts?.find(a => a.name === 'Coffre')?.balance || 0;
+  
+  // Calculer les flux Coffre APRÈS targetDate
+  const futureFlows = transactions
+    .filter(tx => {
+      const isCoffre = (tx.account_name || tx.accountName || tx.account) === 'Coffre';
+      const txDate = tx.date ? new Date(tx.date).toISOString().split('T')[0] : null;
+      return isCoffre && txDate && txDate > targetStr;
+    })
+    .reduce((sum, tx) => {
+      const amount = Number(tx.amount) || 0;
+      const isIncome = String(tx.type).toLowerCase() === 'income';
+      return sum + (isIncome ? amount : -amount);
+    }, 0);
+  
+  // Solde au targetDate = solde actuel - flux futurs
+  return currentBalance - futureFlows;
+};
+
+// Utiliser pour calculer le solde initial de la timeline
+const focusStart = new Date();
+focusStart.setDate(focusStart.getDate() - 45);
+
+const focusEnd = new Date();
+focusEnd.setDate(focusEnd.getDate() + 45);
+
+const initialBalance = getBalanceAtDate(focusStart);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full h-[95vh] flex flex-col">
@@ -344,6 +418,17 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
           </div>
         </div>
 
+         {/* Prévision de Trésorerie */}
+/ Passer à TreasuryTimeline
+<TreasuryTimeline
+  projects={normalizedProjects}
+  currentCashBalance={initialBalance} // ✅ Solde au début de la période
+  startDate={focusStart}
+  endDate={focusEnd}
+  receivables={receivables}
+  transactions={transactions}
+  plannedTransactions={plannedTransactions}
+/>
         {/* Controls */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 gap-4">
           <div className="flex items-center gap-2">
@@ -494,6 +579,8 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
       ) : (
         filteredProjects.map((project, projectIndex) => {
           const isDelayed = project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed';
+
+
 
           return (
             <div
@@ -683,6 +770,28 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
       <span className="ml-2 bg-white bg-opacity-30 px-2 py-0.5 rounded">
         {project.progress || 0}%
       </span>
+      {/* Dans le rendu de chaque barre de projet */}
+<div className="relative">
+  {/* Barre existante */}
+  <div className={`h-8 rounded ${project.color} ...`}>
+    {/* Contenu existant */}
+  </div>
+  
+  {/* Indicateurs de flux */}
+  <div className="absolute top-0 right-0 flex gap-1">
+    {project.expected_revenue > 0 && (
+      <div className="bg-green-500 text-white text-xs px-1 rounded" title="Revenus prévus">
+        ↑ {(project.expected_revenue / 1000000).toFixed(1)}M
+      </div>
+    )}
+    {project.estimated_cost > 0 && (
+      <div className="bg-red-500 text-white text-xs px-1 rounded" title="Coûts prévus">
+        ↓ {(project.estimated_cost / 1000000).toFixed(1)}M
+      </div>
+    )}
+  </div>
+</div>
+
     </div>
 
     {/* Progress Fill */}

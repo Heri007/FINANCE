@@ -69,7 +69,7 @@ const schemas = {
     
     type: Joi.string().valid(
       'ponctuel', 'recurrent', 
-      'PRODUCTFLIP', 'LIVESTOCK', 'FISHING', 'REALESTATE', 'VEHICLE', 'EXPORT', 'OTHER'
+      'PRODUCTFLIP', 'LIVESTOCK', 'FISHING', 'REALESTATE', 'VEHICLE', 'EXPORT', 'OTHER', 'CARRIERE'
     ).required(),
     
     description: Joi.string().allow('', null).optional(),

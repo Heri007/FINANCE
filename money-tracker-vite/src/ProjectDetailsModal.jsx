@@ -274,9 +274,10 @@ console.log('💰 TOTAUX CALCULÉS:', {
   };
 
   const handleCopyToClipboard = () => {
-    let text = `📋 ${project.name}\n💰 Budget: ${formatCurrency(totalCost)}\n📈 Revenus: ${formatCurrency(totalRev)}\n💎 Profit: ${formatCurrency(netProfit)}`;
-    navigator.clipboard.writeText(text).then(() => alert('Résumé copié !'));
-  };
+  let text = `${project.name}\nBudget: ${formatCurrency(totalBudget)}\nRevenus: ${formatCurrency(totalRevenuePrev)}\nProfit: ${formatCurrency(netProfit)}`;
+  navigator.clipboard.writeText(text).then(() => alert("Résumé copié !"));
+};
+
 
   // Juste avant le return
 console.log('🎯 RENDU Modal avec:', {

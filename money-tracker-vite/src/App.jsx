@@ -364,7 +364,7 @@ const handleDeleteAccount = async (id) => {
   };
 
   const handleTransactionUpdate = async () => {
-    await refreshAccounts()();
+    await refreshAccounts();
     await refreshTransactions();
     setEditingTransaction(null);
   };
