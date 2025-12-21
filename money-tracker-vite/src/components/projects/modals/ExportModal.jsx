@@ -102,42 +102,48 @@ export function ExportModal({
 
             // Fusionner les transactions réelles avec les lignes budgétaires
             const mergeTransactions = (lines, type) => {
-              const newLines = [...lines];
-              
-              projectTx.filter(t => t.type === type).forEach(tx => {
-                const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-                
-                // Chercher si la ligne existe déjà
-                const existingIdx = newLines.findIndex(l => 
-                  String(l.id) === String(tx.project_line_id) ||
-                  (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid)
-                );
+  const newLines = [...lines];
 
-                if (existingIdx >= 0) {
-                  // Ligne existante → marquer comme payée
-                  newLines[existingIdx] = {
-                    ...newLines[existingIdx],
-                    isPaid: true,
-                    account: accName,
-                    date: new Date(tx.transaction_date || tx.date)
-                  };
-                } else {
-                  // Nouvelle ligne depuis transaction
-                  newLines.push({
-                    id: tx.project_line_id || uuidv4(),
-                    description: tx.description,
-                    amount: parseFloat(tx.amount),
-                    category: tx.category,
-                    date: new Date(tx.transaction_date || tx.date),
-                    account: accName,
-                    isPaid: true,
-                    isRecurring: false
-                  });
-                }
-              });
+  projectTx
+    .filter(t => t.type === type)
+    .forEach(tx => {
+      const accName =
+        accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+      const realDate = tx.transaction_date || tx.date;
 
-              return newLines;
-            };
+      const existingIdx = newLines.findIndex(
+        l =>
+          String(l.id) === String(tx.project_line_id) ||
+          (l.amount === parseFloat(tx.amount) &&
+            l.description === tx.description &&
+            !l.isPaid)
+      );
+
+      if (existingIdx >= 0) {
+        newLines[existingIdx] = {
+          ...newLines[existingIdx],
+          isPaid: true,
+          account: accName,
+          realDate: realDate ? new Date(realDate) : null, // ✅ Date réelle
+        };
+      } else {
+        newLines.push({
+          id: tx.project_line_id || uuidv4(),
+          description: tx.description,
+          amount: parseFloat(tx.amount),
+          category: tx.category,
+          date: new Date(), // ✅ Date planifiée par défaut
+          realDate: realDate ? new Date(realDate) : null, // ✅ Date réelle
+          account: accName,
+          isPaid: true,
+          isRecurring: false,
+        });
+      }
+    });
+
+  return newLines;
+};
+
 
             currentExpenses = mergeTransactions(currentExpenses, 'expense');
             currentRevenues = mergeTransactions(currentRevenues, 'income');
@@ -505,40 +511,64 @@ export function ExportModal({
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) return;
+  if (!project?.id) {
+    console.warn('⚠️ saveProjectState: Projet non enregistré');
+    return;
+  }
+  
+  // ✅ MAPPER plannedDate AVANT stringify
+  const expensesWithDate = currentExpenses.map(exp => ({
+    ...exp,
+    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+  }));
+  
+  const revenuesWithDate = currentRevenues.map(rev => ({
+    ...rev,
+    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+  }));
 
-    const newTotalRevenues = currentRevenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const newTotalExpenses = currentExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+  console.log('💾 saveProjectState démarré:', {
+    projectId: project.id,
+    expensesCount: currentExpenses.length,
+    revenuesCount: currentRevenues.length,
+    expensesPaid: currentExpenses.filter(e => e.isPaid).length
+  });
 
-    const payload = {
-      name: projectName.trim(),
-      type: 'EXPORT',
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      expenses: JSON.stringify(currentExpenses),
-      revenues: JSON.stringify(currentRevenues),
-      metadata: JSON.stringify({
-        pricePerContainer,
-        containerCount,
-        commissionRateProprio,
-        commissionRateRandou,
-        productType,
-        destination,
-        containerType
-      })
-    };
+  const newTotalRevenues = revenuesWithDate.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const newTotalExpenses = expensesWithDate.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const newNetProfit = newTotalRevenues - newTotalExpenses;
+  const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
-    await projectsService.updateProject(project.id, payload);
+  const payload = {
+    name: projectName.trim(),
+    type: 'EXPORT',
+    description: description || '',
+    status: status || 'active',
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    endDate: endDate ? new Date(endDate).toISOString() : null,
+    totalCost: newTotalExpenses,
+    totalRevenues: newTotalRevenues,
+    netProfit: newNetProfit,
+    roi: parseFloat(newRoi),
+    expenses: JSON.stringify(expensesWithDate),  // ✅ AVEC plannedDate
+    revenues: JSON.stringify(revenuesWithDate),  // ✅ AVEC plannedDate
+    metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
   };
 
+  console.log('📤 Payload envoyé:', {
+    ...payload,
+    expenses: `${expensesWithDate.length} lignes`,
+    revenues: `${revenuesWithDate.length} lignes`
+  });
+
+  try {
+    const result = await projectsService.updateProject(project.id, payload);
+    console.log('✅ Projet sauvegardé:', result);
+  } catch (error) {
+    console.error('❌ Erreur saveProjectState:', error);
+    throw error;
+  }
+};
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -560,6 +590,17 @@ export function ExportModal({
 
     setLoading(true);
 
+    const expensesWithDate = expenses.map(exp => ({
+  ...exp,
+  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+}));
+
+const revenuesWithDate = revenues.map(rev => ({
+  ...rev,
+  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+}));
+
+
     try {
       const payload = {
         name: projectName.trim(),
@@ -572,8 +613,8 @@ export function ExportModal({
         totalRevenues: parseFloat(totalRevenues) || 0,
         netProfit: parseFloat(netProfit) || 0,
         roi: parseFloat(roi) || 0,
-        expenses: JSON.stringify(expenses),
-        revenues: JSON.stringify(revenues),
+        expenses: JSON.stringify(expensesWithDate),
+        revenues: JSON.stringify(revenuesWithDate),
         metadata: JSON.stringify({
           pricePerContainer,
           containerCount,
@@ -825,208 +866,262 @@ export function ExportModal({
           </div>
 
           {/* SECTION 4: CHARGES */}
-          <div className="bg-red-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingDown className="w-5 h-5 text-red-600" />
-                Charges ({expenses.length})
-              </h3>
-              <button
-                onClick={addExpense}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Charge
-              </button>
-            </div>
+<div className="bg-red-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingDown className="w-5 h-5 text-red-600" />
+      Charges ({expenses.length})
+    </h3>
+    <button
+      onClick={addExpense}
+      className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Charge
+    </button>
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {expenses.map((exp, idx) => (
-                <div key={exp.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
-                  <input
-                    type="text"
-                    value={exp.description}
-                    onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                  />
-                  
-                  <select
-                    value={exp.category}
-                    onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    {expenseCategories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {expenses.map((exp, idx) => (
+      <div
+        key={exp.id}
+        className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${
+          exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+        }`}
+      >
+        <input
+          type="text"
+          value={exp.description}
+          onChange={(e) =>
+            updateExpense(exp.id, 'description', e.target.value)
+          }
+          className="col-span-3 p-2 border rounded text-sm"
+          placeholder="Description"
+        />
 
-                  <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+        <select
+          value={exp.category}
+          onChange={(e) =>
+            updateExpense(exp.id, 'category', e.target.value)
+          }
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          {expenseCategories.map((cat) => (
+            <option key={cat.value} value={cat.value}>
+              {cat.label}
+            </option>
+          ))}
+        </select>
 
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+        <CalculatorInput
+          value={exp.amount}
+          onChange={(val) => updateExpense(exp.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+        />
 
-                  <select
-                    value={exp.account}
-                    onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
-                    ))}
-                  </select>
+        {/* Date planifiée */}
+        <DatePicker
+          selected={exp.date}
+          onChange={(date) => updateExpense(exp.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
 
-                  {!exp.isPaid ? (
-                    <button
-                      onClick={() => handlePayerDepense(exp, idx)}
-                      disabled={!exp.account || !project?.id}
-                      className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-                      title="Payer"
-                    >
-                      💳
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentExpense(exp, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler paiement"
-                    >
-                      ↩️
-                    </button>
-                  )}
+        {/* Date réelle */}
+        <DatePicker
+          selected={exp.realDate || null}
+          onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+          dateFormat="dd/MM/yy"
+          placeholderText="Date réelle"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
 
-                  <button
-                    onClick={() => removeExpense(exp.id)}
-                    className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+        <select
+          value={exp.account}
+          onChange={(e) =>
+            updateExpense(exp.id, 'account', e.target.value)
+          }
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          <option value="">Compte</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.name}>
+              {acc.name}
+            </option>
+          ))}
+        </select>
 
-              {expenses.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
-                </p>
-              )}
-            </div>
+        {!exp.isPaid ? (
+          <button
+            onClick={() => handlePayerDepense(exp, idx)}
+            disabled={!exp.account || !project?.id}
+            className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
+            title="Payer"
+          >
+            💳
+          </button>
+        ) : (
+          <button
+            onClick={() => handleCancelPaymentExpense(exp, idx)}
+            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+            title="Annuler paiement"
+          >
+            ↩️
+          </button>
+        )}
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Charges: </span>
-              <span className="font-bold text-red-600 text-xl">{formatCurrency(totalExpenses)}</span>
-            </div>
-          </div>
+        <button
+          onClick={() => removeExpense(exp.id)}
+          className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    ))}
+
+    {expenses.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
+      </p>
+    )}
+  </div>
+
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Charges: </span>
+    <span className="font-bold text-red-600 text-xl">
+      {formatCurrency(totalExpenses)}
+    </span>
+  </div>
+</div>
 
           {/* SECTION 5: REVENUS */}
-          <div className="bg-green-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-600" />
-                Revenus ({revenues.length})
-              </h3>
-              <button
-                onClick={addRevenue}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Revenu
-              </button>
-            </div>
+<div className="bg-green-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingUp className="w-5 h-5 text-green-600" />
+      Revenus ({revenues.length})
+    </h3>
+    <button
+      onClick={addRevenue}
+      className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Revenu
+    </button>
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {revenues.map((rev, idx) => (
-                <div key={rev.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
-                  <input
-                    type="text"
-                    value={rev.description}
-                    onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                  />
-                  
-                  <select
-                    value={rev.category}
-                    onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    {revenueCategories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {revenues.map((rev, idx) => (
+      <div
+        key={rev.id}
+        className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${
+          rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
+        }`}
+      >
+        <input
+          type="text"
+          value={rev.description}
+          onChange={(e) =>
+            updateRevenue(rev.id, 'description', e.target.value)
+          }
+          className="col-span-3 p-2 border rounded text-sm"
+          placeholder="Description"
+        />
 
-                  <CalculatorInput
-                    value={rev.amount}
-                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+        <select
+          value={rev.category}
+          onChange={(e) =>
+            updateRevenue(rev.id, 'category', e.target.value)
+          }
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          {revenueCategories.map((cat) => (
+            <option key={cat.value} value={cat.value}>
+              {cat.label}
+            </option>
+          ))}
+        </select>
 
-                  <DatePicker
-                    selected={rev.date}
-                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+        <CalculatorInput
+          value={rev.amount}
+          onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+        />
 
-                  <select
-                    value={rev.account}
-                    onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
-                    ))}
-                  </select>
+        {/* Date planifiée */}
+        <DatePicker
+          selected={rev.date}
+          onChange={(date) => updateRevenue(rev.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
 
-                  {!rev.isPaid ? (
-                    <button
-                      onClick={() => handleEncaisser(rev, idx)}
-                      disabled={!rev.account || !project?.id}
-                      className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
-                      title="Encaisser"
-                    >
-                      💰
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentRevenue(rev, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler encaissement"
-                    >
-                      ↩️
-                    </button>
-                  )}
+        {/* Date réelle */}
+        <DatePicker
+          selected={rev.realDate || null}
+          onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
+          dateFormat="dd/MM/yy"
+          placeholderText="Date réelle"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
 
-                  <button
-                    onClick={() => removeRevenue(rev.id)}
-                    className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+        <select
+          value={rev.account}
+          onChange={(e) =>
+            updateRevenue(rev.id, 'account', e.target.value)
+          }
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          <option value="">Compte</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.name}>
+              {acc.name}
+            </option>
+          ))}
+        </select>
 
-              {revenues.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucun revenu. Utilisez "Générer Ligne Globale" ou ajoutez manuellement.
-                </p>
-              )}
-            </div>
+        {!rev.isPaid ? (
+          <button
+            onClick={() => handleEncaisser(rev, idx)}
+            disabled={!rev.account || !project?.id}
+            className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
+            title="Encaisser"
+          >
+            💰
+          </button>
+        ) : (
+          <button
+            onClick={() => handleCancelPaymentRevenue(rev, idx)}
+            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+            title="Annuler encaissement"
+          >
+            ↩️
+          </button>
+        )}
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Revenus: </span>
-              <span className="font-bold text-green-600 text-xl">{formatCurrency(totalRevenues)}</span>
-            </div>
-          </div>
+        <button
+          onClick={() => removeRevenue(rev.id)}
+          className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    ))}
+
+    {revenues.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucun revenu. Utilisez "Générer Lignes" ou ajoutez manuellement.
+      </p>
+    )}
+  </div>
+
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Revenus: </span>
+    <span className="font-bold text-green-600 text-xl">
+      {formatCurrency(totalRevenues)}
+    </span>
+  </div>
+</div>
 
           {/* RÉSUMÉ FINANCIER */}
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-lg">

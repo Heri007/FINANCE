@@ -38,6 +38,7 @@ export function FinanceProvider({ children }) {
 
   const [projectExpenseLines, setProjectExpenseLines] = useState([]);
   const [projectRevenueLines, setProjectRevenueLines] = useState([]);
+  const [loading, setLoading] = useState(false);
 
 const refreshProjectLines = useCallback(async () => {
   if (!isAuthenticated) return;
@@ -47,7 +48,7 @@ const refreshProjectLines = useCallback(async () => {
     apiRequest('/projects/revenue-lines/pending'),
   ]);
 
-  console.log('🧪 RAW unpaidExpenses:', unpaidExpenses);
+console.log('🧪 RAW unpaidExpenses:', unpaidExpenses);
 console.log('🧪 RAW pendingRevenues:', pendingRevenues);
 
   console.log('✅ Project lines chargées:', {
@@ -59,6 +60,7 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
   setProjectExpenseLines(Array.isArray(unpaidExpenses) ? unpaidExpenses : []);
   setProjectRevenueLines(Array.isArray(pendingRevenues) ? pendingRevenues : []);
 }, [isAuthenticated]);
+
 
   // ============================================================
   // REFRESH FUNCTIONS
@@ -161,6 +163,7 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
   refreshProjects();
   refreshReceivables();
   refreshProjectLines(); // ✅ AJOUT
+  loadData(); // ✅ appelle ton log Coffre
 }, [
   isAuthenticated,
   refreshAccounts,
@@ -286,6 +289,35 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
     },
     [refreshTransactions, refreshAccounts]
   );
+
+  const loadData = async () => {
+  try {
+    setLoading(true);
+
+    const [accountsRes, transactionsRes, projectsRes] = await Promise.all([
+      apiRequest('/accounts'),
+      apiRequest('/transactions'),
+      apiRequest('/projects'),
+    ]);
+
+    // accountsRes / transactionsRes / projectsRes sont déjà les data JSON directes
+    const accountsData = Array.isArray(accountsRes) ? accountsRes : accountsRes?.data || [];
+    const transactionsData = Array.isArray(transactionsRes) ? transactionsRes : transactionsRes?.data || [];
+    const projectsData = Array.isArray(projectsRes) ? projectsRes : projectsRes?.data || [];
+
+    const coffre = accountsData.find((a) => a.name === 'Coffre');
+    console.log('🧾 Coffre account depuis API:', coffre);
+
+    setAccounts(accountsData);
+    setTransactions(transactionsData);
+    setProjects(projectsData);
+
+  } catch (error) {
+    console.error('Erreur chargement données:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ============================================================
   // MUTATIONS - PROJECTS
@@ -892,6 +924,13 @@ console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
 
   return result;
 }, [projectExpenseLines, projectRevenueLines]);
+
+console.log(
+  '🔍 plannedTransactions NATIORA+NEMO:',
+  plannedTransactions.filter(
+    tx => tx.project_id === 24 || tx.project_id === 27
+  )
+);
 
   const treasuryAlerts = useMemo(() => {
     const warnings = [];

@@ -107,44 +107,47 @@ export function ProjectPlannerModal({
 
                 // Fonction pour fusionner/ajouter les transactions réelles
                 const mergeTransactions = (lines, type) => {
-                    const newLines = [...lines];
-                    
-                    projectTx.filter(t => t.type === type).forEach(tx => {
-                        // On cherche si cette transaction correspond déjà à une ligne (par ID ou similarité)
-                        const existingIdx = newLines.findIndex(l => 
-                            String(l.id) === String(tx.project_line_id) || // Match par ID précis
-                            (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid) // Match flou
-                        );
+  const newLines = [...lines];
 
-                        // Trouver le nom du compte
-                        const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+  projectTx
+    .filter(t => t.type === type)
+    .forEach(tx => {
+      const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
 
-                        if (existingIdx >= 0) {
-                            // On met à jour la ligne existante pour dire "C'est payé !"
-                            console.log(`✅ Ligne validée par transaction: ${tx.description}`);
-                            newLines[existingIdx] = {
-                                ...newLines[existingIdx],
-                                isPaid: true,
-                                account: accName,
-                                date: new Date(tx.transaction_date || tx.date) // On met la date réelle
-                            };
-                        } else {
-                            // La ligne n'existait pas dans le budget ? ON L'AJOUTE !
-                            console.log(`➕ Nouvelle ligne ajoutée depuis transaction: ${tx.description}`);
-                            newLines.push({
-                                id: tx.project_line_id || uuidv4(), // On garde l'ID si dispo
-                                description: tx.description,
-                                amount: parseFloat(tx.amount),
-                                category: tx.category,
-                                date: new Date(tx.transaction_date || tx.date),
-                                account: accName,
-                                isPaid: true, // C'est une transaction réelle, donc c'est payé
-                                isRecurring: false
-                            });
-                        }
-                    });
-                    return newLines;
-                };
+      const existingIdx = newLines.findIndex(l =>
+        String(l.id) === String(tx.project_line_id) ||
+        (Number(l.amount) === Number(tx.amount) && l.description === tx.description && !l.isPaid)
+      );
+
+      const realDate = tx.transaction_date || tx.date; // ✅ Date réelle
+
+      if (existingIdx >= 0) {
+        // Ligne existante: on garde l'ancienne date (planifiée) dans `date`,
+        // et on stocke la date réelle séparément
+        newLines[existingIdx] = {
+          ...newLines[existingIdx],
+          isPaid: true,
+          account: accName,
+          realDate: realDate ? new Date(realDate) : null, // ✅ nouvelle propriété
+        };
+      } else {
+        // Nouvelle ligne créée depuis une transaction réelle
+        newLines.push({
+          id: tx.project_line_id || uuidv4(),
+          description: tx.description,
+          amount: parseFloat(tx.amount),
+          category: tx.category,
+          date: new Date(), // planifiée par défaut ou null si tu préfères
+          realDate: realDate ? new Date(realDate) : null, // ✅ stocker la date réelle
+          account: accName,
+          isPaid: true,
+          isRecurring: false,
+        });
+      }
+    });
+
+  return newLines;
+}
 
                 currentExpenses = mergeTransactions(currentExpenses, 'expense');
                 currentRevenues = mergeTransactions(currentRevenues, 'income');
@@ -527,32 +530,52 @@ const handlePayerDepense = async (exp, index) => {
     }
   };
 
-  const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) return;
-    const newTotalRevenues = currentRevenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const newTotalExpenses = currentExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+const saveProjectState = async (currentExpenses, currentRevenues) => {
+  if (!project?.id) return;
 
-    const payload = {
-      name: projectName.trim(),
-      type: projectType,
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      remainingBudget: parseFloat(totalAvailable) - newTotalExpenses,
-      totalAvailable: parseFloat(totalAvailable),
-      expenses: JSON.stringify(currentExpenses),
-      revenues: JSON.stringify(currentRevenues)
-    };
+  // ✅ Mapper Date planifiée
+  const expensesWithDate = currentExpenses.map(e => ({
+    ...e,
+    plannedDate: e.date ? new Date(e.date).toISOString().split('T')[0] : null
+  }));
+console.log('🔍 EXPENSES WITH DATE:', expensesWithDate[0]); // ✅ Vérifie ici
+  const revenuesWithDate = currentRevenues.map(r => ({
+    ...r,
+    plannedDate: r.date ? new Date(r.date).toISOString().split('T')[0] : null
+  }));
+console.log('🔍 REVENUES WITH DATE:', revenuesWithDate[0]); // ✅ Vérifie ici
+  const newTotalRevenues = revenuesWithDate.reduce(
+    (s, r) => s + (parseFloat(r.amount) || 0),
+    0
+  );
+  const newTotalExpenses = expensesWithDate.reduce(
+    (s, e) => s + (parseFloat(e.amount) || 0),
+    0
+  );
+  const newNetProfit = newTotalRevenues - newTotalExpenses;
+  const newRoi =
+    newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
-    await projectsService.updateProject(project.id, payload);
+  const payload = {
+    name: projectName.trim(),
+    type: projectType,
+    description: description || '',
+    status: status || 'active',
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    endDate: endDate ? new Date(endDate).toISOString() : null,
+    totalCost: newTotalExpenses,
+    totalRevenues: newTotalRevenues,
+    netProfit: newNetProfit,
+    roi: parseFloat(newRoi),
+    remainingBudget: parseFloat(totalAvailable) - newTotalExpenses,
+    totalAvailable: parseFloat(totalAvailable),
+    // ✅ avec plannedDate
+    expenses: JSON.stringify(expensesWithDate),
+    revenues: JSON.stringify(revenuesWithDate)
   };
+
+  await projectsService.updateProject(project.id, payload);
+};
 
   // --- TEMPLATES ---
   const applyTemplate = (template) => {
@@ -607,40 +630,66 @@ const handlePayerDepense = async (exp, index) => {
 
   // --- SAUVEGARDE FINALE ---
   const handleSave = async () => {
-    if (!projectName) return alert("Le nom est obligatoire");
-    setLoading(true);
-    try {
-      const payload = {
-        name: projectName.trim(),
-        description: description.trim(),
-        type: projectType,
-        status,
-        startDate: startDate.toISOString(),
-        endDate: endDate ? endDate.toISOString() : null,
-        totalCost: parseFloat(totalExpenses) || 0,
-        totalRevenues: parseFloat(totalRevenues) || 0,
-        netProfit: parseFloat(netProfit) || 0,
-        roi: parseFloat(roi) || 0,
-        remainingBudget: parseFloat(remainingBudget) || 0,
-        totalAvailable: parseFloat(totalAvailable) || 0,
-        expenses: JSON.stringify(expenses),
-        revenues: JSON.stringify(revenues)
-      };
+  if (!projectName) return alert("Le nom est obligatoire");
+  setLoading(true);
 
-      if (project?.id) {
-        await projectsService.updateProject(project.id, payload);
-      } else {
-        await projectsService.createProject(payload);
-      }
+  try {
+    // ✅ Mapper Date planifiée
+    const expensesWithDate = expenses.map(e => ({
+      ...e,
+      plannedDate: e.date ? new Date(e.date).toISOString().split('T')[0] : null
+    }));
 
+    const revenuesWithDate = revenues.map(r => ({
+      ...r,
+      plannedDate: r.date ? new Date(r.date).toISOString().split('T')[0] : null
+    }));
+
+    const totalRevenues = revenuesWithDate.reduce(
+      (s, r) => s + (parseFloat(r.amount) || 0),
+      0
+    );
+    const totalExpenses = expensesWithDate.reduce(
+      (s, e) => s + (parseFloat(e.amount) || 0),
+      0
+    );
+    const netProfit = totalRevenues - totalExpenses;
+    const roi =
+      totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : 0;
+
+    const payload = {
+      name: projectName.trim(),
+      description: description.trim(),
+      type: projectType,
+      status,
+      startDate: startDate ? startDate.toISOString() : null,
+      endDate: endDate ? endDate.toISOString() : null,
+      totalCost: parseFloat(totalExpenses) || 0,
+      totalRevenues: parseFloat(totalRevenues) || 0,
+      netProfit: parseFloat(netProfit) || 0,
+      roi: parseFloat(roi) || 0,
+      remainingBudget: parseFloat(remainingBudget) || 0,
+      totalAvailable: parseFloat(totalAvailable) || 0,
+      // ✅ avec plannedDate
+      expenses: JSON.stringify(expensesWithDate),
+      revenues: JSON.stringify(revenuesWithDate)
+    };
+
+    if (project?.id) {
+      await projectsService.updateProject(project.id, payload);
+      if (onProjectUpdated) onProjectUpdated();
+    } else {
+      await projectsService.createProject(payload);
       if (onProjectSaved) onProjectSaved();
-      onClose();
-    } catch (e) {
-      alert("Erreur sauvegarde: " + e.message);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    onClose();
+  } catch (e) {
+    alert("Erreur sauvegarde: " + e.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!isOpen) return null;
 
@@ -668,7 +717,6 @@ const handlePayerDepense = async (exp, index) => {
             </button>
           </div>
         </div>
-
         <div className="p-6 space-y-6 flex-1">
           
           {/* Info Principales */}
@@ -861,7 +909,6 @@ const handlePayerDepense = async (exp, index) => {
               ))}
             </div>
           </div>
-          
         </div>
         
         {/* Footer Actions */}

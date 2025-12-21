@@ -191,8 +191,8 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             roi: proj.roi || 0,
             remaining_budget: proj.remaining_budget || 0,
             total_available: proj.total_available || 0,
-            expenses: JSON.stringify(expenses),
-            revenues: JSON.stringify(revenues),
+expenses: JSON.stringify(expensesWithDate),
+        revenues: JSON.stringify(revenuesWithDate)
           };
 
           await updateProject(projectId, payload);

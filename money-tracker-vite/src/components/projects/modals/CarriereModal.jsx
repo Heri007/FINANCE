@@ -350,40 +350,72 @@ useEffect(() => {
 
   // AJOUTER CHARGE MANUELLE
   const addExpense = () => {
-    setExpenses([...expenses, {
-      id: uuidv4(),
-      description: '',
-      amount: 0,
-      category: 'Exploitation',
-      date: new Date(),
-      account: '',
-      isPaid: false,
-      isRecurring: false
-    }]);
+  const newExpense = {
+    id: `exp-${Date.now()}`,
+    description: '',
+    category: '',
+    amount: 0,
+    isPaid: false,
+    plannedDate: null,  // ✅ NEW
   };
+  setExpenses([...expenses, newExpense]);
+};
 
+const removeExpense = (id) => {
+  setExpenses(expenses.filter(e => e.id !== id));
+};
   // AJOUTER VENTE MANUELLE
   const addRevenue = () => {
-    setRevenues([...revenues, {
-      id: uuidv4(),
-      description: '',
-      amount: 0,
-      category: 'Vente Substance',
-      date: new Date(),
-      account: '',
-      isPaid: false,
-      isRecurring: false
-    }]);
+  const newRevenue = {
+    id: `rev-${Date.now()}`,
+    description: '',
+    category: '',
+    amount: 0,
+    isPaid: false,
+    plannedDate: null,  // ✅ NEW
   };
+  setRevenues([...revenues, newRevenue]);
+};
 
-  // UPDATE HELPERS
-  const updateExpense = (id, field, value) => {
-    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
-  };
+const removeRevenue = (id) => {
+  setRevenues(revenues.filter(r => r.id !== id));
+};
 
-  const updateRevenue = (id, field, value) => {
-    setRevenues(revenues.map(r => r.id === id ? { ...r, [field]: value } : r));
-  };
+
+// ============================================================
+// FONCTIONS DE GESTION DES DÉPENSES AVEC DATE (ADAPTÉ À TES IDs)
+// ============================================================
+const updateExpense = (id, field, value) => {
+  // Si c'est un champ date, forcer le format YYYY-MM-DD
+  if (field === 'plannedDate') {
+    const formattedValue = value && value.length > 0 ? value : null;
+    setExpenses(expenses.map(e => 
+      e.id === id ? { ...e, [field]: formattedValue } : e
+    ));
+  } else {
+    setExpenses(expenses.map(e => 
+      e.id === id ? { ...e, [field]: value } : e
+    ));
+  }
+};
+
+// ============================================================
+// FONCTIONS DE GESTION DES REVENUS AVEC DATE (ADAPTÉ À TES IDs)
+// ============================================================
+
+const updateRevenue = (id, field, value) => {
+  if (field === 'plannedDate') {
+    const formattedValue = value && value.length > 0 ? value : null;
+    setRevenues(revenues.map(r => 
+      r.id === id ? { ...r, [field]: formattedValue } : r
+    ));
+  } else {
+    setRevenues(revenues.map(r => 
+      r.id === id ? { ...r, [field]: value } : r
+    ));
+  }
+};
+
 
   // CATÉGORIES
   const expenseCategories = [
@@ -475,7 +507,6 @@ const handlePayExpense = async (expenseId) => {
     alert(`Erreur lors du paiement : ${error.message}`);
   }
 };
-
 
 // ==================== ENCAISSER REVENU (MODIFIÉ) ====================
 const handleEncaisser = async (rev, index) => {
@@ -633,16 +664,31 @@ const handleEncaisser = async (rev, index) => {
     console.warn('⚠️ saveProjectState: Projet non enregistré');
     return;
   }
+  
+  // ✅ MAPPER plannedDate AVANT stringify
+  const expensesWithDate = currentExpenses.map(exp => ({
+    ...exp,
+    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+  }));
+
+  console.log('🔍 EXPENSES WITH DATE:', expensesWithDate[0]); // ✅ Vérifie ici
+  
+  const revenuesWithDate = currentRevenues.map(rev => ({
+    ...rev,
+    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+  }));
+
+  console.log('📤 PAYLOAD ENVIADO:', payload.expenses); // ✅ Vérifie ici aussi
 
   console.log('💾 saveProjectState démarré:', {
     projectId: project.id,
     expensesCount: currentExpenses.length,
     revenuesCount: currentRevenues.length,
-    expensesPaid: currentExpenses.filter(e => e.isPaid).length 
+    expensesPaid: currentExpenses.filter(e => e.isPaid).length
   });
 
-  const newTotalRevenues = currentRevenues.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const newTotalExpenses = currentExpenses.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const newTotalRevenues = revenuesWithDate.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const newTotalExpenses = expensesWithDate.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
   const newNetProfit = newTotalRevenues - newTotalExpenses;
   const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
@@ -657,22 +703,15 @@ const handleEncaisser = async (rev, index) => {
     totalRevenues: newTotalRevenues,
     netProfit: newNetProfit,
     roi: parseFloat(newRoi),
-    expenses: JSON.stringify(currentExpenses),
-    revenues: JSON.stringify(currentRevenues),
-    metadata: JSON.stringify({
-      lieu,
-      substances,
-      perimetre,
-      numeroPermis,
-      typePermis,
-      lp1List
-    })
+    expenses: JSON.stringify(expensesWithDate),  // ✅ AVEC plannedDate
+    revenues: JSON.stringify(revenuesWithDate),  // ✅ AVEC plannedDate
+    metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
   };
 
   console.log('📤 Payload envoyé:', {
     ...payload,
-    expenses: `${currentExpenses.length} lignes (${JSON.stringify(currentExpenses).length} bytes)`,
-    revenues: `${currentRevenues.length} lignes`
+    expenses: `${expensesWithDate.length} lignes`,
+    revenues: `${revenuesWithDate.length} lignes`
   });
 
   try {
@@ -697,6 +736,16 @@ const handleEncaisser = async (rev, index) => {
       return;
     }
 
+    const expensesWithDate = expenses.map(exp => ({
+  ...exp,
+  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+}));
+
+const revenuesWithDate = revenues.map(rev => ({
+  ...rev,
+  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+}));
+
     setLoading(true);
     try {
       const payload = {
@@ -710,8 +759,8 @@ const handleEncaisser = async (rev, index) => {
         totalRevenues,
         netProfit,
         roi: parseFloat(roi),
-        expenses: JSON.stringify(expenses),
-        revenues: JSON.stringify(revenues),
+        expenses: JSON.stringify(expensesWithDate),
+        revenues: JSON.stringify(revenuesWithDate),
         metadata: JSON.stringify({
           lieu,
           substances,
@@ -738,6 +787,8 @@ const handleEncaisser = async (rev, index) => {
   };
 
   if (!isOpen) return null;
+
+  
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -1060,241 +1111,303 @@ const handleEncaisser = async (rev, index) => {
             </div>
           </div>
 
-          {/* SECTION 4: CHARGES */}
-          <div className="bg-red-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingDown className="w-5 h-5 text-red-600" />
-                Charges ({expenses.length})
-              </h3>
-              <button 
-                onClick={addExpense} 
-                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Charge
-              </button>
-            </div>
+{/* SECTION 4: CHARGES */}
+<div className="bg-red-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingDown className="w-5 h-5 text-red-600" />
+      Charges ({expenses.length})
+    </h3>
+    <button 
+      onClick={addExpense} 
+      className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Charge
+    </button>
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {expenses.map((exp, idx) => (
-                <div 
-                  key={exp.id} 
-                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
-                    exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
-                  }`}
-                >
-                  {/* Description */}
-                  <input
-                    type="text"
-                    value={exp.description}
-                    onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                    disabled={exp.lp1Id} // Ligne auto = non éditable
-                  />
+  {/* HEADERS EXPLICITES */}
+  <div 
+    className="hidden sm:grid gap-2 px-3 py-2 bg-red-100 rounded-lg mb-2 text-xs font-bold text-gray-700"
+    style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}
+  >
+    <div className="col-span-2">Description</div>
+    <div className="col-span-2">Catégorie</div>
+    <div className="col-span-2">Montant (Ar)</div>
+    <div className="col-span-2">📅 Date Réelle</div>
+    <div className="col-span-2">🔮 Date Planifiée</div>
+    <div className="col-span-1">Compte</div>
+    <div className="col-span-1">Action</div>
+    <div className="col-span-1">✓</div>
+  </div>
 
-                  {/* Catégorie */}
-                  <select
-                    value={exp.category}
-                    onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                    disabled={exp.lp1Id}
-                  >
-                    {expenseCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {expenses.map((exp, idx) => (
+      <div 
+        key={exp.id} 
+        className={`bg-white p-3 rounded-lg border-2 grid gap-2 items-center ${
+          exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+        }`}
+        style={{ gridTemplateColumns: 'repeat(13, 1fr)' }} 
+      >
+        {/* Description */}
+        <input
+          type="text"
+          value={exp.description}
+          onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+          placeholder="Description"
+          disabled={exp.lp1Id}
+        />
 
-                  {/* Montant */}
-                  <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                    disabled={exp.lp1Id}
-                  />
+        {/* Catégorie */}
+        <select
+          value={exp.category}
+          onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+          disabled={exp.lp1Id}
+        >
+          {expenseCategories.map((cat) => (
+            <option key={cat.value} value={cat.value}>{cat.label}</option>
+          ))}
+        </select>
 
-                  {/* Date */}
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+        {/* Montant */}
+        <CalculatorInput
+          value={exp.amount}
+          onChange={(val) => updateExpense(exp.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+          disabled={exp.lp1Id}
+        />
 
-                  {/* Compte */}
-                  <select
-                    value={exp.account}
-                    onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
-                    ))}
-                  </select>
+        {/* DATE RÉELLE - Avec titre explicite */}
+        <div className="col-span-2">
+          <DatePicker
+            selected={exp.date}
+            onChange={(date) => updateExpense(exp.id, 'date', date)}
+            dateFormat="dd/MM/yy"
+            className="w-full p-2 border rounded text-sm"
+            placeholderText="Effectuée"
+          />
+        </div>
 
-                  {/* BOUTONS PAYER/CANCEL */}
-                  {!exp.isPaid ? (
-                    <button
-                      onClick={() => handlePayExpense(exp.id)}  // ✅ Utiliser handlePayExpense
-                      disabled={!exp.account || !project?.id}
-                      className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-                      title="Payer"
-                    >
-                      💰
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentExpense(exp, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler paiement"
-                    >
-                      ❌
-                    </button>
-                  )}
+        {/* DATE PLANIFIÉE - Avec titre explicite */}
+        <div className="col-span-2">
+          <input
+            type="date"
+            value={exp.plannedDate || ''}
+            onChange={(e) => updateExpense(exp.id, 'plannedDate', e.target.value)}
+            className="w-full p-2 border border-indigo-300 rounded text-sm bg-indigo-50"
+            placeholder="Prévue"
+            title="Date planifiée du paiement"
+          />
+        </div>
 
-                  {/* Supprimer */}
-                  <button
-                    onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))}
-                    className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
-                    disabled={exp.lp1Id || lp1List.some(lp => lp.id === exp.lp1Id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+        {/* Compte */}
+        <select
+          value={exp.account}
+          onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          <option value="">Compte</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.name}>{acc.name}</option>
+          ))}
+        </select>
 
-              {expenses.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
-                </p>
-              )}
-            </div>
+        {/* BOUTON PAYER/CANCEL */}
+        {!exp.isPaid ? (
+          <button
+            onClick={() => handlePayExpense(exp.id)}
+            disabled={!exp.account || !project?.id}
+            className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
+            title="Payer"
+          >
+            💰
+          </button>
+        ) : (
+          <button
+            onClick={() => handleCancelPaymentExpense(exp, idx)}
+            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+            title="Annuler paiement"
+          >
+            ❌
+          </button>
+        )}
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Charges: </span>
-              <span className="font-bold text-red-600 text-lg">{formatCurrency(totalExpenses)}</span>
-            </div>
-          </div>
+        {/* Supprimer */}
+        <button
+          onClick={() => setExpenses(expenses.filter((e) => e.id !== exp.id))}
+          className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
+          disabled={exp.lp1Id || lp1List.some(lp => lp.id === exp.lp1Id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    ))}
 
-          {/* SECTION 5: VENTES/REVENUS */}
-          <div className="bg-green-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-600" />
-                Ventes & Revenus ({revenues.length})
-              </h3>
-              <button 
-                onClick={addRevenue} 
-                className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Vente
-              </button>
-            </div>
+    {expenses.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
+      </p>
+    )}
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {revenues.map((rev, idx) => (
-                <div 
-                  key={rev.id} 
-                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
-                    rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
-                  }`}
-                >
-                  {/* Description */}
-                  <input
-                    type="text"
-                    value={rev.description}
-                    onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                    disabled={rev.lp1Id}
-                  />
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Charges: </span>
+    <span className="font-bold text-red-600 text-lg">{formatCurrency(totalExpenses)}</span>
+  </div>
+</div>
 
-                  {/* Catégorie */}
-                  <select
-                    value={rev.category}
-                    onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                    disabled={rev.lp1Id}
-                  >
-                    {revenueCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
+{/* SECTION 5: VENTES/REVENUS */}
+<div className="bg-green-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingUp className="w-5 h-5 text-green-600" />
+      Ventes & Revenus ({revenues.length})
+    </h3>
+    <button 
+      onClick={addRevenue} 
+      className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Vente
+    </button>
+  </div>
 
-                  {/* Montant */}
-                  <CalculatorInput
-                    value={rev.amount}
-                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                    disabled={rev.lp1Id}
-                  />
+  {/* HEADERS EXPLICITES */}
+  <div 
+    className="hidden sm:grid gap-2 px-3 py-2 bg-green-100 rounded-lg mb-2 text-xs font-bold text-gray-700"
+    style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}
+  >
+    <div className="col-span-2">Description</div>
+    <div className="col-span-2">Catégorie</div>
+    <div className="col-span-2">Montant (Ar)</div>
+    <div className="col-span-2">📅 Date Réelle</div>
+    <div className="col-span-2">🔮 Date Planifiée</div>
+    <div className="col-span-1">Compte</div>
+    <div className="col-span-1">Action</div>
+    <div className="col-span-1">✓</div>
+  </div>
 
-                  {/* Date */}
-                  <DatePicker
-                    selected={rev.date}
-                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {revenues.map((rev, idx) => (
+      <div 
+        key={rev.id} 
+        className={`bg-white p-3 rounded-lg border-2 grid gap-2 items-center ${
+          rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
+        }`}
+        style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}
+      >
+        {/* Description */}
+        <input
+          type="text"
+          value={rev.description}
+          onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+          placeholder="Description"
+          disabled={rev.lp1Id}
+        />
 
-                  {/* Compte */}
-                  <select
-                    value={rev.account}
-                    onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
-                    ))}
-                  </select>
+        {/* Catégorie */}
+        <select
+          value={rev.category}
+          onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+          disabled={rev.lp1Id}
+        >
+          {revenueCategories.map((cat) => (
+            <option key={cat.value} value={cat.value}>{cat.label}</option>
+          ))}
+        </select>
 
-                  {/* BOUTONS ENCAISSER/CANCEL */}
-                  {!rev.isPaid ? (
-                    <button
-                      onClick={() => handleEncaisser(rev, idx)}
-                      disabled={!rev.account || !project?.id}
-                      className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
-                      title="Encaisser"
-                    >
-                      💵
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentRevenue(rev, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler encaissement"
-                    >
-                      ❌
-                    </button>
-                  )}
+        {/* Montant */}
+        <CalculatorInput
+          value={rev.amount}
+          onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+          disabled={rev.lp1Id}
+        />
 
-                  {/* Supprimer */}
-                  <button
-                    onClick={() => setRevenues(revenues.filter((r) => r.id !== rev.id))}
-                    className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
-                    disabled={rev.lp1Id || lp1List.some(lp => lp.id === rev.lp1Id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+        {/* DATE RÉELLE - Avec titre explicite */}
+        <div className="col-span-2">
+          <DatePicker
+            selected={rev.date}
+            onChange={(date) => updateRevenue(rev.id, 'date', date)}
+            dateFormat="dd/MM/yy"
+            className="w-full p-2 border rounded text-sm"
+            placeholderText="Encaissée"
+          />
+        </div>
 
-              {revenues.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucun revenu. Cliquez sur "Ajouter Vente" pour commencer.
-                </p>
-              )}
-            </div>
+        {/* DATE PLANIFIÉE - Avec titre explicite */}
+        <div className="col-span-2">
+          <input
+            type="date"
+            value={rev.plannedDate || ''}
+            onChange={(e) => updateRevenue(rev.id, 'plannedDate', e.target.value)}
+            className="w-full p-2 border border-green-300 rounded text-sm bg-green-50"
+            placeholder="Prévue"
+            title="Date planifiée de l'encaissement"
+          />
+        </div>
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Revenus: </span>
-              <span className="font-bold text-green-600 text-lg">{formatCurrency(totalRevenues)}</span>
-            </div>
-          </div>
+        {/* Compte */}
+        <select
+          value={rev.account}
+          onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          <option value="">Compte</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.name}>{acc.name}</option>
+          ))}
+        </select>
+
+        {/* BOUTON ENCAISSER/CANCEL */}
+        {!rev.isPaid ? (
+          <button
+            onClick={() => handleEncaisser(rev, idx)}
+            disabled={!rev.account || !project?.id}
+            className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
+            title="Encaisser"
+          >
+            💵
+          </button>
+        ) : (
+          <button
+            onClick={() => handleCancelPaymentRevenue(rev, idx)}
+            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+            title="Annuler encaissement"
+          >
+            ❌
+          </button>
+        )}
+
+        {/* Supprimer */}
+        <button
+          onClick={() => setRevenues(revenues.filter((r) => r.id !== rev.id))}
+          className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
+          disabled={rev.lp1Id || lp1List.some(lp => lp.id === rev.lp1Id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    ))}
+
+    {revenues.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucun revenu. Cliquez sur "Ajouter Vente" pour commencer.
+      </p>
+    )}
+  </div>
+
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Revenus: </span>
+    <span className="font-bold text-green-600 text-lg">{formatCurrency(totalRevenues)}</span>
+  </div>
+</div>
 
           {/* RÉSUMÉ FINANCIER */}
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 rounded-lg">

@@ -47,6 +47,97 @@ const safeJson = (data) => {
 };
 
 // ============================================================================
+// HELPER : Synchroniser project_*_lines depuis les JSON expenses/revenues
+// ============================================================================
+const syncProjectLinesFromJson = async (client, projectId, rawExpenses, rawRevenues) => {
+  let expenses = [];
+  let revenues = [];
+
+  try {
+    const expStr = safeJsonArray(rawExpenses);
+    expenses = JSON.parse(expStr);
+  } catch (e) {
+    console.warn('⚠️ syncProjectLinesFromJson: parse expenses failed', e);
+  }
+
+  try {
+    const revStr = safeJsonArray(rawRevenues);
+    revenues = JSON.parse(revStr);
+  } catch (e) {
+    console.warn('⚠️ syncProjectLinesFromJson: parse revenues failed', e);
+  }
+
+  // CHARGES
+  for (const exp of expenses) {
+    if (!exp?.plannedDate) continue;
+
+    await client.query(
+      `
+      INSERT INTO project_expense_lines (
+        project_id,
+        description,
+        category,
+        projected_amount,
+        actual_amount,
+        transaction_date,
+        is_paid
+      )
+      VALUES ($1, $2, $3, $4, COALESCE($5, 0), $6, COALESCE($7, false))
+      ON CONFLICT (project_id, description, projected_amount)
+      DO UPDATE SET
+        category = EXCLUDED.category,
+        transaction_date = EXCLUDED.transaction_date,
+        is_paid = EXCLUDED.is_paid
+      `,
+      [
+        projectId,
+        exp.description || '',
+        exp.category || 'Projet - Charge',
+        Number(exp.amount || 0),
+        exp.actualAmount != null ? Number(exp.actualAmount) : null,
+        exp.plannedDate,                 // "YYYY-MM-DD"
+        exp.isPaid === true,
+      ]
+    );
+  }
+
+  // REVENUS
+  for (const rev of revenues) {
+    if (!rev?.plannedDate) continue;
+
+    await client.query(
+      `
+      INSERT INTO project_revenue_lines (
+        project_id,
+        description,
+        category,
+        projected_amount,
+        actual_amount,
+        transaction_date,
+        is_received
+      )
+      VALUES ($1, $2, $3, $4, COALESCE($5, 0), $6, COALESCE($7, false))
+      ON CONFLICT (project_id, description, projected_amount)
+      DO UPDATE SET
+        category = EXCLUDED.category,
+        transaction_date = EXCLUDED.transaction_date,
+        is_received = EXCLUDED.is_received
+      `,
+      [
+        projectId,
+        rev.description || '',
+        rev.category || 'Projet - Revenu',
+        Number(rev.amount || 0),
+        rev.actualAmount != null ? Number(rev.actualAmount) : null,
+        rev.plannedDate,
+        rev.isPaid === true,
+      ]
+    );
+  }
+};
+
+
+// ============================================================================
 // 1. GET - Récupérer tous les projets avec mapping explicite
 // ============================================================================
 exports.getProjects = async (req, res) => {
@@ -328,7 +419,7 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
           expense.category || 'Autre',
           parseFloat(expense.amount || 0),
           0, // actual_amount initial
-          null, // transaction_date
+          expense.plannedDate || null,  // Utiliser la date fournie
           false // is_paid
         ]
       );
@@ -462,31 +553,33 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
       // Si l'ID est un entier (existant en base)
       if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
         await client.query(
-          `UPDATE project_expense_lines 
-           SET description=$1, category=$2, projected_amount=$3, is_paid=$4
-           WHERE id=$5`,
-          [
-            item.description || '', 
-            item.category || 'Autre', 
-            parseFloat(item.amount || 0), 
-            item.isPaid || false,
-            parseInt(item.id)
-          ]
-        );
+  `UPDATE project_expense_lines 
+   SET description=$1, category=$2, projected_amount=$3, is_paid=$4, transaction_date=$5
+   WHERE id=$6`, 
+  [
+    item.description || '', 
+    item.category || 'Autre', 
+    parseFloat(item.amount || 0), 
+    item.isPaid || false,
+    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
+    parseInt(item.id, 10),
+  ]
+);
       } else {
         // Si l'ID est un UUID (nouveau du frontend)
         await client.query(
-          `INSERT INTO project_expense_lines 
-           (project_id, description, category, projected_amount, actual_amount, is_paid)
-           VALUES ($1, $2, $3, $4, 0, $5)`,
-          [
-            id, 
-            item.description || '', 
-            item.category || 'Autre', 
-            parseFloat(item.amount || 0),
-            item.isPaid || false
-          ]
-        );
+  `INSERT INTO project_expense_lines 
+   (project_id, description, category, projected_amount, actual_amount, is_paid, transaction_date)
+   VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+  [
+    id,
+    item.description || '',
+    item.category || 'Autre',
+    parseFloat(item.amount || 0),
+    item.isPaid || false,
+    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
+  ]
+);
       }
     }
 
@@ -510,30 +603,34 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
     for (const item of revenuesList) {
       if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
         await client.query(
-          `UPDATE project_revenue_lines 
-           SET description=$1, category=$2, projected_amount=$3, is_received=$4
-           WHERE id=$5`,
-          [
-            item.description || '', 
-            item.category || 'Autre', 
-            parseFloat(item.amount || 0), 
-            item.isPaid || item.isReceived || false,
-            parseInt(item.id)
-          ]
-        );
+  `UPDATE project_revenue_lines 
+   SET description=$1, category=$2, projected_amount=$3, is_received=$4, transaction_date=$5
+   WHERE id=$6`,
+  [
+    item.description || '',
+    item.category || 'Autre',
+    parseFloat(item.amount || 0),
+    item.isPaid || item.isReceived || false,
+    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
+    parseInt(item.id, 10),
+  ]
+);
+
       } else {
-        await client.query(
-          `INSERT INTO project_revenue_lines 
-           (project_id, description, category, projected_amount, actual_amount, is_received)
-           VALUES ($1, $2, $3, $4, 0, $5)`,
-          [
-            id, 
-            item.description || '', 
-            item.category || 'Autre', 
-            parseFloat(item.amount || 0),
-            item.isPaid || item.isReceived || false
-          ]
-        );
+       await client.query(
+  `INSERT INTO project_revenue_lines 
+   (project_id, description, category, projected_amount, actual_amount, is_received, transaction_date)
+   VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+  [
+    id,
+    item.description || '',
+    item.category || 'Autre',
+    parseFloat(item.amount || 0),
+    item.isPaid || item.isReceived || false,
+    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
+  ]
+);
+
       }
     }
 
@@ -542,6 +639,7 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
     // On renvoie le projet mis à jour
     const updatedProject = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
     res.json(updatedProject.rows[0]);
+
 
   } catch (error) {
     await client.query('ROLLBACK');

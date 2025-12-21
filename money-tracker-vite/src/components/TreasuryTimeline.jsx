@@ -5,6 +5,7 @@ import {
   TrendingDown,
   AlertTriangle,
   DollarSign,
+  Calendar,
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -29,6 +30,14 @@ export default function TreasuryTimeline({
     typeof currentCashBalance === 'string'
       ? Number(currentCashBalance)
       : currentCashBalance;
+
+
+console.log('💰 DEBUG TreasuryTimeline props:', {
+  currentCashBalance,
+  balance,
+  startDate,
+  endDate,
+});
 
   /* =========================
      1. Cash flow journalier
@@ -64,10 +73,12 @@ export default function TreasuryTimeline({
 
       // --- Transactions réelles ---
       transactions.forEach((tx) => {
-        if (!tx?.date) return;
-        const txDateStr = new Date(tx.date)
-          .toISOString()
-          .split('T')[0];
+  const rawDate =
+    tx.realDate || tx.transactionDate || tx.date || tx.plannedDate;
+  if (!rawDate) return;
+
+  const txDateStr = new Date(rawDate).toISOString().split('T')[0];
+  if (txDateStr !== dateStr) return;
         if (txDateStr !== dateStr) return;
 
         const amount = Number(tx.amount) || 0;
@@ -115,15 +126,20 @@ export default function TreasuryTimeline({
 
       // --- Transactions prévisionnelles (A PAYER / A RECEVOIR non payées) ---
       plannedTransactions.forEach((tx) => {
-        if (!tx?.date) return;
-        const txDateStr = new Date(tx.date)
-          .toISOString()
-          .split('T')[0];
-        if (txDateStr !== dateStr) return;
+  const rawDate =
+    tx.plannedDate || tx.date || tx.transactionDate || tx.realDate;
+  if (!rawDate) return;
 
-        const amount = Number(tx.amount) || 0;
-        const isIncome =
-          String(tx.type).toLowerCase() === 'planned_income';
+  const txDateStr = new Date(rawDate).toISOString().split('T')[0];
+  if (txDateStr !== dateStr) return;
+
+  const amount = Number(tx.amount) || 0;
+  const isIncome = String(tx.type).toLowerCase() === 'planned_income';
+
+  if (tx.project_id === 24 || tx.project_id === 27) {
+    console.log('📅 plannedTx jour', dateStr, tx);
+  }
+
 
         const account =
           tx.account_name || tx.accountName || tx.account || '';
@@ -246,302 +262,257 @@ export default function TreasuryTimeline({
   };
 
   /* =========================
-     3. RENDER
+     3. RENDER (Updated Style)
      ========================= */
-  return (
-    <div className="mt-4 bg-white rounded-lg border border-gray-200 p-4 max-h-[500px] overflow-y-auto">
-      {/* Header */}
-      <div className="flex justify-between mb-3">
-        <h3 className="flex items-center gap-2 font-semibold">
-          <DollarSign className="w-5 h-5 text-blue-600" />
+return (
+  <div className="mt-6 bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-h-[650px] overflow-hidden flex flex-col font-sans">
+    
+    {/*Header Section */}
+    <div className="flex justify-between items-start mb-2 border-b border-slate-100 pb-4">
+      <div>
+        <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800">
+          <span className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+            <DollarSign className="w-5 h-5" />
+          </span>
           Timeline Coffre & Prévisions
         </h3>
-
-        <div className="text-xs text-right">
-          <div className="text-gray-500">Solde Coffre actuel</div>
-          <div className="font-bold text-blue-700">
-            {(balance || 0).toLocaleString()} Ar
-          </div>
-          <div className="text-gray-500 text-[11px]">
-            Min: {stats.minBalance.toLocaleString()} Ar
-          </div>
-        </div>
+        <p className="text-slate-500 text-xs mt-1 ml-11">
+          Suivi journalier des flux réels et prévisionnels
+        </p>
       </div>
 
-      {/* Barre de contrôle: pagination + date */}
-      <div className="flex items-center justify-between mb-3 text-xs">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrev}
-            disabled={currentIndex === 0}
-            className="px-2 py-1 border rounded disabled:opacity-40"
-          >
-            ← Précédent
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={currentIndex >= maxIndex}
-            className="px-2 py-1 border rounded disabled:opacity-40"
-          >
-            Suivant →
-          </button>
-          <span className="text-gray-500">
-            {cashFlowData.length > 0 &&
-              `${currentIndex + 1}-${Math.min(
-                currentIndex + pageSize,
-                cashFlowData.length
-              )} / ${cashFlowData.length} jours`}
+      <div className="text-right">
+        <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Solde Coffre actuel</div>
+        <div className="text-xl font-bold text-blue-600">
+          {Number(currentCashBalance || 0).toLocaleString()} Ar
+        </div>
+        <div className="text-slate-400 text-[10px] mt-0.5 bg-slate-50 px-2 py-0.5 rounded-full inline-block">
+          Min historique: <span className="font-medium text-slate-600">{stats.minBalance.toLocaleString()} Ar</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Barre de contrôle: pagination + date */}
+    <div className="flex items-center justify-between mb-4 text-xs">
+      <div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-100">
+        <button
+          onClick={handlePrev}
+          disabled={currentIndex === 0}
+          className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 transition-all flex items-center gap-1"
+        >
+          ← <span className="hidden sm:inline">Précédent</span>
+        </button>
+        <span className="px-2 text-slate-400 font-medium border-l border-r border-slate-200">
+          {cashFlowData.length > 0 &&
+            `${currentIndex + 1}-${Math.min(
+              currentIndex + pageSize,
+              cashFlowData.length
+            )} / ${cashFlowData.length}`}
+        </span>
+        <button
+          onClick={handleNext}
+          disabled={currentIndex >= maxIndex}
+          className="px-3 py-1.5 hover:bg-white hover:shadow-sm rounded-md text-slate-600 disabled:opacity-40 transition-all flex items-center gap-1"
+        >
+          <span className="hidden sm:inline">Suivant</span> →
+        </button>
+      </div>
+
+      <div className="relative">
+        <button
+          onClick={() => setIsDatePickerOpen((v) => !v)}
+          className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+        >
+          <span className="text-slate-400"><Calendar className="w-3.5 h-3.5"/></span>
+          <span className="font-medium">
+             {selectedDate.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
           </span>
+        </button>
+
+        {isDatePickerOpen && (
+          <div className="absolute right-0 mt-2 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2">
+            <DatePicker
+              inline
+              selected={selectedDate}
+              onChange={(date) => {
+                if (!date) return;
+                setSelectedDate(date);
+                setIsDatePickerOpen(false);
+                const dateStr = date.toISOString().split('T')[0];
+                const idx = cashFlowData.findIndex((d) => d.date === dateStr);
+                if (idx !== -1) {
+                  const newIndex = Math.floor(idx / pageSize) * pageSize;
+                  setCurrentIndex(newIndex);
+                }
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Alertes */}
+    {criticalDays.length > 0 && (
+      <div className="mb-4 p-3 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-3">
+        <div className="p-1.5 bg-rose-100 rounded-full text-rose-600">
+          <AlertTriangle className="w-4 h-4" />
         </div>
-
-        <div className="relative">
-          <button
-            onClick={() => setIsDatePickerOpen((v) => !v)}
-            className="px-2 py-1 border rounded bg-gray-50"
-          >
-            Aujourd&apos;hui:{' '}
-            {selectedDate.toLocaleDateString('fr-FR', {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-            })}
-          </button>
-
-          {isDatePickerOpen && (
-            <div className="absolute right-0 mt-1 z-10 bg-white border rounded shadow">
-              <DatePicker
-                inline
-                selected={selectedDate}
-                onChange={(date) => {
-                  if (!date) return;
-                  setSelectedDate(date);
-                  setIsDatePickerOpen(false);
-
-                  const dateStr = date
-                    .toISOString()
-                    .split('T')[0];
-                  const idx = cashFlowData.findIndex(
-                    (d) => d.date === dateStr
-                  );
-                  if (idx !== -1) {
-                    const newIndex =
-                      Math.floor(idx / pageSize) * pageSize;
-                    setCurrentIndex(newIndex);
-                  }
-                }}
-              />
-            </div>
-          )}
+        <div>
+          <div className="font-bold text-rose-700 text-xs">Alerte Trésorerie</div>
+          <div className="text-rose-600 text-[11px]">{stats.negativeDays} jour(s) avec solde négatif détecté(s)</div>
         </div>
       </div>
+    )}
 
-      {/* Alertes */}
-      {criticalDays.length > 0 && (
-        <div className="mb-3 p-2 bg-red-50 border rounded text-xs flex gap-2">
-          <AlertTriangle className="w-4 h-4 text-red-600" />
-          <div>
-            <div className="font-semibold text-red-800">
-              Alerte Trésorerie
-            </div>
-            <div>{stats.negativeDays} jour(s) négatif(s)</div>
-          </div>
-        </div>
-      )}
-
-      {/* Cards: 4 jours visibles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {/* Cards Container - Scrollable si l'écran est petit, mais ici on gère le scroll interne */}
+    <div className="flex-grow overflow-y-auto pr-1 pb-1">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {visibleDays.map((day) => {
-          const netPlanned =
-            (day.plannedRevenues || 0) -
-            (day.plannedExpenses || 0);
-          const netReal =
-            (day.revenues || 0) - (day.expenses || 0);
+          const netPlanned = (day.plannedRevenues || 0) - (day.plannedExpenses || 0);
+          const netReal = (day.revenues || 0) - (day.expenses || 0);
+          const highlight = netPlanned !== 0 || netReal !== 0 ? 'bg-slate-50/50' : 'bg-white';
+          const isNegative = (day.coffreProjectedBalance || 0) < 0;
 
-          const highlight =
-            netPlanned !== 0 || netReal !== 0
-              ? 'bg-gray-50'
-              : 'bg-white';
-
-          const dateLabel = new Date(day.date).toLocaleDateString(
-            'fr-FR',
-            {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-            }
-          );
+          const dateLabel = new Date(day.date).toLocaleDateString('fr-FR', {
+            weekday: 'short', day: '2-digit', month: 'short'
+          });
 
           return (
             <div
               key={day.date}
-              className={`p-2 border rounded text-xs shadow-sm ${highlight}`}
+              className={`group border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-all h-[230px] flex flex-col ${highlight}`}
             >
-              <div className="flex justify-between mb-1">
-                <span className="font-semibold">{dateLabel}</span>
-                <div className="text-right text-[11px]">
-                  <div className="text-gray-600">
-                    Solde Coffre fin (réel):{' '}
-                    {(day.coffreBalance || 0).toLocaleString()} Ar
-                  </div>
-                  <div className="text-gray-600">
-                    Solde Coffre fin (prévu):{' '}
-                    {(day.coffreProjectedBalance ||
-                      0).toLocaleString()}{' '}
-                    Ar
+              {/* --- Card Header: Date & Solde --- */}
+              <div className="flex justify-between items-start mb-2 border-b border-slate-100 pb-2">
+                <div className="flex flex-col">
+                   <span className="font-bold text-slate-700 capitalize text-sm">{dateLabel}</span>
+                   <span className="text-[10px] text-slate-400 font-medium">Fin de journée</span>
+                </div>
+                <div className="text-right">
+                  <div className={`text-lg font-bold leading-none ${isNegative ? 'text-rose-600' : 'text-slate-800'}`}>
+                    {(day.coffreProjectedBalance || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400">Ar</span>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mb-1">
-                <div>
-                  <div className="font-semibold text-blue-700 text-[11px]">
-                    Flux prévus du jour
+              {/* --- Card Body: Flux (Grid compacte) --- */}
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                {/* Prévisions */}
+                <div className="bg-blue-50/50 rounded p-1.5 border border-blue-100/50">
+                  <div className="text-[9px] uppercase font-bold text-blue-700 mb-0.5">Prévisions</div>
+                  <div className="text-[10px] text-slate-600 flex justify-between">
+                    <span>Entrées:</span> <span className="font-medium">{(day.plannedRevenues || 0).toLocaleString()}</span>
                   </div>
-                  <div className="text-[11px]">
-                    +{(day.plannedRevenues || 0).toLocaleString()} / -
-                    {(day.plannedExpenses || 0).toLocaleString()} (
-                    {netPlanned >= 0 ? '+' : ''}
-                    {netPlanned.toLocaleString()})
+                  <div className="text-[10px] text-slate-600 flex justify-between">
+                    <span>Sorties:</span> <span className="font-medium">{(day.plannedExpenses || 0).toLocaleString()}</span>
+                  </div>
+                  <div className={`text-[10px] mt-0.5 pt-0.5 border-t border-blue-100 text-right font-bold ${netPlanned >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {netPlanned > 0 ? '+' : ''}{netPlanned.toLocaleString()}
                   </div>
                 </div>
 
-                <div>
-                  <div className="font-semibold text-emerald-700 text-[11px]">
-                    Flux réalisés du jour
+                {/* Réalisé */}
+                <div className="bg-emerald-50/30 rounded p-1.5 border border-emerald-100/50">
+                  <div className="text-[9px] uppercase font-bold text-emerald-700 mb-0.5">Réalisé</div>
+                  <div className="text-[10px] text-slate-600 flex justify-between">
+                    <span>Entrées:</span> <span className="font-medium">{(day.revenues || 0).toLocaleString()}</span>
                   </div>
-                  <div className="text-[11px]">
-                    +{(day.revenues || 0).toLocaleString()} / -
-                    {(day.expenses || 0).toLocaleString()} (
-                    {netReal >= 0 ? '+' : ''}
-                    {netReal.toLocaleString()})
+                  <div className="text-[10px] text-slate-600 flex justify-between">
+                    <span>Sorties:</span> <span className="font-medium">{(day.expenses || 0).toLocaleString()}</span>
+                  </div>
+                  <div className={`text-[10px] mt-0.5 pt-0.5 border-t border-emerald-100 text-right font-bold ${netReal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                     {netReal > 0 ? '+' : ''}{netReal.toLocaleString()}
                   </div>
                 </div>
               </div>
 
-              {(day.projectPlanned.length > 0 ||
-                day.projectReal.length > 0) && (
-                <div className="mt-1 border-t border-gray-100 pt-1">
-                  {day.projectPlanned.length > 0 && (
-                    <div className="mb-1">
-                      <div className="text-[11px] font-semibold text-blue-600">
-                        Projets – Prévisions
-                      </div>
-                      {day.projectPlanned.map((p, idx) => (
-                        <div
-                          key={idx}
-                          className="text-[11px] flex justify-between"
-                        >
-                          <span className="text-gray-600">
-                            {p.project_name ||
-                              `Projet #${p.project_id}`}{' '}
-                            {p.type === 'income'
-                              ? '→ revenu prévu'
-                              : '→ charge prévue'}
-                          </span>
-                          <span
-                            className={
-                              p.type === 'income'
-                                ? 'text-green-700'
-                                : 'text-red-700'
-                            }
-                          >
-                            {p.type === 'income' ? '+' : '-'}
-                            {p.amount.toLocaleString()} Ar
-                          </span>
+              {/* --- Card Footer: Projets (Scrollable) --- */}
+              <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent pr-1">
+                {(day.projectPlanned.length > 0 || day.projectReal.length > 0) ? (
+                  <div className="space-y-2">
+                    {/* Projets Prévus */}
+                    {day.projectPlanned.length > 0 && (
+                      <div>
+                        <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[9px] font-bold text-blue-600 uppercase tracking-wide mb-1 border-b border-blue-50 py-0.5">
+                          Projets (Prévu)
                         </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {day.projectReal.length > 0 && (
-                    <div>
-                      <div className="text-[11px] font-semibold text-emerald-600">
-                        Projets – Réalisé
-                      </div>
-                      {day.projectReal.map((p, idx) => (
-                        <div
-                          key={idx}
-                          className="text-[11px] flex justify-between"
-                        >
-                          <div className="text-gray-600">
-                            <div>{p.label || 'Sans libellé'}</div>
-                            <div className="text-[10px] text-gray-500">
-                              {p.project_name
-                                ? `${p.project_name} `
-                                : 'Hors projet '}
-                              {p.type === 'income'
-                                ? '→ revenu encaissé'
-                                : '→ charge payée'}
-                              {p.isCoffre && ' (Coffre)'}
-                            </div>
+                        {day.projectPlanned.map((p, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 group/item">
+                            <span className="text-slate-600 truncate max-w-[65%] group-hover/item:text-slate-900 transition-colors" title={p.project_name}>
+                              {p.project_name || `Projet #${p.project_id}`}
+                            </span>
+                            <span className={`font-medium ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {p.type === 'income' ? '+' : '-'}{p.amount.toLocaleString()}
+                            </span>
                           </div>
-                          <span
-                            className={
-                              p.type === 'income'
-                                ? 'text-green-700'
-                                : 'text-red-700'
-                            }
-                          >
-                            {p.type === 'income' ? '+' : '-'}
-                            {p.amount.toLocaleString()} Ar
-                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Projets Réalisés */}
+                    {day.projectReal.length > 0 && (
+                      <div>
+                         <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[9px] font-bold text-emerald-600 uppercase tracking-wide mb-1 border-b border-emerald-50 py-0.5 mt-1">
+                          Projets (Réel)
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                        {day.projectReal.map((p, idx) => (
+                          <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 group/item">
+                            <div className="flex flex-col max-w-[65%]">
+                               <span className="text-slate-700 truncate font-medium">{p.label || 'Sans libellé'}</span>
+                               <span className="text-[8px] text-slate-400 truncate">{p.project_name || 'Hors projet'}</span>
+                            </div>
+                            <span className={`font-medium ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {p.type === 'income' ? '+' : '-'}{p.amount.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-slate-300 text-[10px] italic">
+                    Aucune activité projet
+                  </div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
+    </div>
 
-      {/* Résumé global */}
-      <div className="mt-4 grid grid-cols-3 gap-3 text-xs">
-        <div className="p-2 bg-green-50 rounded">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="w-4 h-4 text-green-600" />
-            <span className="font-medium text-green-800">
-              Entrées réalisées
-            </span>
-          </div>
-          <div className="text-lg font-bold text-green-700">
-            +{(stats.totalInflows || 0).toLocaleString()} Ar
-          </div>
+    {/* Footer: Résumé global */}
+    <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-3 gap-4">
+      <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="p-1 bg-white rounded-full shadow-sm text-emerald-600"><TrendingUp size={12} /></div>
+          <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wide">Entrées Réelles</span>
         </div>
-        <div className="p-2 bg-red-50 rounded">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingDown className="w-4 h-4 text-red-600" />
-            <span className="font-medium text-red-800">
-              Sorties réalisées
-            </span>
-          </div>
-          <div className="text-lg font-bold text-red-700">
-            -{(stats.totalOutflows || 0).toLocaleString()} Ar
-          </div>
+        <div className="text-lg font-bold text-emerald-700">
+          +{(stats.totalInflows || 0).toLocaleString()} Ar
         </div>
-        <div className="p-2 bg-blue-50 rounded">
-          <div className="flex items-center gap-2 mb-1">
-            <DollarSign className="w-4 h-4 text-blue-600" />
-            <span className="font-medium text-blue-800">
-              Variation nette réelle
-            </span>
-          </div>
-          <div
-            className={`text-lg font-bold ${
-              (stats.totalInflows || 0) - (stats.totalOutflows || 0) >= 0
-                ? 'text-green-700'
-                : 'text-red-700'
-            }`}
-          >
-            {(
-              (stats.totalInflows || 0) -
-              (stats.totalOutflows || 0)
-            ).toLocaleString()}{' '}
-            Ar
-          </div>
+      </div>
+
+      <div className="bg-rose-50 rounded-lg p-3 border border-rose-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="p-1 bg-white rounded-full shadow-sm text-rose-600"><TrendingDown size={12} /></div>
+          <span className="text-[10px] uppercase font-bold text-rose-800 tracking-wide">Sorties Réelles</span>
+        </div>
+        <div className="text-lg font-bold text-rose-700">
+          -{(stats.totalOutflows || 0).toLocaleString()} Ar
+        </div>
+      </div>
+
+      <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="p-1 bg-white rounded-full shadow-sm text-blue-600"><DollarSign size={12} /></div>
+          <span className="text-[10px] uppercase font-bold text-blue-800 tracking-wide">Variation Nette</span>
+        </div>
+        <div className={`text-lg font-bold ${(stats.totalInflows || 0) - (stats.totalOutflows || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {( (stats.totalInflows || 0) - (stats.totalOutflows || 0) ).toLocaleString()} Ar
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }

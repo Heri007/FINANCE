@@ -686,48 +686,64 @@ export function LivestockModal({
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) return;
+  if (!project?.id) {
+    console.warn('⚠️ saveProjectState: Projet non enregistré');
+    return;
+  }
+  
+  // ✅ MAPPER plannedDate AVANT stringify
+  const expensesWithDate = currentExpenses.map(exp => ({
+    ...exp,
+    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+  }));
+  
+  const revenuesWithDate = currentRevenues.map(rev => ({
+    ...rev,
+    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+  }));
 
-    const newTotalRevenues = currentRevenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const newTotalExpenses = currentExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+  console.log('💾 saveProjectState démarré:', {
+    projectId: project.id,
+    expensesCount: currentExpenses.length,
+    revenuesCount: currentRevenues.length,
+    expensesPaid: currentExpenses.filter(e => e.isPaid).length
+  });
 
-    const payload = {
-      name: projectName.trim(),
-      type: 'LIVESTOCK',
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      expenses: JSON.stringify(currentExpenses),
-      revenues: JSON.stringify(currentRevenues),
-      metadata: JSON.stringify({
-        animalType,
-        breed,
-        cycleCount,
-        cycleDuration,
-        headsPerCycle,
-        currentCycleNumber,
-        poussinPrice,
-        feedCostPerCycle,
-        targetWeight,
-        sellingPricePerKg,
-        sellingPricePerUnit,
-        mortalityRate,
-        farmLocation,
-        currentHeadCount,
-        soldCount,
-        deathCount
-      })
-    };
+  const newTotalRevenues = revenuesWithDate.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const newTotalExpenses = expensesWithDate.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const newNetProfit = newTotalRevenues - newTotalExpenses;
+  const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
-    await projectsService.updateProject(project.id, payload);
+  const payload = {
+    name: projectName.trim(),
+    type: 'LIVESTOCK',
+    description: description || '',
+    status: status || 'active',
+    startDate: startDate ? new Date(startDate).toISOString() : null,
+    endDate: endDate ? new Date(endDate).toISOString() : null,
+    totalCost: newTotalExpenses,
+    totalRevenues: newTotalRevenues,
+    netProfit: newNetProfit,
+    roi: parseFloat(newRoi),
+    expenses: JSON.stringify(expensesWithDate),  // ✅ AVEC plannedDate
+    revenues: JSON.stringify(revenuesWithDate),  // ✅ AVEC plannedDate
+    metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
   };
+
+  console.log('📤 Payload envoyé:', {
+    ...payload,
+    expenses: `${expensesWithDate.length} lignes`,
+    revenues: `${revenuesWithDate.length} lignes`
+  });
+
+  try {
+    const result = await projectsService.updateProject(project.id, payload);
+    console.log('✅ Projet sauvegardé:', result);
+  } catch (error) {
+    console.error('❌ Erreur saveProjectState:', error);
+    throw error;
+  }
+};
 
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -748,6 +764,17 @@ export function LivestockModal({
 
     setLoading(true);
 
+    const expensesWithDate = expenses.map(exp => ({
+  ...exp,
+  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+}));
+
+const revenuesWithDate = revenues.map(rev => ({
+  ...rev,
+  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+}));
+
+
     try {
       const payload = {
         name: projectName.trim(),
@@ -760,8 +787,8 @@ export function LivestockModal({
         totalRevenues: parseFloat(totalRevenues) || 0,
         netProfit: parseFloat(netProfit) || 0,
         roi: parseFloat(roi) || 0,
-        expenses: JSON.stringify(expenses),
-        revenues: JSON.stringify(revenues),
+        expenses: JSON.stringify(expensesWithDate),
+        revenues: JSON.stringify(revenuesWithDate),
         metadata: JSON.stringify({
           animalType,
           breed,
@@ -1165,17 +1192,27 @@ export function LivestockModal({
                   </select>
 
                   <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+          value={exp.amount}
+          onChange={(val) => updateExpense(exp.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+        />
 
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+        {/* Date planifiée */}
+        <DatePicker
+          selected={exp.date}
+          onChange={(date) => updateExpense(exp.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
+
+        {/* Date réelle */}
+        <DatePicker
+          selected={exp.realDate || null}
+          onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+          dateFormat="dd/MM/yy"
+          placeholderText="Date réelle"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
 
                   <select
                     value={exp.account}
@@ -1267,17 +1304,28 @@ export function LivestockModal({
                   </select>
 
                   <CalculatorInput
-                    value={rev.amount}
-                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+          value={rev.amount}
+          onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+        />
 
-                  <DatePicker
-                    selected={rev.date}
-                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+        {/* Date planifiée */}
+        <DatePicker
+          selected={rev.date}
+          onChange={(date) => updateRevenue(rev.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
+
+        {/* Date réelle */}
+        <DatePicker
+          selected={rev.realDate || null}
+          onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
+          dateFormat="dd/MM/yy"
+          placeholderText="Date réelle"
+          className="col-span-2 p-2 border rounded text-sm"
+        />
+
 
                   <select
                     value={rev.account}

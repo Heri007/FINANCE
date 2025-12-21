@@ -102,42 +102,44 @@ export function ProductFlipModal({
 
             // Fusionner les transactions réelles avec les lignes budgétaires
             const mergeTransactions = (lines, type) => {
-              const newLines = [...lines];
-              
-              projectTx.filter(t => t.type === type).forEach(tx => {
-                const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-                
-                // Chercher si la ligne existe déjà
-                const existingIdx = newLines.findIndex(l => 
-                  String(l.id) === String(tx.project_line_id) ||
-                  (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid)
-                );
+  const newLines = [...lines];
 
-                if (existingIdx >= 0) {
-                  // Ligne existante → marquer comme payée
-                  newLines[existingIdx] = {
-                    ...newLines[existingIdx],
-                    isPaid: true,
-                    account: accName,
-                    date: new Date(tx.transaction_date || tx.date)
-                  };
-                } else {
-                  // Nouvelle ligne depuis transaction
-                  newLines.push({
-                    id: tx.project_line_id || uuidv4(),
-                    description: tx.description,
-                    amount: parseFloat(tx.amount),
-                    category: tx.category,
-                    date: new Date(tx.transaction_date || tx.date),
-                    account: accName,
-                    isPaid: true,
-                    isRecurring: false
-                  });
-                }
-              });
+  projectTx
+    .filter(t => t.type === type)
+    .forEach(tx => {
+      const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+      const realDate = tx.transaction_date || tx.date; // ✅ date réelle
 
-              return newLines;
-            };
+      const existingIdx = newLines.findIndex(l =>
+        String(l.id) === String(tx.project_line_id) ||
+        (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid)
+      );
+
+      if (existingIdx >= 0) {
+        newLines[existingIdx] = {
+          ...newLines[existingIdx],
+          isPaid: true,
+          account: accName,
+          realDate: realDate ? new Date(realDate) : null, // ✅ nouvelle propriété
+        };
+      } else {
+        newLines.push({
+          id: tx.project_line_id || uuidv4(),
+          description: tx.description,
+          amount: parseFloat(tx.amount),
+          category: tx.category,
+          date: new Date(), // planifiée par défaut
+          realDate: realDate ? new Date(realDate) : null, // ✅ réelle
+          account: accName,
+          isPaid: true,
+          isRecurring: false,
+        });
+      }
+    });
+
+  return newLines;
+};
+
 
             currentExpenses = mergeTransactions(currentExpenses, 'expense');
             currentRevenues = mergeTransactions(currentRevenues, 'income');
@@ -327,91 +329,101 @@ export function ProductFlipModal({
 
   // ===== PAYER DÉPENSE =====
   const handlePayerDepense = async (exp, index) => {
-    try {
-      if (!exp.account) return alert('Choisis un compte');
-      
-      const accountObj = accounts.find(a => a.name === exp.account);
-      if (!accountObj) return alert('Compte introuvable');
+  try {
+    if (!exp.account) return alert('Choisis un compte');
 
-      if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) {
-        return;
-      }
+    const accountObj = accounts.find(a => a.name === exp.account);
+    if (!accountObj) return alert('Compte introuvable');
 
-      if (!project || !project.id) {
-        alert('Erreur: Projet introuvable.');
-        return;
-      }
-
-      await createTransaction({
-        accountid: parseInt(accountObj.id, 10),
-        type: 'expense',
-        amount: parseFloat(exp.amount),
-        category: exp.category || 'Projet - Dépense',
-        description: `${project.name} - ${exp.description || 'Dépense'}`,
-        date: new Date().toISOString().split('T')[0],
-        isplanned: false,
-        isposted: true,
-        projectid: project.id,
-        projectlineid: exp.id,
-      });
-
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: true };
-      setExpenses(updated);
-
-      await saveProjectState(updated, revenues);
-      if (onProjectUpdated) onProjectUpdated();
-      
-      alert('✅ Dépense payée !');
-    } catch (error) {
-      console.error('❌ Erreur handlePayerDepense:', error);
-      alert(error?.message || 'Erreur paiement');
+    if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) {
+      return;
     }
-  };
+
+    if (!project || !project.id) {
+      alert('Erreur: Projet introuvable.');
+      return;
+    }
+
+    // ✅ Normaliser la date (string ou Date -> string ISO jour)
+    const rawPayDate = exp.realDate || exp.date || new Date();
+    const payDateObj = rawPayDate instanceof Date ? rawPayDate : new Date(rawPayDate);
+    const payDateStr = payDateObj.toISOString().split('T')[0];
+
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'expense',
+      amount: parseFloat(exp.amount),
+      category: exp.category || 'Projet - Dépense',
+      description: `${project.name} - ${exp.description || 'Dépense'}`,
+      date: payDateStr,
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: exp.id,
+    });
+
+    const updated = [...expenses];
+    updated[index] = { ...updated[index], isPaid: true };
+    setExpenses(updated);
+
+    await saveProjectState(updated, revenues);
+    if (onProjectUpdated) onProjectUpdated();
+
+    alert('✅ Dépense payée !');
+  } catch (error) {
+    console.error('❌ Erreur handlePayerDepense:', error);
+    alert(error?.message || 'Erreur paiement');
+  }
+};
+
 
   // ===== ENCAISSER REVENU =====
   const handleEncaisser = async (rev, index) => {
-    try {
-      if (!rev.account) return alert('Choisis un compte');
-      
-      const accountObj = accounts.find(a => a.name === rev.account);
-      if (!accountObj) return alert('Compte introuvable');
+  try {
+    if (!rev.account) return alert('Choisis un compte');
 
-      if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) {
-        return;
-      }
+    const accountObj = accounts.find(a => a.name === rev.account);
+    if (!accountObj) return alert('Compte introuvable');
 
-      if (!project || !project.id) {
-        alert('Erreur: Projet introuvable.');
-        return;
-      }
-
-      await createTransaction({
-        accountid: parseInt(accountObj.id, 10),
-        type: 'income',
-        amount: parseFloat(rev.amount),
-        category: 'Projet - Revenu',
-        description: `${project.name} - ${rev.description || 'Revenu'}`,
-        date: new Date().toISOString().split('T')[0],
-        isplanned: false,
-        isposted: true,
-        projectid: project.id,
-        projectlineid: rev.id,
-      });
-
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: true };
-      setRevenues(updated);
-
-      await saveProjectState(expenses, updated);
-      if (onProjectUpdated) onProjectUpdated();
-      
-      alert('✅ Revenu encaissé !');
-    } catch (error) {
-      console.error('❌ Erreur handleEncaisser:', error);
-      alert(error?.message || 'Erreur encaissement');
+    if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) {
+      return;
     }
-  };
+
+    if (!project || !project.id) {
+      alert('Erreur: Projet introuvable.');
+      return;
+    }
+
+    const rawReceiveDate = rev.realDate || rev.date || new Date();
+    const receiveDateObj = rawReceiveDate instanceof Date ? rawReceiveDate : new Date(rawReceiveDate);
+    const receiveDateStr = receiveDateObj.toISOString().split('T')[0];
+
+    await createTransaction({
+      accountid: parseInt(accountObj.id, 10),
+      type: 'income',
+      amount: parseFloat(rev.amount),
+      category: 'Projet - Revenu',
+      description: `${project.name} - ${rev.description || 'Revenu'}`,
+      date: receiveDateStr,
+      isplanned: false,
+      isposted: true,
+      projectid: project.id,
+      projectlineid: rev.id,
+    });
+
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: true };
+    setRevenues(updated);
+
+    await saveProjectState(expenses, updated);
+    if (onProjectUpdated) onProjectUpdated();
+
+    alert('✅ Revenu encaissé !');
+  } catch (error) {
+    console.error('❌ Erreur handleEncaisser:', error);
+    alert(error?.message || 'Erreur encaissement');
+  }
+};
 
   // ===== ANNULER PAIEMENT DÉPENSE =====
   const handleCancelPaymentExpense = async (exp, index) => {
@@ -500,39 +512,71 @@ export function ProductFlipModal({
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) return;
+  if (!project?.id) {
+    console.warn('⚠️ saveProjectState: Projet non enregistré');
+    return;
+  }
+  
+  // ✅ MAPPER plannedDate AVANT stringify
+  const expensesWithDate = currentExpenses.map(exp => ({
+    ...exp,
+    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+  }));
+  
+  const revenuesWithDate = currentRevenues.map(rev => ({
+    ...rev,
+    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+  }));
 
-    const newTotalRevenues = currentRevenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
-    const newTotalExpenses = currentExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+  console.log('💾 saveProjectState démarré:', {
+    projectId: project.id,
+    expensesCount: currentExpenses.length,
+    revenuesCount: currentRevenues.length,
+    expensesPaid: currentExpenses.filter(e => e.isPaid).length
+  });
 
-    const payload = {
-      name: projectName.trim(),
-      type: 'PRODUCTFLIP',
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      expenses: JSON.stringify(currentExpenses),
-      revenues: JSON.stringify(currentRevenues),
-      metadata: JSON.stringify({
-        productName,
-        supplier,
-        purchasePrice,
-        quantity,
-        sellingPrice,
-        targetMargin
-      })
-    };
+  const newTotalRevenues = revenuesWithDate.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+  const newTotalExpenses = expensesWithDate.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
+  const newNetProfit = newTotalRevenues - newTotalExpenses;
+  const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
-    await projectsService.updateProject(project.id, payload);
-  };
+  const payload = {
+  name: projectName.trim(),
+  type: 'PRODUCTFLIP',
+  description: description || '',
+  status: status || 'active',
+  startDate: startDate ? new Date(startDate).toISOString() : null,
+  endDate: endDate ? new Date(endDate).toISOString() : null,
+  totalCost: newTotalExpenses,
+  totalRevenues: newTotalRevenues,
+  netProfit: newNetProfit,
+  roi: parseFloat(newRoi),
+  expenses: JSON.stringify(expensesWithDate),
+  revenues: JSON.stringify(revenuesWithDate),
+  metadata: JSON.stringify({
+    productName,
+    supplier,
+    purchasePrice,
+    quantity,
+    sellingPrice,
+    targetMargin,
+  }),
+};
 
+  console.log('📤 Payload envoyé:', {
+    ...payload,
+    expenses: `${expensesWithDate.length} lignes`,
+    revenues: `${revenuesWithDate.length} lignes`
+  });
+
+  try {
+    const result = await projectsService.updateProject(project.id, payload);
+    console.log('✅ Projet sauvegardé:', result);
+  } catch (error) {
+    console.error('❌ Erreur saveProjectState:', error);
+    throw error;
+  }
+};
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -552,6 +596,17 @@ export function ProductFlipModal({
 
     setLoading(true);
 
+    const expensesWithDate = expenses.map(exp => ({
+  ...exp,
+  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+}));
+
+const revenuesWithDate = revenues.map(rev => ({
+  ...rev,
+  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
+}));
+
+
     try {
       const payload = {
         name: projectName.trim(),
@@ -564,8 +619,8 @@ export function ProductFlipModal({
         totalRevenues: parseFloat(totalRevenues) || 0,
         netProfit: parseFloat(netProfit) || 0,
         roi: parseFloat(roi) || 0,
-        expenses: JSON.stringify(expenses),
-        revenues: JSON.stringify(revenues),
+        expenses: JSON.stringify(expensesWithDate),
+        revenues: JSON.stringify(revenuesWithDate),
         metadata: JSON.stringify({
           productName,
           supplier,
@@ -876,17 +931,28 @@ export function ProductFlipModal({
                   </select>
 
                   <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+  value={exp.amount}
+  onChange={(val) => updateExpense(exp.id, 'amount', val)}
+  className="col-span-2 p-2 border rounded text-sm font-semibold"
+/>
 
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+{/* Date planifiée */}
+<DatePicker
+  selected={exp.date}
+  onChange={(date) => updateExpense(exp.id, 'date', date)}
+  dateFormat="dd/MM/yy"
+  className="col-span-2 p-2 border rounded text-sm"
+  placeholderText="Date planifiée"
+/>
+
+/* Date réelle */
+<DatePicker
+  selected={exp.realDate || null}
+  onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+  dateFormat="dd/MM/yy"
+  className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+  placeholderText="Date réelle"
+/>
 
                   <select
                     value={exp.account}
@@ -978,17 +1044,29 @@ export function ProductFlipModal({
                   </select>
 
                   <CalculatorInput
-                    value={rev.amount}
-                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+  value={rev.amount}
+  onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+  className="col-span-2 p-2 border rounded text-sm font-semibold"
+/>
 
-                  <DatePicker
-                    selected={rev.date}
-                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+{/* Date planifiée */}
+<DatePicker
+  selected={rev.date}
+  onChange={(date) => updateRevenue(rev.id, 'date', date)}
+  dateFormat="dd/MM/yy"
+  className="col-span-2 p-2 border rounded text-sm"
+  placeholderText="Date planifiée"
+/>
+
+/* Date réelle */
+<DatePicker
+  selected={rev.realDate || null}
+  onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
+  dateFormat="dd/MM/yy"
+  className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+  placeholderText="Date réelle"
+/>
+
 
                   <select
                     value={rev.account}

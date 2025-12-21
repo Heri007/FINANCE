@@ -15,6 +15,8 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   const [hoveredDay, setHoveredDay] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const { accounts, receivables, transactions, plannedTransactions } = useFinance();
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
+
 
 
   console.log('🎨 GanttTimelineModal - Projets reçus:', projects);
@@ -66,10 +68,6 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
 //focusStart.setDate(focusStart.getDate() - 45); // 45 jours avant
 //const focusEnd = new Date();
 //focusEnd.setDate(focusEnd.getDate() + 45); // 45 jours après
-
-  const coffreBalance = useMemo(() => {
-    return accounts?.find(a => a.name === 'Coffre')?.balance || 75000000;
-  }, [accounts]);
 
   // 5️⃣ 🆕 Calculer les dates de timeline
   const timelineStart = useMemo(() => {
@@ -304,148 +302,105 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
     }).format(amount || 0) + ' Ar';
   };
 
-  if (!isOpen) return null;
+  // ✅ Solde réel Coffre actuel
+const coffreAccount = accounts?.find((a) => a.name === 'Coffre');
+const currentCoffreBalance = Number(coffreAccount?.balance || 0);
 
-  // Fonction pour calculer le solde Coffre à une date donnée
-const getBalanceAtDate = (targetDate) => {
-  const targetStr = new Date(targetDate).toISOString().split('T')[0];
-  
-  // Solde actuel du compte Coffre
-  const currentBalance = accounts?.find(a => a.name === 'Coffre')?.balance || 0;
-  
-  // Calculer les flux Coffre APRÈS targetDate
-  const futureFlows = transactions
-    .filter(tx => {
-      const isCoffre = (tx.account_name || tx.accountName || tx.account) === 'Coffre';
-      const txDate = tx.date ? new Date(tx.date).toISOString().split('T')[0] : null;
-      return isCoffre && txDate && txDate > targetStr;
-    })
-    .reduce((sum, tx) => {
-      const amount = Number(tx.amount) || 0;
-      const isIncome = String(tx.type).toLowerCase() === 'income';
-      return sum + (isIncome ? amount : -amount);
-    }, 0);
-  
-  // Solde au targetDate = solde actuel - flux futurs
-  return currentBalance - futureFlows;
-};
+console.log('💰 DEBUG GanttTimelineModal Coffre:', {
+  coffreAccount,
+  currentCoffreBalance,
+});
 
-// Utiliser pour calculer le solde initial de la timeline
-const focusStart = new Date();
-focusStart.setDate(focusStart.getDate() - 45);
+// ✅ Fenêtre de prévision: de aujourd'hui à +45 jours
+const focusStart = new Date();          // aujourd'hui
+focusStart.setHours(0, 0, 0, 0);        // normaliser à minuit
 
 const focusEnd = new Date();
-focusEnd.setDate(focusEnd.getDate() + 45);
+focusEnd.setDate(focusEnd.getDate() + 90);
+focusEnd.setHours(23, 59, 59, 999);
 
-const initialBalance = getBalanceAtDate(focusStart);
+  if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full h-[95vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">Gantt Timeline - Gestion de Projets</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {filteredProjects.length} projet{filteredProjects.length > 1 ? 's' : ''} • {format(currentMonth, 'MMMM yyyy', { locale: fr })}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X size={24} />
+return (
+  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-xl shadow-2xl w-full h-[95vh] flex flex-col overflow-hidden border border-slate-200">
+
+      {/* Header moderne */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">
+            Gantt Timeline – Gestion de projets
+          </h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {filteredProjects.length} projet{filteredProjects.length > 1 ? 's' : ''} •{' '}
+            {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+        >
+          <X size={22} />
+        </button>
+      </div>
+
+      {/* Stats compactes */}
+      <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-200">
+        {/* Total / Actifs / Complétés / Retard / Revenus / Marge */}
+        {/* tu peux reprendre exactement les 6 cartes que tu as déjà, en passant juste aux classes slate/emerald/rose */}
+      </div>
+
+      {/* Timeline Coffre en hover */}
+<div
+  className="px-2 pt-2 pb-2 border-b border-slate-200 bg-slate-600 transition-all duration-300"
+  onMouseEnter={() => setIsTimelineExpanded(true)}
+  onMouseLeave={() => setIsTimelineExpanded(false)}
+>
+  <div
+    className={`
+      rounded-2xl overflow-hidden bg-slate-600
+      transition-all duration-300
+      ${isTimelineExpanded ? 'h-[680px]' : 'h-[140px]'}
+    `}
+  >
+    <TreasuryTimeline
+      projects={normalizedProjects}
+      currentCashBalance={currentCoffreBalance}
+      startDate={timelineStart}
+      endDate={timelineEnd}
+      transactions={transactions}
+      plannedTransactions={plannedTransactions}
+    />
+  </div>
+</div>
+
+      {/* Barre de contrôles modernisée */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevious}
+            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            <ChevronLeft size={16} />
           </button>
-        </div>
+          <button
+            onClick={handleToday}
+            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+          >
+            Aujourd’hui
+          </button>
+          <button
+            onClick={handleNext}
+            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+          >
+            <ChevronRight size={16} />
+          </button>
 
-        {/* Statistics Dashboard */}
-        <div className="grid grid-cols-6 gap-4 p-6 bg-gray-50 border-b border-gray-200">
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Total Projets</p>
-                <p className="text-2xl font-bold text-gray-800">{statistics.total}</p>
-              </div>
-              <Package className="text-blue-500" size={24} />
-            </div>
-          </div>
+          <span className="ml-3 text-sm font-semibold text-slate-700">
+            {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+          </span>
 
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Actifs</p>
-                <p className="text-2xl font-bold text-blue-600">{statistics.active}</p>
-              </div>
-              <Clock className="text-blue-500" size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Complétés</p>
-                <p className="text-2xl font-bold text-green-600">{statistics.completed}</p>
-              </div>
-              <CheckCircle className="text-green-500" size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">En Retard</p>
-                <p className="text-2xl font-bold text-red-600">{statistics.delayed}</p>
-              </div>
-              <AlertCircle className="text-red-500" size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Revenus</p>
-                <p className="text-lg font-bold text-green-600">{formatCurrency(statistics.totalRevenue)}</p>
-              </div>
-              <DollarSign className="text-green-500" size={24} />
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase">Marge</p>
-                <p className="text-lg font-bold text-purple-600">{statistics.profitMargin.toFixed(1)}%</p>
-              </div>
-              <TrendingUp className="text-purple-500" size={24} />
-            </div>
-          </div>
-        </div>
-
-         {/* Prévision de Trésorerie */}
-/ Passer à TreasuryTimeline
-<TreasuryTimeline
-  projects={normalizedProjects}
-  currentCashBalance={initialBalance} // ✅ Solde au début de la période
-  startDate={focusStart}
-  endDate={focusEnd}
-  receivables={receivables}
-  transactions={transactions}
-  plannedTransactions={plannedTransactions}
-/>
-        {/* Controls */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 gap-4">
-          <div className="flex items-center gap-2">
-            <button onClick={handlePrevious} className="p-2 hover:bg-gray-100 rounded">
-              <ChevronLeft size={20} />
-            </button>
-            <button onClick={handleToday} className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
-              Aujourd'hui
-            </button>
-            <button onClick={handleNext} className="p-2 hover:bg-gray-100 rounded">
-              <ChevronRight size={20} />
-            </button>
-            <span className="ml-4 font-semibold text-gray-700">
-              {format(currentMonth, 'MMMM yyyy', { locale: fr })}
-            </span>
-
-            {/* Calendrier */}
+          {/* Calendrier */}
             <div className="relative ml-4">
               <button 
                 onClick={() => setShowCalendar(!showCalendar)}
@@ -518,59 +473,60 @@ const initialBalance = getBalanceAtDate(focusStart);
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <select 
-              value={viewMode} 
-              onChange={(e) => setViewMode(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded"
-            >
-              <option value="month">Mois</option>
-              <option value="quarter">Trimestre</option>
-              <option value="year">Année</option>
-            </select>
+        <div className="flex items-center gap-2">
+          <select
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
+          >
+            <option value="month">Mois</option>
+            <option value="quarter">Trimestre</option>
+            <option value="year">Année</option>
+          </select>
 
-            <select 
-              value={filterStatus} 
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded"
-            >
-              <option value="all">Tous les statuts</option>
-              <option value="active">Actifs</option>
-              <option value="completed">Complétés</option>
-              <option value="delayed">En retard</option>
-            </select>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
+          >
+            <option value="all">Tous les statuts</option>
+            <option value="active">Actifs</option>
+            <option value="completed">Complétés</option>
+            <option value="delayed">En retard</option>
+          </select>
 
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded w-64"
-              />
-            </div>
-
-            <button 
-              onClick={handleExport}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-2"
-            >
-              <Download size={18} />
-              Export
-            </button>
+          <div className="relative">
+            <Search className="absolute left-3 top-2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Rechercher..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm w-52"
+            />
           </div>
-        </div>
 
-       {/* Gantt Chart - STRUCTURE CORRIGÉE */}
-<div className="flex-1 overflow-hidden flex flex-col">
-  <div className="flex flex-1 min-h-0">
-    {/* Colonne projets - FIXE */}
-    <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-gray-300 bg-gray-50">
-      <div className="sticky top-0 bg-gray-100 border-b border-gray-300 p-4 font-semibold z-20" style={{ height: '60px' }}>
-        Projets ({filteredProjects.length})
+          <button
+            onClick={handleExport}
+            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5"
+          >
+            <Download size={16} />
+            Export
+          </button>
+        </div>
       </div>
 
-      {filteredProjects.length === 0 ? (
+      {/* ICI tu gardes ton bloc Gantt Chart - STRUCTURE CORRIGÉE TEL QUEL */}
+      {/* Gantt Chart - STRUCTURE CORRIGÉE */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+         <div className="flex flex-1 min-h-0">
+          {/* Colonne projets - FIXE */}
+        <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-gray-300 bg-gray-50">
+        <div className="sticky top-0 bg-gray-100 border-b border-gray-300 p-4 font-semibold z-20" style={{ height: '60px' }}>
+        Projets ({filteredProjects.length})
+        </div>
+
+        {filteredProjects.length === 0 ? (
         <div className="p-8 text-center text-gray-500">
           <Package size={48} className="mx-auto mb-4 text-gray-300" />
           <p className="text-lg font-semibold">Aucun projet trouvé</p>
@@ -579,8 +535,6 @@ const initialBalance = getBalanceAtDate(focusStart);
       ) : (
         filteredProjects.map((project, projectIndex) => {
           const isDelayed = project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed';
-
-
 
           return (
             <div
@@ -831,8 +785,6 @@ const initialBalance = getBalanceAtDate(focusStart);
     </div>
   </div>
 )}
-
-
                 {/* Today Marker */}
                 {timelineDays.some(day => isSameDay(day, new Date())) && (
                   <div
@@ -849,30 +801,26 @@ const initialBalance = getBalanceAtDate(focusStart);
       </div>
     </div>
   </div>
-</div>
+        </div>
 
 
-        {/* Modal de détails */}
-        {selectedProject && (
-          <ProjectDetailsModal
-            project={selectedProject}
-            onClose={() => setSelectedProject(null)}
-            onUpdate={async (updates) => {
-              if (onUpdateProject) {
-                await onUpdateProject(selectedProject.id, updates);
-              }
-              setSelectedProject(null);
-              if (onRefresh) onRefresh();
-            }}
-          />
-        )}
-      </div>
+      {/* Modal détails projet : tu gardes ton ProjectDetailsModal identique */}
+      {selectedProject && (
+        <ProjectDetailsModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+          onUpdate={async (updates) => {
+            if (onUpdateProject) {
+              await onUpdateProject(selectedProject.id, updates);
+            }
+            setSelectedProject(null);
+            if (onRefresh) onRefresh();
+          }}
+        />
+      )}
     </div>
-  );
-};
-
-// Modal de détails
-const ProjectDetailsModal = ({ project, onClose, onUpdate }) => {
+  </div>
+);
   const [formData, setFormData] = useState({
     start_date: project.start_date || '',
     end_date: project.end_date || '',
