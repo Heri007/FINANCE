@@ -317,7 +317,10 @@ focusStart.setHours(0, 0, 0, 0);        // normaliser à minuit
 
 const focusEnd = new Date();
 focusEnd.setDate(focusEnd.getDate() + 90);
+
 focusEnd.setHours(23, 59, 59, 999);
+
+const today = new Date();
 
   if (!isOpen) return null;
 
@@ -366,7 +369,7 @@ return (
     <TreasuryTimeline
       projects={normalizedProjects}
       currentCashBalance={currentCoffreBalance}
-      startDate={timelineStart}
+      startDate={today}
       endDate={timelineEnd}
       transactions={transactions}
       plannedTransactions={plannedTransactions}
@@ -802,7 +805,6 @@ return (
     </div>
   </div>
         </div>
-
 
       {/* Modal détails projet : tu gardes ton ProjectDetailsModal identique */}
       {selectedProject && (

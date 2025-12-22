@@ -343,48 +343,64 @@ const handlePayerDepense = async (exp, index) => {
     
     const accountObj = accounts.find(a => a.name === exp.account);
     if (!accountObj) return alert('Compte introuvable');
-    
-    if (!window.confirm(`Payer ${formatCurrency(exp.amount)} depuis ${exp.account} ?`)) {
-      return;
-    }
 
-    // ✅ Vérifier que le projet existe
-    if (!project || !project.id) {
-      alert('Erreur: Projet introuvable.');
-      return;
-    }
+    if (!project?.id) return alert('Erreur: Projet introuvable.');
 
-    // ✅ Utiliser createTransaction du contexte
-    await createTransaction({
-      accountid: parseInt(accountObj.id, 10),
-      type: 'expense',
+    // Demander si c'est un paiement déjà effectué
+    const alreadyPaid = window.confirm(
+      `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
+      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
+      `- NON (Annuler) → Je crée une transaction et débite le compte.`
+    );
+
+    const payload = alreadyPaid ? {
+      paid_externally: true,
       amount: parseFloat(exp.amount),
-      category: exp.category || 'Projet - Dépense',
-      description: `${project.name} - ${exp.description || 'Dépense'}`,
-      date: new Date().toISOString().split('T')[0],
-      isplanned: false,
-      isposted: true,
-      projectid: project.id,
-      projectlineid: null,
-    });
+      paid_date: exp.realDate || new Date().toISOString().split('T')[0]
+    } : {
+      create_transaction: true,
+      amount: parseFloat(exp.amount),
+      paid_date: exp.realDate || new Date().toISOString().split('T')[0]
+    };
+
+    // Appeler la route backend
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur serveur');
+    }
+
+    const result = await response.json();
 
     // Mettre à jour l'état local
     const updated = [...expenses];
     updated[index] = { ...updated[index], isPaid: true };
     setExpenses(updated);
-    
-    // Sauvegarder
+
+    // Sauvegarder le projet
     await saveProjectState(updated, revenues);
 
     if (onProjectUpdated) onProjectUpdated();
-    
-    alert('✅ Dépense payée !');
+
+    alert(result.message || 'Dépense marquée comme payée !');
   } catch (error) {
-    console.error('❌ Erreur handlePayerDepense:', error);
-    const msg = error?.message || error?.raw?.message || 'Erreur paiement';
-    alert(msg);
+    console.error('Erreur handlePayerDepense:', error);
+    alert(error?.message || 'Erreur paiement');
   }
 };
+
 
  const handleEncaisser = async (rev, index) => {
   try {
@@ -392,143 +408,140 @@ const handlePayerDepense = async (exp, index) => {
     
     const accountObj = accounts.find(a => a.name === rev.account);
     if (!accountObj) return alert('Compte introuvable');
-    
-    if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) {
-      return;
-    }
 
-    // ✅ Vérifier que le projet existe
-    if (!project || !project.id) {
-      alert('Erreur: Projet introuvable.');
-      return;
-    }
+    if (!project?.id) return alert('Erreur: Projet introuvable.');
 
-    // ✅ Utiliser createTransaction du contexte (passé via props)
-    await createTransaction({
-      accountid: parseInt(accountObj.id, 10),
-      type: 'income',
+    const alreadyReceived = window.confirm(
+      `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
+      `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
+      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
+      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+    );
+
+    const payload = alreadyReceived ? {
+      received_externally: true,
       amount: parseFloat(rev.amount),
-      category: 'Projet - Revenu',
-      description: `${project.name} - ${rev.description || 'Revenu'}`,
-      date: new Date().toISOString().split('T')[0],
-      isplanned: false,
-      isposted: true,
-      projectid: project.id,
-      projectlineid: null, // ✅ Correction
-    });
+      received_date: rev.realDate || new Date().toISOString().split('T')[0]
+    } : {
+      create_transaction: true,
+      amount: parseFloat(rev.amount),
+      received_date: rev.realDate || new Date().toISOString().split('T')[0]
+    };
 
-    // Mettre à jour l'état local
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur serveur');
+    }
+
+    const result = await response.json();
+
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: true };
     setRevenues(updated);
-    
-    // Sauvegarder
+
     await saveProjectState(expenses, updated);
 
     if (onProjectUpdated) onProjectUpdated();
-    
-    alert('✅ Revenu encaissé !');
+
+    alert(result.message || 'Revenu marqué comme reçu !');
   } catch (error) {
-    console.error('❌ Erreur handleEncaisser:', error);
-    const msg = error?.message || error?.raw?.message || 'Erreur encaissement';
-    alert(msg);
+    console.error('Erreur handleEncaisser:', error);
+    alert(error?.message || 'Erreur encaissement');
   }
 };
 
-  // --- ANNULATION PAIEMENT DÉPENSE ---
+
+  // --- ANNULATION PAIEMENT DÉPENSE/REVENUE ---
   const handleCancelPaymentExpense = async (exp, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
-      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
+  try {
+    if (!project?.id) return alert('Projet non enregistré');
 
-      const allTx = await transactionsService.getAll();
-      
-      // 1. Chercher la transaction liée
-      let matches = allTx.filter(t => 
-        String(t.project_line_id) === String(exp.id) && t.is_posted === true
-      );
-      
-      // Fallback si pas de project_line_id
-      if (matches.length === 0) {
-        matches = allTx.filter(t =>
-          String(t.project_id) === String(project.id) &&
-          t.type === 'expense' &&
-          Number(t.amount) === Number(exp.amount) &&
-          t.description.includes(exp.description)
-        );
-      }
+    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
-      // 2. Supprimer les transactions trouvées
-      for (const tx of matches) {
-        try {
-          await transactionsService.deleteTransaction(tx.id);
-        } catch (e) {
-          console.warn('Impossible de supprimer transaction', tx.id, e);
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       }
+    );
 
-      // 3. Mettre à jour l'état local
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: false }; // On repasse à non payé
-      setExpenses(updated);
-
-      // 4. SAUVEGARDER L'ÉTAT DU PROJET (CRUCIAL)
-      // C'est ici que ça manquait : il faut dire à la DB que la ligne n'est plus payée
-      await saveProjectState(updated, revenues);
-
-      // 5. Rafraîchir l'app globale
-      if (onProjectUpdated) onProjectUpdated();
-      
-      alert('Paiement annulé.');
-
-    } catch (err) {
-      console.error('Erreur handleCancelPaymentExpense:', err);
-      alert('Erreur annulation paiement: ' + (err.message || err));
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur serveur');
     }
-  };
 
-  // --- ANNULATION PAIEMENT REVENU ---
-  const handleCancelPaymentRevenue = async (rev, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
-      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+    const result = await response.json();
 
-      const allTx = await transactionsService.getAll();
-      let matches = allTx.filter(t => 
-        String(t.project_line_id) === String(rev.id) && t.is_posted === true
-      );
+    const updated = [...expenses];
+    updated[index] = { ...updated[index], isPaid: false };
+    setExpenses(updated);
 
-      if (matches.length === 0) {
-        matches = allTx.filter(t =>
-          String(t.project_id) === String(project.id) &&
-          t.type === 'income' &&
-          Number(t.amount) === Number(rev.amount)
-        );
-      }
+    await saveProjectState(updated, revenues);
 
-      for (const tx of matches) {
-        try {
-          await transactionsService.deleteTransaction(tx.id);
-        } catch (e) {
-          console.warn('Impossible de supprimer transaction', tx.id, e);
+    if (onProjectUpdated) onProjectUpdated();
+
+    alert(result.message);
+  } catch (err) {
+    console.error('Erreur handleCancelPaymentExpense:', err);
+    alert('Erreur annulation: ' + (err.message || err));
+  }
+};
+
+const handleCancelPaymentRevenue = async (rev, index) => {
+  try {
+    if (!project?.id) return alert('Projet non enregistré');
+
+    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       }
+    );
 
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: false };
-      setRevenues(updated);
-
-      // SAUVEGARDE DB
-      await saveProjectState(expenses, updated);
-
-      if (onProjectUpdated) onProjectUpdated();
-      alert('Encaissement annulé.');
-
-    } catch (err) {
-      console.error('Erreur handleCancelPaymentRevenue:', err);
-      alert(`Erreur annulation encaissement: ${err.message || err}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur serveur');
     }
-  };
+
+    const result = await response.json();
+
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: false };
+    setRevenues(updated);
+
+    await saveProjectState(expenses, updated);
+
+    if (onProjectUpdated) onProjectUpdated();
+
+    alert(result.message);
+  } catch (err) {
+    console.error('Erreur handleCancelPaymentRevenue:', err);
+    alert('Erreur annulation: ' + (err.message || err));
+  }
+};
+
 
 const saveProjectState = async (currentExpenses, currentRevenues) => {
   if (!project?.id) return;

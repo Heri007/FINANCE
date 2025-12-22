@@ -436,75 +436,84 @@ const updateRevenue = (id, field, value) => {
 
   // ==================== PAYER DÉPENSE ====================
 const handlePayExpense = async (expenseId) => {
-  const expense = expenses.find(e => e.id === expenseId);
-  if (!expense) return;
-
-  if (!expense.account) {
-    alert('Choisis un compte pour cette charge (ex: Coffre) avant de la payer.');
-    return;
-  }
-
   try {
-    console.log('💳 Paiement de la ligne:', expenseId, expense.description);
-
-    // Nettoyer la description pour éviter duplication
-    let finalDescription = expense.description;
-
-    if (finalDescription.startsWith(`${project.name} - `)) {
-      finalDescription = finalDescription.replace(`${project.name} - `, '');
-    }
-    if (finalDescription.endsWith(' (Dépense)')) {
-      finalDescription = finalDescription.replace(' (Dépense)', '');
-    }
-
-    finalDescription = `${project.name} - ${finalDescription} (Dépense)`;
-
-    // Trouver le compte sélectionné (Coffre, etc.)
-    const accountObj = accounts.find(a => a.name === expense.account);
-    if (!accountObj) {
-      alert(`Compte introuvable: ${expense.account}`);
+    const expense = expenses.find(e => e.id === expenseId);
+    if (!expense || !expense.account) {
+      alert('Veuillez sélectionner un compte avant de payer');
       return;
     }
 
-    // 1️⃣ Créer la transaction en base → mettra à jour le solde du Coffre
-    await createTransaction({
-      accountid: parseInt(accountObj.id, 10),
-      type: 'expense',
-      amount: parseFloat(expense.amount),
-      category: expense.category || 'Projet - Dépense',
-      description: finalDescription,
-      date: expense.date.toISOString().split('T')[0],
-      isplanned: false,
-      isposted: true,
-      projectid: project.id,
-      projectlineid: expenseId,
-    });
+    console.log(`💳 Paiement de la ligne: ${expenseId} ${expense.description}`);
 
-    // 2️⃣ Mettre à jour l'état local de la ligne (visuel "payé")
-    setExpenses(prev =>
-      prev.map(e =>
-        e.id === expenseId
-          ? { ...e, isPaid: true, account: accountObj.name }
-          : e
-      )
+    const alreadyPaid = window.confirm(
+      `💰 Paiement de "${expense.description}"\n` +
+      `Montant: ${expense.amount.toLocaleString()} Ar\n` +
+      `Compte: ${expense.account}\n\n` +
+      `❓ Ce paiement a-t-il DÉJÀ ÉTÉ EFFECTUÉ physiquement?\n\n` +
+      `• Cliquez OK si DÉJÀ PAYÉ (pas d'impact sur le Coffre)\n` +
+      `• Cliquez Annuler pour CRÉER UNE TRANSACTION (débite le Coffre)`
     );
 
-    console.log('📝 État mis à jour (ligne payée):', {
-      ...expense,
-      isPaid: true,
-      account: accountObj.name,
+    const expenseLine = project?.expenseLines?.find(line => {
+      return line.description === expense.description &&
+             Math.abs(parseFloat(line.projectedamount || line.actualamount) - expense.amount) < 1;
     });
 
-    // 3️⃣ Sauvegarder l'état du projet (JSONB + lignes normalisées)
-    await saveProjectState(
-      expenses.map(e =>
-        e.id === expenseId ? { ...e, isPaid: true } : e
-      ),
-      revenues
+    if (!expenseLine) {
+      console.error('❌ Ligne expense DB introuvable');
+      alert('Impossible de trouver la ligne de dépense dans la base de données');
+      return;
+    }
+
+    const dbLineId = expenseLine.id;
+    const accountObj = accounts.find(a => a.name === expense.account);
+
+    if (!accountObj) {
+      alert(`Compte "${expense.account}" introuvable`);
+      return;
+    }
+
+    // ✅ CORRECTION: Ajouter le token
+    const token = localStorage.getItem('token');
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          paid_externally: alreadyPaid,
+          amount: expense.amount,
+          paid_date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          account_id: accountObj.id
+        })
+      }
     );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Erreur lors du paiement');
+    }
+
+    const data = await response.json();
+    console.log('✅ Ligne marquée comme payée:', data);
+
+    setExpenses(expenses.map(e =>
+      e.id === expenseId ? { ...e, isPaid: true } : e
+    ));
+
+    await loadProjectData();
+
   } catch (error) {
     console.error('❌ Erreur paiement:', error);
-    alert(`Erreur lors du paiement : ${error.message}`);
+    alert(`Erreur lors du paiement: ${error.message}`);
   }
 };
 
@@ -573,90 +582,176 @@ const handleEncaisser = async (rev, index) => {
   }
 };
 
-  // ==================== ANNULER PAIEMENT DÉPENSE ====================
-  const handleCancelPaymentExpense = async (exp, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
-      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
+  // ==================== ANNULER PAIEMENT DÉPENSE/REVENUE ====================
+const handleCancelPaymentExpense = async (expenseIdOrObject) => {
+  try {
+    const frontendExpenseId = typeof expenseIdOrObject === 'object' 
+      ? expenseIdOrObject.id 
+      : expenseIdOrObject;
 
-      const allTx = await transactionsService.getAll();
-      let matches = allTx.filter(t => 
-        String(t.projectlineid) === String(exp.id) && t.isposted === true
-      );
+    console.log(`🔄 Annulation paiement pour ligne frontend ID: ${frontendExpenseId}`);
+    
+    const expense = expenses.find(e => e.id === frontendExpenseId);
+    if (!expense) {
+      console.error('❌ Expense introuvable dans le state');
+      alert('Ligne de dépense introuvable');
+      return;
+    }
 
-      if (matches.length === 0) {
-        matches = allTx.filter(t => 
-          String(t.projectid) === String(project.id) &&
-          t.type === 'expense' &&
-          Number(t.amount) === Number(exp.amount) &&
-          t.description.includes(exp.description)
-        );
+    console.log('✅ Expense trouvé dans state:', {
+      id: expense.id,
+      description: expense.description,
+      amount: expense.amount,
+      isPaid: expense.isPaid
+    });
+
+    console.log('📋 Lignes disponibles dans project.expenseLines:', 
+      project?.expenseLines?.map(line => ({
+        id: line.id,
+        description: line.description,
+        projectedamount: line.projectedamount,
+        actualamount: line.actualamount,
+        transactionid: line.transactionid,
+        transaction_id: line.transaction_id
+      }))
+    );
+
+    let expenseLine;
+    
+    if (expense.isPaid) {
+      expenseLine = project?.expenseLines?.find(line => {
+        const descMatch = line.description?.trim() === expense.description?.trim();
+        
+        console.log(`🔍 Comparaison (ligne payée) avec ligne DB ${line.id}:`, {
+          lineDesc: line.description,
+          expenseDesc: expense.description,
+          descMatch,
+          lineTransactionId: line.transactionid || line.transaction_id
+        });
+        
+        return descMatch;
+      });
+    } else {
+      expenseLine = project?.expenseLines?.find(line => {
+        const lineAmount = parseFloat(line.actualamount || line.actual_amount || line.projectedamount || line.projected_amount || 0);
+        const expenseAmount = parseFloat(expense.amount || 0);
+        const amountMatch = Math.abs(lineAmount - expenseAmount) < 1;
+        const descMatch = line.description?.trim() === expense.description?.trim();
+        
+        console.log(`🔍 Comparaison (ligne non payée) avec ligne DB ${line.id}:`, {
+          lineDesc: line.description,
+          expenseDesc: expense.description,
+          descMatch,
+          lineAmount,
+          expenseAmount,
+          amountMatch
+        });
+        
+        return descMatch && amountMatch;
+      });
+    }
+
+    if (!expenseLine) {
+      console.error('❌ Ligne expense DB introuvable pour:', frontendExpenseId);
+      console.error('📊 Détails de recherche:', {
+        recherché: {
+          description: expense.description,
+          amount: expense.amount,
+          isPaid: expense.isPaid
+        },
+        disponibles: project?.expenseLines?.map(line => ({
+          id: line.id,
+          description: line.description,
+          amount: line.actualamount || line.actual_amount || line.projectedamount || line.projected_amount,
+          transactionid: line.transactionid || line.transaction_id
+        }))
+      });
+      alert('Impossible de trouver la ligne de dépense dans la base de données.\nVérifiez la console pour plus de détails.');
+      return;
+    }
+
+    const dbLineId = expenseLine.id;
+    console.log(`✅ Ligne DB trouvée: ID ${dbLineId}`, expenseLine);
+
+    // ✅ CORRECTION: Ajouter l'en-tête Authorization avec le token
+    const token = localStorage.getItem('token');
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Appeler l'API avec l'ID DB et le token
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
+      {
+        method: 'PATCH',
+        headers
       }
+    );
 
-      for (const tx of matches) {
-        try {
-          await transactionsService.deleteTransaction(tx.id);
-        } catch (e) {
-          console.warn('Impossible de supprimer transaction', tx.id, e);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Erreur lors de l\'annulation');
+    }
+
+    const data = await response.json();
+    console.log('✅ Paiement annulé:', data);
+
+    // Mettre à jour l'état local
+    setExpenses(expenses.map(e =>
+      e.id === frontendExpenseId ? { ...e, isPaid: false } : e
+    ));
+
+    // Recharger le projet
+    await loadProjectData();
+    
+  } catch (error) {
+    console.error('❌ Erreur handleCancelPaymentExpense:', error);
+    alert(`Erreur lors de l'annulation: ${error.message}`);
+  }
+};
+
+const handleCancelPaymentRevenue = async (rev, index) => {
+  try {
+    if (!project?.id) return alert('Projet non enregistré');
+
+    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+
+    const response = await fetch(
+      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       }
+    );
 
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: false };
-      setExpenses(updated);
-
-      await saveProjectState(updated, revenues);
-
-      if (onProjectUpdated) onProjectUpdated();
-      alert('✅ Paiement annulé.');
-
-    } catch (err) {
-      console.error('❌ Erreur handleCancelPaymentExpense:', err);
-      alert('Erreur annulation : ' + (err.message || err));
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Erreur serveur');
     }
-  };
 
-  // ==================== ANNULER ENCAISSEMENT REVENU ====================
-  const handleCancelPaymentRevenue = async (rev, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
-      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+    const result = await response.json();
 
-      const allTx = await transactionsService.getAll();
-      let matches = allTx.filter(t => 
-        String(t.projectlineid) === String(rev.id) && t.isposted === true
-      );
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: false };
+    setRevenues(updated);
 
-      if (matches.length === 0) {
-        matches = allTx.filter(t => 
-          String(t.projectid) === String(project.id) &&
-          t.type === 'income' &&
-          Number(t.amount) === Number(rev.amount)
-        );
-      }
+    await saveProjectState(expenses, updated);
 
-      for (const tx of matches) {
-        try {
-          await transactionsService.deleteTransaction(tx.id);
-        } catch (e) {
-          console.warn('Impossible de supprimer transaction', tx.id, e);
-        }
-      }
+    if (onProjectUpdated) onProjectUpdated();
 
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: false };
-      setRevenues(updated);
-
-      await saveProjectState(expenses, updated);
-
-      if (onProjectUpdated) onProjectUpdated();
-      alert('✅ Encaissement annulé.');
-
-    } catch (err) {
-      console.error('❌ Erreur handleCancelPaymentRevenue:', err);
-      alert('Erreur annulation : ' + (err.message || err));
-    }
-  };
+    alert(result.message);
+  } catch (err) {
+    console.error('Erreur handleCancelPaymentRevenue:', err);
+    alert('Erreur annulation: ' + (err.message || err));
+  }
+};
 
   // ==================== SAUVEGARDER L'ÉTAT DU PROJET ====================
   const saveProjectState = async (currentExpenses, currentRevenues) => {
@@ -677,8 +772,6 @@ const handleEncaisser = async (rev, index) => {
     ...rev,
     plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
   }));
-
-  console.log('📤 PAYLOAD ENVIADO:', payload.expenses); // ✅ Vérifie ici aussi
 
   console.log('💾 saveProjectState démarré:', {
     projectId: project.id,
@@ -708,6 +801,8 @@ const handleEncaisser = async (rev, index) => {
     metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
   };
 
+  // ✅ MAINTENANT on peut utiliser payload
+  console.log('📤 PAYLOAD ENVIADO:', payload.expenses);
   console.log('📤 Payload envoyé:', {
     ...payload,
     expenses: `${expensesWithDate.length} lignes`,
@@ -1228,7 +1323,7 @@ const revenuesWithDate = revenues.map(rev => ({
           </button>
         ) : (
           <button
-            onClick={() => handleCancelPaymentExpense(exp, idx)}
+            onClick={() => handleCancelPaymentExpense(exp.id)}
             className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
             title="Annuler paiement"
           >

@@ -203,34 +203,43 @@ router.get('/full-export', authenticateToken, async (req, res) => {
     console.log('📦 Full export demandé');
 
     // ✅ Requêtes parallèles SANS filtrage par user_id
-    const [accountsRes, transactionsRes, receivablesRes, projectsRes, notesRes, visionsRes, objectivesRes,     
-      ] = await Promise.all([
-      pool.query('SELECT * FROM accounts ORDER BY id'),
-      pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
-      pool.query('SELECT * FROM receivables ORDER BY id'),
-      pool.query('SELECT * FROM projects ORDER BY id'), // ✅ AJOUT DES PROJETS
-      pool.query('SELECT * FROM notes ORDER BY id'),
-      pool.query('SELECT * FROM visions ORDER BY id'),  
-      pool.query('SELECT * FROM objectives ORDER BY id')  
-    ]);
+    const [
+  accountsRes,
+  transactionsRes,
+  receivablesRes,
+  projectsRes,
+  notesRes,
+  visionsRes,
+  objectivesRes,
+  employeesRes,
+  contractsRes,
+  payrollsRes,
+] = await Promise.all([
+  pool.query('SELECT * FROM accounts ORDER BY id'),
+  pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
+  pool.query('SELECT * FROM receivables ORDER BY id'),
+  pool.query('SELECT * FROM projects ORDER BY id'),
+  pool.query('SELECT * FROM notes ORDER BY id'),
+  pool.query('SELECT * FROM visions ORDER BY id'),
+  pool.query('SELECT * FROM objectives ORDER BY id'),
+  pool.query('SELECT * FROM employees ORDER BY id'),
+]);
 
     console.log(
   `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} receivables, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes, ${visionsRes.rows.length} visions, ${objectivesRes.rows.length} objectifs`
 );
-
     const backup = {
-      version: '2.0',
-      date: new Date().toISOString(),
-      accounts: accountsRes.rows,
-      transactions: transactionsRes.rows,
-      receivables: receivablesRes.rows,
-      projects: projectsRes.rows, // ✅ AJOUT DES PROJETS
-      notes: notesRes.rows, // ✅ AJOUTER
-      visions: visionsRes.rows,          // 👈 NEW
-      objectives: objectivesRes.rows     // 👈 NEW
-
-    };
-
+  version: '2.1',
+  date: new Date().toISOString(),
+  accounts: accountsRes.rows,
+  transactions: transactionsRes.rows,
+  receivables: receivablesRes.rows,
+  projects: projectsRes.rows,
+  notes: notesRes.rows,
+  visions: visionsRes.rows,
+  objectives: objectivesRes.rows,
+  employees: employeesRes.rows,
+};
     res.json(backup);
   } catch (err) {
     console.error('❌ Erreur full-export:', err);
@@ -240,7 +249,6 @@ router.get('/full-export', authenticateToken, async (req, res) => {
     });
   }
 });
-
 
 // -----------------------------------------------------------------------------
 // GET /api/backup/:filename - Télécharger un backup précis
@@ -269,7 +277,6 @@ router.get('/:filename', authenticateToken, async (req, res) => {
   }
 });
 
-
 // -----------------------------------------------------------------------------
 // POST /api/backup/restore-full - Restaurer la base depuis un full JSON
 // -----------------------------------------------------------------------------
@@ -289,6 +296,18 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
     const includeProjects = options.includeProjects !== false; // ✅ Par défaut true
     const userId = 1; // ✅ FORCER user_id = 1 (app mono-utilisateur)
 
+        const {
+  accounts,
+  transactions,
+  receivables = [],
+  projects = [],
+  notes = [],
+  visions = [],
+  objectives = [],
+  employees = [],
+} = backup;
+
+
     const summary = {
   accounts: backup.accounts.length,
   transactions: backup.transactions.length,
@@ -300,6 +319,7 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
   notes: Array.isArray(backup.notes) ? backup.notes.length : 0,
   visions: Array.isArray(backup.visions) ? backup.visions.length : 0,          // ✅ Corrigé
   objectives: Array.isArray(backup.objectives) ? backup.objectives.length : 0,
+  employees: employees.length,
   includeProjects,
   dryRun,
 };
@@ -312,20 +332,19 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
         summary,
       });
     }
-
     await client.query('BEGIN');
 
     // 1) SUPPRIMER les données (SANS filtrer par user_id pour tout effacer)
    console.log('🗑️ Suppression de TOUTES les données...');
-await client.query('DELETE FROM transactions');
-await client.query('DELETE FROM receivables');
-if (includeProjects) {
+  await client.query('DELETE FROM transactions');
+    await client.query('DELETE FROM receivables');
+  if (includeProjects) {
   await client.query('DELETE FROM projects');
-}
-await client.query('DELETE FROM objectives'); // 👈 NEW
-await client.query('DELETE FROM visions');    // 👈 NEW
-await client.query('DELETE FROM accounts');
-
+  }
+  await client.query('DELETE FROM objectives'); // 👈 NEW
+  await client.query('DELETE FROM visions');    // 👈 NEW
+  await client.query('DELETE FROM accounts');
+await client.query('DELETE FROM employees');
 
     // 2) Restaurer les comptes
     console.log(`📦 Restauration de ${backup.accounts.length} comptes...`);
@@ -537,6 +556,29 @@ if (Array.isArray(backup.objectives) && backup.objectives.length > 0) {
   }
 }
 
+// 5quinquies) Restaurer les employés
+if (Array.isArray(employees) && employees.length > 0) {
+  console.log(`📦 Restauration de ${employees.length} employés...`);
+  for (const e of employees) {
+    await client.query(
+      `INSERT INTO employees
+       (id, full_name, role, salary, status, hired_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        e.id,
+        e.full_name || e.name || '',
+        e.role || '',
+        e.salary || 0,
+        e.status || 'active',
+        e.hired_at || null,
+        e.created_at || new Date(),
+        e.updated_at || new Date(),
+      ]
+    );
+  }
+}
+
     // 6) Reset des séquences PostgreSQL
     await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
     await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
@@ -546,6 +588,7 @@ if (Array.isArray(backup.objectives) && backup.objectives.length > 0) {
     }
     await client.query(`SELECT setval('visions_id_seq', (SELECT MAX(id) FROM visions))`);
     await client.query(`SELECT setval('objectives_id_seq', (SELECT MAX(id) FROM objectives))`);
+await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))`);
     await client.query('COMMIT');
     
     console.log('✅ Restauration committée avec succès');

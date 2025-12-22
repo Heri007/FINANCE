@@ -19,7 +19,7 @@ export default function TreasuryTimeline({
   plannedTransactions = [],
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const pageSize = 4;
+  const pageSize = 2;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
@@ -380,17 +380,17 @@ return (
           return (
             <div
               key={day.date}
-              className={`group border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-all h-[230px] flex flex-col ${highlight}`}
+              className={`group border border-slate-200 rounded-xl p-3 shadow-sm hover:shadow-md transition-all h-[270px] flex flex-col ${highlight}`}
             >
               {/* --- Card Header: Date & Solde --- */}
               <div className="flex justify-between items-start mb-2 border-b border-slate-100 pb-2">
                 <div className="flex flex-col">
-                   <span className="font-bold text-slate-700 capitalize text-sm">{dateLabel}</span>
-                   <span className="text-[10px] text-slate-400 font-medium">Fin de journée</span>
+                   <span className="font-bold text-slate-700 capitalize text-lg">{dateLabel}</span>
+                   <span className="text-[10px] text-red-400 font-medium">Fin de journée</span>
                 </div>
                 <div className="text-right">
                   <div className={`text-lg font-bold leading-none ${isNegative ? 'text-rose-600' : 'text-slate-800'}`}>
-                    {(day.coffreProjectedBalance || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400">Ar</span>
+                    {(day.coffreProjectedBalance || 0).toLocaleString()} <span className="text-[18px] font-normal text-blue-800">Ar</span>
                   </div>
                 </div>
               </div>
@@ -399,28 +399,28 @@ return (
               <div className="grid grid-cols-2 gap-3 mb-2">
                 {/* Prévisions */}
                 <div className="bg-blue-50/50 rounded p-1.5 border border-blue-100/50">
-                  <div className="text-[9px] uppercase font-bold text-blue-700 mb-0.5">Prévisions</div>
-                  <div className="text-[10px] text-slate-600 flex justify-between">
+                  <div className="text-[11px] uppercase font-bold text-blue-700 mb-0.5">Prévisions</div>
+                  <div className="text-[11px] text-slate-600 flex justify-between">
                     <span>Entrées:</span> <span className="font-medium">{(day.plannedRevenues || 0).toLocaleString()}</span>
                   </div>
-                  <div className="text-[10px] text-slate-600 flex justify-between">
+                  <div className="text-[11px] text-slate-600 flex justify-between">
                     <span>Sorties:</span> <span className="font-medium">{(day.plannedExpenses || 0).toLocaleString()}</span>
                   </div>
-                  <div className={`text-[10px] mt-0.5 pt-0.5 border-t border-blue-100 text-right font-bold ${netPlanned >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <div className={`text-[11px] mt-0.5 pt-0.5 border-t border-blue-100 text-right font-bold ${netPlanned >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {netPlanned > 0 ? '+' : ''}{netPlanned.toLocaleString()}
                   </div>
                 </div>
 
                 {/* Réalisé */}
                 <div className="bg-emerald-50/30 rounded p-1.5 border border-emerald-100/50">
-                  <div className="text-[9px] uppercase font-bold text-emerald-700 mb-0.5">Réalisé</div>
-                  <div className="text-[10px] text-slate-600 flex justify-between">
+                  <div className="text-[11px] uppercase font-bold text-emerald-700 mb-0.5">Réalisé(s)</div>
+                  <div className="text-[11px] text-slate-600 flex justify-between">
                     <span>Entrées:</span> <span className="font-medium">{(day.revenues || 0).toLocaleString()}</span>
                   </div>
-                  <div className="text-[10px] text-slate-600 flex justify-between">
+                  <div className="text-[11px] text-slate-600 flex justify-between">
                     <span>Sorties:</span> <span className="font-medium">{(day.expenses || 0).toLocaleString()}</span>
                   </div>
-                  <div className={`text-[10px] mt-0.5 pt-0.5 border-t border-emerald-100 text-right font-bold ${netReal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <div className={`text-[11px] mt-0.5 pt-0.5 border-t border-emerald-100 text-right font-bold ${netReal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                      {netReal > 0 ? '+' : ''}{netReal.toLocaleString()}
                   </div>
                 </div>
@@ -433,15 +433,15 @@ return (
                     {/* Projets Prévus */}
                     {day.projectPlanned.length > 0 && (
                       <div>
-                        <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[9px] font-bold text-blue-600 uppercase tracking-wide mb-1 border-b border-blue-50 py-0.5">
+                        <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[11px] font-bold text-blue-600 uppercase tracking-wide mb-1 border-b border-blue-50 py-0.5">
                           Projets (Prévu)
                         </div>
                         {day.projectPlanned.map((p, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 group/item">
+                          <div key={idx} className="flex justify-between items-center text-[11px] py-0.5 group/item">
                             <span className="text-slate-600 truncate max-w-[65%] group-hover/item:text-slate-900 transition-colors" title={p.project_name}>
                               {p.project_name || `Projet #${p.project_id}`}
                             </span>
-                            <span className={`font-medium ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span className={`text-[11px] ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {p.type === 'income' ? '+' : '-'}{p.amount.toLocaleString()}
                             </span>
                           </div>
