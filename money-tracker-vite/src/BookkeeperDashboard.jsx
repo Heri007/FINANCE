@@ -41,14 +41,162 @@ export default function BookkeeperDashboard({ onClose }) {
     console.log("📊 BookkeeperDashboard - Projets reçus:", projects.length);
   }, [transactions, accounts, projects]);
 
-  // Texte pour CopyButton
-  const generateCopyText = () => {
-    return [
-      `📊 Bookkeeper – ${transactions.length} transactions`,
-      `Comptes: ${accounts.length}`,
-      `Projets: ${projects.length}`,
-    ].join("\n");
-  };
+  // Texte pour CopyButton - VERSION COMPLÈTE
+const generateCopyText = () => {
+  const now = new Date().toLocaleDateString('fr-FR', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+
+  let text = `📊 BOOKKEEPER DASHBOARD\n`;
+  text += `═══════════════════════════════════════════════\n`;
+  text += `Date: ${now}\n`;
+  text += `What I don't track can't grow\n\n`;
+
+  // RÉSUMÉ GLOBAL
+  text += `💰 RÉSUMÉ FINANCIER GLOBAL\n`;
+  text += `───────────────────────────────────────────────\n`;
+  text += `Solde total:           ${formatCurrency(filteredTotalBalance)}\n`;
+  text += `Comptes suivis:        ${accounts.length}\n`;
+  text += `Encaissements filtrés: ${formatCurrency(filteredIncome)}\n`;
+  text += `  (${filteredTransactions.filter(t => t.type === 'income').length} transactions)\n`;
+  text += `Dépenses filtrées:     ${formatCurrency(filteredExpense)}\n`;
+  text += `  (${filteredTransactions.filter(t => t.type === 'expense').length} transactions)\n`;
+  text += `Solde net:             ${formatCurrency(filteredIncome - filteredExpense)}\n`;
+  text += `Projets actifs:        ${projects.length}\n\n`;
+
+  // DÉTAIL DES COMPTES
+  if (accounts.length > 0) {
+    text += `💳 DÉTAIL DES COMPTES\n`;
+    text += `───────────────────────────────────────────────\n`;
+    accounts
+      .sort((a, b) => parseFloat(b.balance || 0) - parseFloat(a.balance || 0))
+      .forEach(acc => {
+        text += `${acc.name}: ${formatCurrency(acc.balance || 0)}\n`;
+      });
+    text += `\n`;
+  }
+
+  // IMPACTS À VENIR (PROJETS)
+  const futureImpacts = projectTimelines.reduce((sum, project) => {
+    return sum + project.accountTimelines.reduce((accSum, acc) => {
+      return accSum + acc.events.reduce((evSum, ev) => 
+        ev.type === 'income' ? evSum + (ev.amount || 0) : evSum, 0
+      );
+    }, 0);
+  }, 0);
+
+  if (futureImpacts > 0) {
+    text += `📈 IMPACTS À VENIR\n`;
+    text += `───────────────────────────────────────────────\n`;
+    text += `Revenus projetés:      ${formatCurrency(futureImpacts)}\n`;
+    text += `(Gain futur brut hors transferts et dépenses)\n\n`;
+  }
+
+  // PROJETS ACTIFS
+  if (projects.length > 0) {
+    text += `📋 PROJETS ACTIFS (${projects.length})\n`;
+    text += `───────────────────────────────────────────────\n`;
+    projects.forEach((project, idx) => {
+      text += `${idx + 1}. ${project.name}\n`;
+      text += `   Type: ${project.type || 'N/A'}\n`;
+      text += `   Budget: ${formatCurrency(project.totalCost || 0)}\n`;
+      text += `   CA prévu: ${formatCurrency(project.totalRevenues || 0)}\n`;
+      text += `   ROI: ${(project.roi || 0).toFixed(1)}%\n`;
+    });
+    text += `\n`;
+  }
+
+  // FILTRES ACTIFS
+  const activeFilters = [];
+  if (selectedAccountId) {
+    const acc = accounts.find(a => String(a.id) === String(selectedAccountId));
+    if (acc) activeFilters.push(`Compte: ${acc.name}`);
+  }
+  if (selectedProjectId) {
+    const proj = projects.find(p => String(p.id) === String(selectedProjectId));
+    if (proj) activeFilters.push(`Projet: ${proj.name}`);
+  }
+  if (dateRange.from) activeFilters.push(`Début: ${dateRange.from}`);
+  if (dateRange.to) activeFilters.push(`Fin: ${dateRange.to}`);
+
+  if (activeFilters.length > 0) {
+    text += `🔍 FILTRES ACTIFS\n`;
+    text += `───────────────────────────────────────────────\n`;
+    activeFilters.forEach(filter => {
+      text += `• ${filter}\n`;
+    });
+    text += `\n`;
+  }
+
+  // TRANSACTIONS FILTRÉES (TOP 20)
+  text += `📝 TRANSACTIONS FILTRÉES (${filteredTransactions.length} total)\n`;
+  text += `───────────────────────────────────────────────\n`;
+  
+  if (filteredTransactions.length === 0) {
+    text += `Aucune transaction ne correspond aux filtres.\n\n`;
+  } else {
+    const displayCount = Math.min(filteredTransactions.length, 20);
+    text += `Affichage des ${displayCount} premières:\n\n`;
+    
+    filteredTransactions.slice(0, 20).forEach(tx => {
+      const acc = accounts.find(a => a.id === tx.account_id);
+      const proj = projects.find(p => p.id === tx.project_id);
+      const date = String(tx.date || tx.transactiondate || '')
+        .split('T')[0]
+        .replace(/-/g, '/');
+      
+      text += `${date} | ${tx.type === 'income' ? '📈' : '📉'} ${formatCurrency(tx.amount)}\n`;
+      text += `  ${tx.description || '—'}\n`;
+      if (acc) text += `  Compte: ${acc.name}\n`;
+      if (proj) text += `  Projet: ${proj.name}\n`;
+      text += `\n`;
+    });
+
+    if (filteredTransactions.length > 20) {
+      text += `... et ${filteredTransactions.length - 20} autres transactions\n\n`;
+    }
+  }
+
+  // STATISTIQUES PAR CATÉGORIE
+  const categoryStats = {};
+  filteredTransactions.forEach(tx => {
+    const cat = tx.category || 'Non catégorisé';
+    if (!categoryStats[cat]) {
+      categoryStats[cat] = { income: 0, expense: 0, count: 0 };
+    }
+    categoryStats[cat].count++;
+    if (tx.type === 'income') {
+      categoryStats[cat].income += parseFloat(tx.amount || 0);
+    } else if (tx.type === 'expense') {
+      categoryStats[cat].expense += parseFloat(tx.amount || 0);
+    }
+  });
+
+  if (Object.keys(categoryStats).length > 0) {
+    text += `📊 STATISTIQUES PAR CATÉGORIE\n`;
+    text += `───────────────────────────────────────────────\n`;
+    Object.entries(categoryStats)
+      .sort((a, b) => (b[1].income + b[1].expense) - (a[1].income + a[1].expense))
+      .slice(0, 10)
+      .forEach(([category, stats]) => {
+        text += `${category}:\n`;
+        if (stats.income > 0) text += `  Revenus:  ${formatCurrency(stats.income)}\n`;
+        if (stats.expense > 0) text += `  Dépenses: ${formatCurrency(stats.expense)}\n`;
+        text += `  Net:      ${formatCurrency(stats.income - stats.expense)}\n`;
+        text += `  Trans:    ${stats.count}\n`;
+      });
+    text += `\n`;
+  }
+
+  text += `═══════════════════════════════════════════════\n`;
+  text += `Généré par Money Tracker • ${new Date().toLocaleTimeString('fr-FR')}\n`;
+
+  return text;
+};
+
 
   // Transactions filtrées (bloc tableau)
   const filteredTransactions = useMemo(() => {

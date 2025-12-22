@@ -388,7 +388,7 @@ const calculateInvestedAmount = (project) => {
   <Calendar size={20} />
   Gantt Timeline
 </button>
-              <CopyButton textToCopy={generateCopyText()} />
+              <CopyButton getText={generateCopyText} />
               <button
                 onClick={onClose}
                 className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-lg transition"

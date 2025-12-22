@@ -2,11 +2,13 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
-  X, Copy, TrendingUp, Calendar, DollarSign, PieChart, 
+  X, TrendingUp, Calendar, DollarSign, PieChart, 
   CheckCircle, Clock, ArrowRight, Briefcase, Link2, AlertCircle, RefreshCw, Filter
 } from 'lucide-react';
 import { formatCurrency, formatDate } from './utils/formatters';
 import { API_BASE } from './services/api';
+import { CopyButton } from './components/common/CopyButton';
+
 
 export function ProjectDetailsModal({
   project,
@@ -273,11 +275,6 @@ console.log('💰 TOTAUX CALCULÉS:', {
     } catch (e) { alert("Erreur réseau"); }
   };
 
-  const handleCopyToClipboard = () => {
-  let text = `${project.name}\nBudget: ${formatCurrency(totalBudget)}\nRevenus: ${formatCurrency(totalRevenuePrev)}\nProfit: ${formatCurrency(netProfit)}`;
-  navigator.clipboard.writeText(text).then(() => alert("Résumé copié !"));
-};
-
 
   // Juste avant le return
 console.log('🎯 RENDU Modal avec:', {
@@ -288,6 +285,45 @@ console.log('🎯 RENDU Modal avec:', {
   receivedRevenues: receivedRevenues?.length,
   pendingRevenues: pendingRevenues?.length
 });
+
+const generateCopyText = () => {
+  return `
+📋 PROJET: ${project.name}
+Type: ${project.type || 'N/A'}
+Statut: ${project.status || 'actif'}
+
+📅 DATES:
+Début: ${project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'N/A'}
+Fin: ${project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie'}
+
+💰 RÉSUMÉ FINANCIER:
+Budget total: ${formatCurrency(totalBudget)}
+Revenus prévus: ${formatCurrency(totalRevenuePrev)}
+Profit net: ${formatCurrency(netProfit)}
+ROI: ${project.roi || 0}%
+
+📊 DÉTAILS:
+${project.metadata ? `
+Métadonnées:
+${Object.entries(typeof project.metadata === 'string' ? JSON.parse(project.metadata) : project.metadata)
+  .map(([key, value]) => `  ${key}: ${value}`)
+  .join('\n')}
+` : ''}
+
+💸 CHARGES (${project.expenses?.length || 0}):
+${(project.expenses || []).map(exp => 
+  `- ${exp.description}: ${formatCurrency(exp.amount)} [${exp.category}]${exp.isPaid ? ' ✅ Payé' : ' ⏳ Non payé'}`
+).join('\n') || 'Aucune charge'}
+
+💵 REVENUS (${project.revenues?.length || 0}):
+${(project.revenues || []).map(rev => 
+  `- ${rev.description}: ${formatCurrency(rev.amount)} [${rev.category}]${rev.isPaid ? ' ✅ Reçu' : ' ⏳ Non reçu'}`
+).join('\n') || 'Aucun revenu'}
+
+⏰ Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+  `.trim();
+};
+
 
   // =======================================================================
   // 4. RENDER
@@ -606,9 +642,12 @@ console.log('🎯 RENDU Modal avec:', {
 </div>
           {/* FOOTER */}
           <div className="p-4 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
-            <button onClick={handleCopyToClipboard} className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-200 rounded-xl hover:shadow-sm">
-              <Copy className="w-4 h-4" /> Copier
-            </button>
+            <CopyButton 
+  getText={generateCopyText}
+  size="default"
+  className="px-4 py-2"
+/>
+
             <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors">
               Fermer
             </button>

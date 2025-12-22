@@ -266,7 +266,7 @@ export function ReportsModal({ onClose, transactions = [], accounts = [] }) {
             </div>
             <div className="flex items-center gap-3">
               {/* ✅ Bouton Copier */}
-              <CopyButton textToCopy={generateCopyText()} />
+              <CopyButton getText={generateCopyText} />
               
               <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition">
                 <X className="w-6 h-6" />
