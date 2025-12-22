@@ -823,13 +823,6 @@ return (
     </div>
   </div>
 );
-  const [formData, setFormData] = useState({
-    start_date: project.start_date || '',
-    end_date: project.end_date || '',
-    progress: project.progress || 0,
-    status: project.status || 'active',
-    color: project.color || '#3B82F6',
-  });
 
   const colorPalette = [
     { name: 'Bleu', value: '#3B82F6' },

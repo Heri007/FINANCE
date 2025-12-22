@@ -1,4 +1,4 @@
-// routes/projects.js - VERSION CORRIGÉE AVEC BON ORDRE
+// routes/projects.js - VERSION FINALE CORRIGÉE
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
@@ -15,9 +15,30 @@ router.use(authMiddleware);
 router.get('/expense-lines/unpaid', projectsController.getUnpaidExpenses);
 router.get('/revenue-lines/pending', projectsController.getPendingRevenues);
 
-// ✅ NOUVELLES ROUTES : Marquer ligne comme payée/reçue
-router.patch('/:projectId/expense-lines/:lineId/mark-paid', projectsController.markExpenseLinePaid);
-router.patch('/:projectId/revenue-lines/:lineId/mark-received', projectsController.markRevenueLineReceived);
+// ============================================================================
+// ✅ ROUTES POUR MARQUER LIGNES COMME PAYÉES/REÇUES
+// ============================================================================
+
+// ✅ CORRECTION : Enlever "/projects/" car déjà dans le mount path
+router.patch(
+  '/:projectId/expense-lines/:lineId/mark-paid',
+  projectsController.markExpenseLinePaid
+);
+
+router.patch(
+  '/:projectId/revenue-lines/:lineId/mark-received',
+  projectsController.markRevenueLineReceived
+);
+
+router.patch(
+  '/:projectId/expense-lines/:lineId/cancel-payment',
+  projectsController.cancelExpenseLinePayment
+);
+
+router.patch(
+  '/:projectId/revenue-lines/:lineId/cancel-receipt',
+  projectsController.cancelRevenueLineReceipt
+);
 
 // ============================================================================
 // ROUTES PROJETS PRINCIPALES
@@ -44,9 +65,6 @@ router.post('/:id/reactivate', projectsController.reactivateProject);
 // Routes lignes spécifiques à un projet
 router.get('/:id/expense-lines', projectsController.getProjectExpenseLines);
 router.get('/:id/revenue-lines', projectsController.getProjectRevenueLines);
-router.patch('/:projectId/expense-lines/:lineId/cancel-payment', projectsController.cancelExpenseLinePayment);
-router.patch('/:projectId/revenue-lines/:lineId/cancel-receipt', projectsController.cancelRevenueLineReceipt);
-
 
 // CRUD projet par ID
 router.get('/:id', projectsController.getProjectById);

@@ -46,6 +46,7 @@ export function CarriereModal({
   const [perimetre, setPerimetre] = useState('');
   const [numeroPermis, setNumeroPermis] = useState('');
   const [typePermis, setTypePermis] = useState('PRE'); // PRE, PE, etc.
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // GESTION DES LP1
   const [lp1List, setLp1List] = useState([]);
@@ -149,61 +150,86 @@ export function CarriereModal({
     console.log('📦 Expenses brutes:', expensesRaw);
     console.log('📦 Revenues brutes:', revenuesRaw);
 
-    // ✅ 6. Fusionner expenses avec transactions pour déterminer isPaid
-    const parsedExpenses = expensesRaw.map(exp => {
-      // Chercher une transaction correspondante
-      const matchingTx = projectTransactions.find(tx => {
-        const txLineId = tx.project_line_id || tx.projectlineid;
-        return String(txLineId) === String(exp.id) && tx.type === 'expense';
-      });
+    // 6.✅  Fusionner expenses avec expenseLines pour déterminer isPaid
+const parsedExpenses = expensesRaw.map(exp => {
+  // ✅ CORRECTION : Trouver la ligne dans expenseLines
+  const expenseLine = currentProject.expenseLines?.find(line => {
+    const descMatch = line.description?.trim() === exp.description?.trim();
+    const lineAmount = parseFloat(line.projectedAmount || line.projected_amount || 0);
+    const expAmount = parseFloat(exp.amount || 0);
+    const amountMatch = Math.abs(lineAmount - expAmount) < 0.01;
+    return descMatch && amountMatch;
+  });
 
-      // Si transaction trouvée, récupérer le nom du compte
-      let accountName = 'Inconnu';
-      if (matchingTx) {
-        const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountid));
-        accountName = acc?.name || 'Inconnu';
-      } else if (exp.account) {
-        accountName = exp.account;
-      }
+  // ✅ RÉCUPÉRER isPaid depuis la BDD (expenseLines)
+  const isPaidFromDB = expenseLine ? !!expenseLine.isPaid : false;
+  
+  // Chercher transaction pour le compte (optionnel, pour affichage)
+  const matchingTx = projectTransactions.find(tx => {
+    const txLineId = tx.project_line_id || tx.projectLineId;
+    return expenseLine && String(txLineId) === String(expenseLine.id) && tx.type === 'expense';
+  });
 
-      return {
-        id: exp.id || uuidv4(),
-        description: exp.description || '',
-        amount: parseFloat(exp.amount || 0),
-        category: exp.category || 'Permis & Admin',
-        date: exp.date ? new Date(exp.date) : new Date(),
-        account: accountName,
-        isPaid: !!matchingTx, // ✅ Vrai si transaction existe
-        isRecurring: !!exp.isRecurring
-      };
-    });
+  let accountName = 'Inconnu';
+  if (matchingTx) {
+    const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountId));
+    accountName = acc?.name || 'Inconnu';
+  } else if (exp.account) {
+    accountName = exp.account;
+  }
+
+  return {
+    id: exp.id || uuidv4(),
+    dbLineId: expenseLine?.id, // ✅ Stocker l'ID DB
+    description: exp.description || '',
+    amount: parseFloat(exp.amount || 0),
+    category: exp.category || 'Permis & Admin',
+    date: exp.date ? new Date(exp.date) : new Date(),
+    account: accountName,
+    isPaid: isPaidFromDB, // ✅ CORRECTION : Utiliser la valeur DB
+    isRecurring: !!exp.isRecurring
+  };
+});
 
     // ✅ 7. Fusionner revenues avec transactions
-    const parsedRevenues = revenuesRaw.map(rev => {
-      const matchingTx = projectTransactions.find(tx => {
-        const txLineId = tx.project_line_id || tx.projectlineid;
-        return String(txLineId) === String(rev.id) && tx.type === 'income';
-      });
+const parsedRevenues = revenuesRaw.map(rev => {
+  // ✅ CORRECTION : Trouver la ligne dans revenueLines
+  const revenueLine = currentProject.revenueLines?.find(line => {
+    const descMatch = line.description?.trim() === rev.description?.trim();
+    const lineAmount = parseFloat(line.projectedAmount || line.projected_amount || 0);
+    const revAmount = parseFloat(rev.amount || 0);
+    const amountMatch = Math.abs(lineAmount - revAmount) < 0.01;
+    return descMatch && amountMatch;
+  });
 
-      let accountName = 'Inconnu';
-      if (matchingTx) {
-        const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountid));
-        accountName = acc?.name || 'Inconnu';
-      } else if (rev.account) {
-        accountName = rev.account;
-      }
+  // ✅ RÉCUPÉRER isReceived depuis la BDD
+  const isReceivedFromDB = revenueLine ? !!revenueLine.isReceived : false;
 
-      return {
-        id: rev.id || uuidv4(),
-        description: rev.description || '',
-        amount: parseFloat(rev.amount || 0),
-        category: rev.category || 'Autre',
-        date: rev.date ? new Date(rev.date) : new Date(),
-        account: accountName,
-        isPaid: !!matchingTx, // ✅ Vrai si transaction existe
-        isRecurring: !!rev.isRecurring
-      };
-    });
+  const matchingTx = projectTransactions.find(tx => {
+    const txLineId = tx.project_line_id || tx.projectLineId;
+    return revenueLine && String(txLineId) === String(revenueLine.id) && tx.type === 'income';
+  });
+
+  let accountName = 'Inconnu';
+  if (matchingTx) {
+    const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountId));
+    accountName = acc?.name || 'Inconnu';
+  } else if (rev.account) {
+    accountName = rev.account;
+  }
+
+  return {
+    id: rev.id || uuidv4(),
+    dbLineId: revenueLine?.id, // ✅ Stocker l'ID DB
+    description: rev.description || '',
+    amount: parseFloat(rev.amount || 0),
+    category: rev.category || 'Autre',
+    date: rev.date ? new Date(rev.date) : new Date(),
+    account: accountName,
+    isPaid: isReceivedFromDB, // ✅ CORRECTION : Utiliser isReceived
+    isRecurring: !!rev.isRecurring
+  };
+});
 
     console.log('📋 Expenses parsées:', parsedExpenses.length, 'lignes');
     console.log('📋 Revenues parsées:', parsedRevenues.length, 'lignes');
@@ -381,7 +407,6 @@ const removeRevenue = (id) => {
   setRevenues(revenues.filter(r => r.id !== id));
 };
 
-
 // ============================================================
 // FONCTIONS DE GESTION DES DÉPENSES AVEC DATE (ADAPTÉ À TES IDs)
 // ============================================================
@@ -402,7 +427,6 @@ const updateExpense = (id, field, value) => {
 // ============================================================
 // FONCTIONS DE GESTION DES REVENUS AVEC DATE (ADAPTÉ À TES IDs)
 // ============================================================
-
 const updateRevenue = (id, field, value) => {
   if (field === 'plannedDate') {
     const formattedValue = value && value.length > 0 ? value : null;
@@ -415,7 +439,6 @@ const updateRevenue = (id, field, value) => {
     ));
   }
 };
-
 
   // CATÉGORIES
   const expenseCategories = [
@@ -443,42 +466,100 @@ const handlePayExpense = async (expenseId) => {
       return;
     }
 
-    console.log(`💳 Paiement de la ligne: ${expenseId} ${expense.description}`);
+    console.log('💳 Paiement de la ligne:', expenseId, expense.description);
+    
+    // ✅ AJOUT : Logger l'expense complet
+    console.log('🔍 Expense state complet:', expense);
+    
+    console.log('📋 ExpenseLines disponibles:', project?.expenseLines?.map(line => ({
+      id: line.id,
+      description: line.description,
+      projectedAmount: line.projectedamount || line.projected_amount,
+      actualAmount: line.actualamount || line.actual_amount,
+      isPaid: line.is_paid || line.isPaid
+    })));
 
     const alreadyPaid = window.confirm(
-      `💰 Paiement de "${expense.description}"\n` +
-      `Montant: ${expense.amount.toLocaleString()} Ar\n` +
-      `Compte: ${expense.account}\n\n` +
-      `❓ Ce paiement a-t-il DÉJÀ ÉTÉ EFFECTUÉ physiquement?\n\n` +
-      `• Cliquez OK si DÉJÀ PAYÉ (pas d'impact sur le Coffre)\n` +
-      `• Cliquez Annuler pour CRÉER UNE TRANSACTION (débite le Coffre)`
+      `Paiement de ${expense.description}\nMontant: ${expense.amount.toLocaleString()} Ar\nCompte: ${expense.account}\n\nCe paiement a-t-il DÉJÀ ÉTÉ EFFECTUÉ physiquement?\n\nCliquez OK si DÉJÀ PAYÉ (pas d'impact sur le Coffre)\nCliquez Annuler pour CRÉER UNE TRANSACTION (débite le Coffre)`
     );
 
-    const expenseLine = project?.expenseLines?.find(line => {
-      return line.description === expense.description &&
-             Math.abs(parseFloat(line.projectedamount || line.actualamount) - expense.amount) < 1;
-    });
-
-    if (!expenseLine) {
-      console.error('❌ Ligne expense DB introuvable');
-      alert('Impossible de trouver la ligne de dépense dans la base de données');
-      return;
+    let dbLineId = expense.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('⚠️ dbLineId absent, recherche manuelle...');
+      console.log('🔎 Recherche pour:', {
+        description: expense.description,
+        descriptionTrimmed: expense.description?.trim(),
+        amount: expense.amount,
+        type: typeof expense.amount
+      });
+      
+      const expenseLine = project?.expenseLines?.find(line => {
+        const lineDesc = line.description?.trim();
+        const expDesc = expense.description?.trim();
+        const descMatch = lineDesc === expDesc;
+        
+        // ✅ CORRECTION : Essayer avec projected_amount ET projectedamount
+        const lineProjectedAmount = parseFloat(
+          line.projectedamount || 
+          line.projected_amount || 
+          line.projectedAmount ||  // CamelCase aussi
+          0
+        );
+        const expenseAmount = parseFloat(expense.amount || 0);
+        const amountMatch = Math.abs(lineProjectedAmount - expenseAmount) < 0.01;
+        
+        console.log(`🔍 Comparaison avec ligne DB ${line.id}:`, {
+          lineDesc,
+          expDesc,
+          descMatch,
+          lineDescLength: lineDesc?.length,
+          expDescLength: expDesc?.length,
+          lineDescCharCodes: lineDesc?.split('').map(c => c.charCodeAt(0)),
+          expDescCharCodes: expDesc?.split('').map(c => c.charCodeAt(0)),
+          lineAmount: lineProjectedAmount,
+          expenseAmount,
+          amountMatch,
+          MATCH: descMatch && amountMatch
+        });
+        
+        return descMatch && amountMatch;
+      });
+      
+      if (!expenseLine) {
+        console.error('❌ Ligne expense DB introuvable');
+        console.error('📊 Recherche finale:', {
+          description: expense.description,
+          amount: expense.amount,
+          disponibles: project?.expenseLines?.map(line => ({
+            id: line.id,
+            description: line.description,
+            projectedamount: line.projectedamount,
+            projected_amount: line.projected_amount,
+            // ✅ Afficher TOUS les champs possibles
+            allKeys: Object.keys(line)
+          }))
+        });
+        alert('Impossible de trouver la ligne de dépense dans la base de données.\n\nVeuillez vérifier la console pour les détails de debug.');
+        return;
+      }
+      
+      dbLineId = expenseLine.id;
+      console.log('✅ Ligne trouvée via recherche manuelle, ID:', dbLineId);
+    } else {
+      console.log('✅ Utilisation du dbLineId stocké:', dbLineId);
     }
 
-    const dbLineId = expenseLine.id;
     const accountObj = accounts.find(a => a.name === expense.account);
-
     if (!accountObj) {
-      alert(`Compte "${expense.account}" introuvable`);
+      alert(`Compte ${expense.account} introuvable`);
       return;
     }
 
-    // ✅ CORRECTION: Ajouter le token
     const token = localStorage.getItem('token');
     const headers = {
       'Content-Type': 'application/json'
     };
-    
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -489,10 +570,10 @@ const handlePayExpense = async (expenseId) => {
         method: 'PATCH',
         headers,
         body: JSON.stringify({
-          paid_externally: alreadyPaid,
+          paidexternally: alreadyPaid,
           amount: expense.amount,
-          paid_date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          account_id: accountObj.id
+          paiddate: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          accountid: accountObj.id
         })
       }
     );
@@ -506,11 +587,10 @@ const handlePayExpense = async (expenseId) => {
     console.log('✅ Ligne marquée comme payée:', data);
 
     setExpenses(expenses.map(e =>
-      e.id === expenseId ? { ...e, isPaid: true } : e
+      e.id === expenseId ? { ...e, isPaid: true, dbLineId } : e
     ));
 
     await loadProjectData();
-
   } catch (error) {
     console.error('❌ Erreur paiement:', error);
     alert(`Erreur lors du paiement: ${error.message}`);
@@ -582,8 +662,8 @@ const handleEncaisser = async (rev, index) => {
   }
 };
 
-  // ==================== ANNULER PAIEMENT DÉPENSE/REVENUE ====================
-const handleCancelPaymentExpense = async (expenseIdOrObject) => {
+// ==================== ANNULER PAIEMENT DÉPENSE ====================
+const handleCancelPayment = async (expenseIdOrObject) => {
   try {
     const frontendExpenseId = typeof expenseIdOrObject === 'object' 
       ? expenseIdOrObject.id 
@@ -600,119 +680,80 @@ const handleCancelPaymentExpense = async (expenseIdOrObject) => {
 
     console.log('✅ Expense trouvé dans state:', {
       id: expense.id,
+      dbLineId: expense.dbLineId,
       description: expense.description,
       amount: expense.amount,
       isPaid: expense.isPaid
     });
 
-    console.log('📋 Lignes disponibles dans project.expenseLines:', 
-      project?.expenseLines?.map(line => ({
-        id: line.id,
-        description: line.description,
-        projectedamount: line.projectedamount,
-        actualamount: line.actualamount,
-        transactionid: line.transactionid,
-        transaction_id: line.transaction_id
-      }))
-    );
-
-    let expenseLine;
+    // ✅ CORRECTION : Utiliser dbLineId d'abord
+    let dbLineId = expense.dbLineId;
     
-    if (expense.isPaid) {
-      expenseLine = project?.expenseLines?.find(line => {
+    if (!dbLineId) {
+      // Fallback : chercher dans expenseLines
+      const expenseLine = project?.expenseLines?.find(line => {
         const descMatch = line.description?.trim() === expense.description?.trim();
         
-        console.log(`🔍 Comparaison (ligne payée) avec ligne DB ${line.id}:`, {
-          lineDesc: line.description,
-          expenseDesc: expense.description,
-          descMatch,
-          lineTransactionId: line.transactionid || line.transaction_id
-        });
+        if (expense.isPaid) {
+          return descMatch;
+        }
         
-        return descMatch;
-      });
-    } else {
-      expenseLine = project?.expenseLines?.find(line => {
         const lineAmount = parseFloat(line.actualamount || line.actual_amount || line.projectedamount || line.projected_amount || 0);
         const expenseAmount = parseFloat(expense.amount || 0);
-        const amountMatch = Math.abs(lineAmount - expenseAmount) < 1;
-        const descMatch = line.description?.trim() === expense.description?.trim();
-        
-        console.log(`🔍 Comparaison (ligne non payée) avec ligne DB ${line.id}:`, {
-          lineDesc: line.description,
-          expenseDesc: expense.description,
-          descMatch,
-          lineAmount,
-          expenseAmount,
-          amountMatch
-        });
+        const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
         
         return descMatch && amountMatch;
       });
+
+      if (!expenseLine) {
+        console.error('❌ Ligne expense DB introuvable');
+        alert('Impossible de trouver la ligne de dépense dans la base de données.');
+        return;
+      }
+
+      dbLineId = expenseLine.id;
+      console.log('⚠️ dbLineId non stocké, récupéré depuis expenseLines:', dbLineId);
+    } else {
+      console.log('✅ Utilisation du dbLineId stocké:', dbLineId);
     }
 
-    if (!expenseLine) {
-      console.error('❌ Ligne expense DB introuvable pour:', frontendExpenseId);
-      console.error('📊 Détails de recherche:', {
-        recherché: {
-          description: expense.description,
-          amount: expense.amount,
-          isPaid: expense.isPaid
-        },
-        disponibles: project?.expenseLines?.map(line => ({
-          id: line.id,
-          description: line.description,
-          amount: line.actualamount || line.actual_amount || line.projectedamount || line.projected_amount,
-          transactionid: line.transactionid || line.transaction_id
-        }))
-      });
-      alert('Impossible de trouver la ligne de dépense dans la base de données.\nVérifiez la console pour plus de détails.');
-      return;
-    }
-
-    const dbLineId = expenseLine.id;
-    console.log(`✅ Ligne DB trouvée: ID ${dbLineId}`, expenseLine);
-
-    // ✅ CORRECTION: Ajouter l'en-tête Authorization avec le token
     const token = localStorage.getItem('token');
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // Appeler l'API avec l'ID DB et le token
     const response = await fetch(
       `http://localhost:5002/api/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
       {
         method: 'PATCH',
-        headers
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
       }
     );
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('❌ Erreur backend complète:', error);  // ✅ AJOUT
       throw new Error(error.message || 'Erreur lors de l\'annulation');
     }
 
     const data = await response.json();
     console.log('✅ Paiement annulé:', data);
 
-    // Mettre à jour l'état local
-    setExpenses(expenses.map(e =>
-      e.id === frontendExpenseId ? { ...e, isPaid: false } : e
+    // Mise à jour optimiste
+    setExpenses(prev => prev.map(e =>
+      e.id === frontendExpenseId 
+        ? { ...e, isPaid: false, actualAmount: 0 } 
+        : e
     ));
 
-    // Recharger le projet
     await loadProjectData();
     
   } catch (error) {
-    console.error('❌ Erreur handleCancelPaymentExpense:', error);
+    console.error('❌ Erreur handleCancelPayment:', error);
     alert(`Erreur lors de l'annulation: ${error.message}`);
+    await loadProjectData();
   }
 };
+
 
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
@@ -1312,24 +1353,28 @@ const revenuesWithDate = revenues.map(rev => ({
         </select>
 
         {/* BOUTON PAYER/CANCEL */}
-        {!exp.isPaid ? (
-          <button
-            onClick={() => handlePayExpense(exp.id)}
-            disabled={!exp.account || !project?.id}
-            className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-            title="Payer"
-          >
-            💰
-          </button>
-        ) : (
-          <button
-            onClick={() => handleCancelPaymentExpense(exp.id)}
-            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-            title="Annuler paiement"
-          >
-            ❌
-          </button>
-        )}
+{!exp.isPaid ? (
+  <button
+    disabled={isProcessing}
+    onClick={async () => {
+      setIsProcessing(true);
+      await handlePayExpense(exp.id);
+      setIsProcessing(false);
+    }}
+    className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-xs disabled:opacity-50"
+    title="Marquer comme payé"
+  >
+    {isProcessing ? '...' : 'Payer'}
+  </button>
+) : (
+  <button
+    onClick={() => handleCancelPayment(exp.id)}
+    className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+    title="Annuler paiement"
+  >
+    Annuler
+  </button>
+)}
 
         {/* Supprimer */}
         <button

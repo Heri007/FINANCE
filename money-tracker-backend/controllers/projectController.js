@@ -553,16 +553,17 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
       if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
         await client.query(
   `UPDATE project_expense_lines 
-   SET description=$1, category=$2, projected_amount=$3, actual_amount = $1, is_paid=$4, transaction_date=$5
+   SET description=$1, category=$2, projected_amount=$3, actual_amount=$4, is_paid=$4, transaction_date=$5
    WHERE id=$6`, 
   [
-    item.description || '', 
-    item.category || 'Autre', 
-    parseFloat(item.amount || 0), 
-    item.isPaid || false,
-    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
-    parseInt(item.id, 10),
-  ]
+  item.description || '', 
+  item.category || 'Autre', 
+  parseFloat(item.amount || 0),
+  parseFloat(item.actualAmount || 0), // ✅ Ajouté
+  item.isPaid || false,
+  item.transactionDate || item.plannedDate,
+  parseInt(item.id, 10)
+]
 );
       } else {
         // Si l'ID est un UUID (nouveau du frontend)
@@ -882,139 +883,128 @@ exports.getUnpaidExpenses = async (req, res) => {
 
 // Marquer une ligne de dépense comme payée
 exports.markExpenseLinePaid = async (req, res) => {
+  console.log('🔵 markExpenseLinePaid appelé');
+  console.log('📦 Body:', req.body);
+  console.log('📦 Params:', req.params);
+  
   const client = await pool.connect();
+  
   try {
     const { projectId, lineId } = req.params;
     const { 
-      paid_externally,      // true si paiement déjà effectué hors système
-      transaction_id,       // ID transaction existante à lier (optionnel)
-      amount,               // montant réel payé
-      transaction_date,            // date du paiement
-      create_transaction    // true pour créer une nouvelle transaction
+      paidexternally,  // true = paiement externe sans créer de transaction
+      amount,          // Montant réel payé
+      paiddate,        // Date du paiement (format YYYY-MM-DD)
+      accountid        // ID du compte à débiter
     } = req.body;
-
+    
+    console.log('🔍 Données:', { projectId, lineId, paidexternally, amount, paiddate, accountid });
+    
+    // Validation
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: 'Montant invalide' });
+    }
+    
+    if (!paiddate) {
+      return res.status(400).json({ message: 'Date de paiement requise' });
+    }
+    
     await client.query('BEGIN');
-
-    // Vérifier que la ligne existe et appartient au projet
+    console.log('✅ BEGIN');
+    
+    // 1. Vérifier que la ligne existe
     const lineRes = await client.query(
-      `SELECT * FROM project_expense_lines 
-       WHERE id = $1 AND project_id = $2`,
+      `SELECT * FROM project_expense_lines WHERE id = $1 AND project_id = $2`,
       [lineId, projectId]
     );
-
+    
     if (lineRes.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Ligne de dépense introuvable' });
+      return res.status(404).json({ message: 'Ligne de dépense introuvable' });
     }
-
+    
     const line = lineRes.rows[0];
-
-    // Vérifier si déjà payée
-    if (line.is_paid && line.transaction_id) {
+    console.log('✅ Ligne trouvée:', line.description);
+    
+    // 2. Vérifier si déjà payée
+    if (line.is_paid) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        error: 'Cette ligne est déjà payée et liée à la transaction ' + line.transaction_id 
-      });
+      return res.status(400).json({ message: 'Ligne déjà payée' });
     }
-
-    let finalTransactionId = null;
-
-    if (paid_externally) {
-      // Cas 1 : Paiement externe (déjà effectué, pas de transaction à créer)
-      await client.query(
-        `UPDATE project_expense_lines
-         SET is_paid = TRUE,
-             actual_amount = $1,
-             transaction_date = $2,
-             transaction_id = NULL
-         WHERE id = $3`,
-        [amount || line.projected_amount, transaction_date || new Date(), lineId]
-      );
-
-      await client.query('COMMIT');
-      return res.json({ 
-        success: true, 
-        message: 'Ligne marquée comme payée (paiement externe)',
-        paid_externally: true
-      });
-
-    } else if (transaction_id) {
-      // Cas 2 : Lier à une transaction existante
-      const txRes = await client.query(
-        'SELECT id, amount, transaction_date FROM transactions WHERE id = $1',
-        [transaction_id]
-      );
-
-      if (txRes.rows.length === 0) {
+    
+    let transactionId = null;
+    
+    // 3. Si pas paiement externe, créer une transaction
+    if (!paidexternally) {
+      console.log('💳 Création transaction...');
+      
+      if (!accountid) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Transaction introuvable' });
+        return res.status(400).json({ message: 'Compte requis' });
       }
-
-      finalTransactionId = transaction_id;
-
-      await client.query(
-        `UPDATE project_expense_lines
-         SET is_paid = TRUE,
-             actual_amount = $1,
-             transaction_date = $2,
-             transaction_id = $3
-         WHERE id = $4`,
-        [txRes.rows[0].amount, txRes.rows[0].transaction_date, transaction_id, lineId]
-      );
-
-    } else if (create_transaction) {
-      // Cas 3 : Créer une nouvelle transaction
-      const newTxRes = await client.query(
-        `INSERT INTO transactions 
-         (account_id, type, amount, category, description, transaction_date, project_id, project_line_id, user_id)
-         VALUES ($1, 'expense', $2, $3, $4, $5, $6, $7, 1)
-         RETURNING id`,
+      
+      const txResult = await client.query(
+        `INSERT INTO transactions (
+          account_id, type, amount, category, description, 
+          transaction_date, is_planned, is_posted, project_id, project_line_id, user_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING id`,
         [
-          5, // Coffre (adapte selon ton système)
-          amount || line.projected_amount,
-          line.category,
-          line.description,
-          transaction_date || new Date(),
+          accountid,
+          'expense',
+          amount,
+          line.category || 'Projet - Dépense',
+          line.description || 'Paiement projet',
+          paiddate,
+          false,      // is_planned
+          true,       // is_posted
           projectId,
-          lineId
+          lineId.toString(),  // project_line_id (text)
+          req.user?.user_id || 1
         ]
       );
-
-      finalTransactionId = newTxRes.rows[0].id;
-
-      await client.query(
-        `UPDATE project_expense_lines
-         SET is_paid = TRUE,
-             actual_amount = $1,
-             transaction_date = $2,
-             transaction_id = $3
-         WHERE id = $4`,
-        [amount || line.projected_amount, transaction_date || new Date(), finalTransactionId, lineId]
-      );
-
+      
+      transactionId = txResult.rows[0].id;
+      console.log('✅ Transaction créée:', transactionId);
     } else {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        error: 'Paramètres manquants : précisez paid_externally, transaction_id ou create_transaction' 
-      });
+      console.log('⚠️ Paiement externe');
     }
-
+    
+    // 4. Mettre à jour la ligne
+    console.log('📝 Mise à jour ligne...');
+    const updateResult = await client.query(
+      `UPDATE project_expense_lines
+       SET is_paid = TRUE,
+           actual_amount = $1,
+           transaction_date = $2,
+           last_synced_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [amount, paiddate, lineId]
+    );
+    
+    console.log('✅ Ligne mise à jour');
+    
     await client.query('COMMIT');
-
-    res.json({ 
+    console.log('✅ COMMIT');
+    
+    res.json({
       success: true,
-      message: 'Ligne de dépense marquée comme payée',
-      transaction_id: finalTransactionId
+      message: 'Paiement enregistré',
+      line: updateResult.rows[0],
+      transactionId,
+      paidExternally: !!paidexternally
     });
-
+    
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Erreur markExpenseLinePaid:', error);
-    res.status(500).json({ error: error.message });
+    console.error('❌ Erreur:', error);
+    res.status(500).json({ message: error.message });
   } finally {
     client.release();
   }
 };
+
 
 // Marquer une ligne de revenu comme reçue
 exports.markRevenueLineReceived = async (req, res) => {
@@ -1243,6 +1233,42 @@ exports.cancelRevenueLineReceipt = async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Erreur cancelRevenueLineReceipt:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+};
+
+// ✅ NOUVEAU dans projectController.js
+exports.cancelExpensePayment = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { projectId, lineId } = req.params;
+    
+    await client.query('BEGIN');
+    
+    // Réinitialiser le statut de paiement
+    const result = await client.query(
+      `UPDATE project_expense_lines
+       SET is_paid = FALSE,
+           actual_amount = 0,
+           transaction_id = NULL,
+           transaction_date = NULL
+       WHERE id = $1 AND project_id = $2
+       RETURNING *`,
+      [lineId, projectId]
+    );
+    
+    if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Ligne introuvable' });
+    }
+    
+    await client.query('COMMIT');
+    res.json(result.rows[0]);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ cancelExpensePayment:', error);
     res.status(500).json({ error: error.message });
   } finally {
     client.release();
