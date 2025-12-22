@@ -884,7 +884,7 @@ const plannedTransactions = useMemo(() => {
     });
 
     console.log('🧪 projectExpenseLines sample:', projectExpenseLines[0]);
-console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
+    console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
 
 
   // 2) Revenus non reçus (project_revenue_lines)
@@ -923,12 +923,24 @@ console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
   );
 
   return result;
+  
 }, [projectExpenseLines, projectRevenueLines]);
+
+console.log('🔮 plannedTransactions créées depuis project lines:', 
+  plannedTransactions.slice(0, 5).map(tx => ({
+    id: tx.id,
+    type: tx.type,
+    amount: tx.amount,
+    plannedDate: tx.plannedDate,
+    account: tx.account_name || tx.account
+  }))
+);
 
 console.log(
   '🔍 plannedTransactions NATIORA+NEMO:',
   plannedTransactions.filter(
     tx => tx.project_id === 24 || tx.project_id === 27
+    
   )
 );
 

@@ -43,161 +43,246 @@ console.log('💰 DEBUG TreasuryTimeline props:', {
      1. Cash flow journalier
      ========================= */
   const cashFlowData = useMemo(() => {
-    if (!startDate || !endDate) return [];
+  if (!startDate || !endDate) return [];
 
-    const days = [];
-    let current = new Date(startDate);
-    const end = new Date(endDate);
+  const days = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-    let runningCoffreReal = balance || 0;
-    let runningCoffreProjected = balance || 0;
+  // ✅ CORRECTION : Le solde du compte est DÉJÀ le solde réel actuel
+  const realBalanceToday = balance || 0;
 
-    while (current <= end) {
-      const dateStr = current.toISOString().split('T')[0];
+  console.log('💰 Solde Coffre actuel (depuis compte):', realBalanceToday);
+  console.log('📅 Date du jour:', today.toLocaleDateString());
+  console.log('📅 startDate:', new Date(startDate).toLocaleDateString());
 
-      const day = {
-        date: dateStr,
-        revenues: 0,
-        expenses: 0,
-        plannedRevenues: 0,
-        plannedExpenses: 0,
-        coffreIn: 0,
-        coffreOut: 0,
-        coffrePlannedIn: 0,
-        coffrePlannedOut: 0,
-        coffreBalance: runningCoffreReal,
-        coffreProjectedBalance: runningCoffreProjected,
-        projectReal: [],
-        projectPlanned: [],
-      };
+  // ✅ DEBUG : Vérifier les transactions prévisionnelles
+  const futureTransactions = transactions.filter((tx) => {
+    const txDate = new Date(tx.transaction_date || tx.date);
+    txDate.setHours(0, 0, 0, 0);
+    return !tx.is_posted && txDate > today && (tx.account_name || tx.account) === 'Coffre';
+  });
 
-      // --- Transactions réelles ---
-      transactions.forEach((tx) => {
-  const rawDate =
-    tx.realDate || tx.transactionDate || tx.date || tx.plannedDate;
-  if (!rawDate) return;
+  const futurePlanned = plannedTransactions.filter((tx) => {
+    const txDate = new Date(tx.plannedDate || tx.transaction_date || tx.date);
+    txDate.setHours(0, 0, 0, 0);
+    return txDate > today && (tx.account_name || tx.account) === 'Coffre';
+  });
 
-  const txDateStr = new Date(rawDate).toISOString().split('T')[0];
-  if (txDateStr !== dateStr) return;
-        if (txDateStr !== dateStr) return;
+  console.log('🔮 DEBUG Timeline:', {
+    aujourdhui: today.toLocaleDateString(),
+    startDate: new Date(startDate).toLocaleDateString(),
+    endDate: new Date(endDate).toLocaleDateString(),
+    soldeCoffreActuel: realBalanceToday,
+    transactionsNonPosteesFutures: futureTransactions.length,
+    plannedTransactionsFutures: futurePlanned.length,
+  });
 
-        const amount = Number(tx.amount) || 0;
-        const isIncome =
-          String(tx.type).toLowerCase() === 'income';
+  let current = new Date(startDate);
+  const end = new Date(endDate);
 
-        const account =
-          tx.account_name || tx.accountName || tx.account || '';
-        const isCoffre = account === 'Coffre';
+  // ✅ CORRECTION : Partir du solde réel actuel
+  let runningCoffreReal = realBalanceToday;
+  let runningCoffreProjected = realBalanceToday;
 
-        const projectId =
-          tx.project_id || tx.projectId || tx.projectid || null;
-        const projectName =
-          projects.find((p) => String(p.id) === String(projectId))
-            ?.name ||
-          tx.project_name ||
-          tx.projectName ||
-          null;
+  while (current <= end) {
+    const dateStr = current.toISOString().split('T')[0];
+    const currentDate = new Date(current);
+    currentDate.setHours(0, 0, 0, 0);
 
-        if (isIncome) day.revenues += amount;
-        else day.expenses += amount;
+    const day = {
+      date: dateStr,
+      revenues: 0,
+      expenses: 0,
+      plannedRevenues: 0,
+      plannedExpenses: 0,
+      coffreIn: 0,
+      coffreOut: 0,
+      coffrePlannedIn: 0,
+      coffrePlannedOut: 0,
+      coffreBalance: runningCoffreReal,
+      coffreProjectedBalance: runningCoffreProjected,
+      projectReal: [],
+      projectPlanned: [],
+    };
 
-        if (isCoffre) {
-          if (isIncome) day.coffreIn += amount;
-          else day.coffreOut += amount;
-        }
+    // --- Transactions RÉELLES POSTÉES (FUTURES seulement) ---
+    // ✅ Ne traiter QUE les transactions futures qui seront postées
+    transactions.forEach((tx) => {
+      const txDate = new Date(tx.transaction_date || tx.date);
+      txDate.setHours(0, 0, 0, 0);
+      
+      if (txDate.getTime() !== currentDate.getTime()) return;
+      if (currentDate <= today && tx.is_posted) return; // ✅ Ignorer passé déjà dans le solde
+      if (!tx.is_posted) return; // ✅ Seulement transactions postées
 
-        if (projectId || isCoffre) {
-          day.projectReal.push({
-            project_id: projectId,
-            project_name: projectName,
-            type: isIncome ? 'income' : 'expense',
-            amount,
-            label:
-              tx.label ||
-              tx.description ||
-              tx.note ||
-              tx.name ||
-              '',
-            account,
-            isCoffre,
-          });
-        }
+      const amount = Number(tx.amount) || 0;
+      const isIncome = String(tx.type).toLowerCase() === 'income';
+      const account = tx.account_name || tx.accountName || tx.account || '';
+      const isCoffre = account === 'Coffre';
+
+      if (!isCoffre) return;
+
+      const projectId = tx.project_id || tx.projectId || tx.projectid || null;
+      const projectName = projects.find((p) => String(p.id) === String(projectId))
+        ?.name || tx.project_name || tx.projectName || null;
+
+      if (isIncome) {
+        day.revenues += amount;
+        day.coffreIn += amount;
+      } else {
+        day.expenses += amount;
+        day.coffreOut += amount;
+      }
+
+      day.projectReal.push({
+        project_id: projectId,
+        project_name: projectName,
+        type: isIncome ? 'income' : 'expense',
+        amount,
+        label: tx.description || '',
+        account,
+        isCoffre,
       });
+    });
 
-      // --- Transactions prévisionnelles (A PAYER / A RECEVOIR non payées) ---
-      plannedTransactions.forEach((tx) => {
-  const rawDate =
-    tx.plannedDate || tx.date || tx.transactionDate || tx.realDate;
-  if (!rawDate) return;
+    // --- Transactions PRÉVISIONNELLES (futures uniquement) ---
+    console.log('🔍 DEBUG plannedTransactions:', {
+  total: plannedTransactions.length,
+  currentDateStr: currentDate.toLocaleDateString(),
+  todayStr: today.toLocaleDateString(),
+  sample: plannedTransactions.slice(0, 3).map(tx => {
+    const txDate = new Date(tx.plannedDate || tx.transaction_date || tx.date);
+    txDate.setHours(0, 0, 0, 0);
+    return {
+      date: txDate.toLocaleDateString(),
+      type: tx.type,
+      amount: tx.amount,
+      account: tx.account_name || tx.accountName || tx.account,
+      isToday: txDate.getTime() === today.getTime(),
+      isCurrentDate: txDate.getTime() === currentDate.getTime(),
+    };
+  })
+});
 
-  const txDateStr = new Date(rawDate).toISOString().split('T')[0];
-  if (txDateStr !== dateStr) return;
+// --- Transactions PRÉVISIONNELLES (futures uniquement) ---
+plannedTransactions.forEach((tx, index) => { // ✅ Ajouter index
+  // ✅ CORRECTION TIMEZONE : Parser en ignorant l'heure UTC
+  const dateStr = tx.plannedDate || tx.transaction_date || tx.date;
+  let txDate;
+  
+  if (typeof dateStr === 'string' && (dateStr.includes('T') || dateStr.includes('Z'))) {
+    // Extraire juste la partie date (YYYY-MM-DD)
+    const [datePart] = dateStr.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    txDate = new Date(year, month - 1, day); // Créer en heure locale (EAT)
+  } else {
+    txDate = new Date(dateStr);
+  }
+  
+  txDate.setHours(0, 0, 0, 0);
 
+  // ✅ Ne traiter que les transactions de currentDate
+  if (txDate.getTime() !== currentDate.getTime()) return;
+  
+  // ✅ LOG DÉTAILLÉ (seulement pour les 3 premières OU le jour actuel)
+  if (index < 3 || currentDate.getTime() === today.getTime()) {
+    console.log(`📅 Transaction prév. #${index}:`, {
+      dateRaw: tx.plannedDate || tx.transaction_date || tx.date,
+      txDate: txDate.toLocaleDateString(),
+      txDateTime: txDate.getTime(),
+      currentDate: currentDate.toLocaleDateString(),
+      currentDateTime: currentDate.getTime(),
+      today: today.toLocaleDateString(),
+      todayTime: today.getTime(),
+      txDateEqualsCurrentDate: txDate.getTime() === currentDate.getTime(),
+      txDateLessThanToday: txDate.getTime() < today.getTime(),
+      currentDateLessThanToday: currentDate.getTime() <= today.getTime(),
+      account: tx.account_name || tx.accountName || tx.account,
+      amount: tx.amount,
+      type: tx.type
+    });
+  }
+  
+  // ✅ CORRECTION : Ignorer SEULEMENT si currentDate est strictement dans le passé
+  if (currentDate < today) {
+    if (index < 3) {
+      console.log(`❌ Rejeté (date passée) #${index}:`, {
+        currentDate: currentDate.toLocaleDateString(),
+        today: today.toLocaleDateString()
+      });
+    }
+    return;
+  }
+  
   const amount = Number(tx.amount) || 0;
-  const isIncome = String(tx.type).toLowerCase() === 'planned_income';
+  const isIncome = String(tx.type).toLowerCase() === 'income' || 
+                   String(tx.type).toLowerCase() === 'planned_income';
+  
+  const account = tx.account_name || tx.accountName || tx.account || '';
+  const isCoffre = account === 'Coffre';
 
-  if (tx.project_id === 24 || tx.project_id === 27) {
-    console.log('📅 plannedTx jour', dateStr, tx);
+  // ✅ LOG si pas Coffre
+  if (!isCoffre) {
+    if (index < 3) {
+      console.log(`⚠️ Rejeté (pas Coffre) #${index}:`, {
+        account,
+        expected: 'Coffre'
+      });
+    }
+    return;
   }
 
+  const projectId = tx.project_id || tx.projectId || null;
+  const projectName = projects.find((p) => String(p.id) === String(projectId))
+    ?.name || tx.project_name || null;
 
-        const account =
-          tx.account_name || tx.accountName || tx.account || '';
-        const isCoffre = account === 'Coffre';
+  // ✅ LOG transaction acceptée
+  if (index < 3 || currentDate.getTime() === today.getTime()) {
+    console.log(`✅ Transaction prév. ACCEPTÉE #${index}:`, {
+      date: txDate.toLocaleDateString(),
+      type: isIncome ? 'income' : 'expense',
+      amount,
+      account,
+      project: projectName
+    });
+  }
 
-        const projectId =
-          tx.project_id || tx.projectId || tx.projectid || null;
-        const projectName =
-          projects.find((p) => String(p.id) === String(projectId))
-            ?.name ||
-          tx.project_name ||
-          tx.projectName ||
-          null;
+  if (isIncome) {
+    day.plannedRevenues += amount;
+    day.coffrePlannedIn += amount;
+  } else {
+    day.plannedExpenses += amount;
+    day.coffrePlannedOut += amount;
+  }
 
-        if (isIncome) day.plannedRevenues += amount;
-        else day.plannedExpenses += amount;
+  day.projectPlanned.push({
+    project_id: projectId,
+    project_name: projectName,
+    type: isIncome ? 'income' : 'expense',
+    amount,
+  });
+});
 
-        if (isCoffre) {
-          if (isIncome) day.coffrePlannedIn += amount;
-          else day.coffrePlannedOut += amount;
-        }
+    const netRealCoffre = (day.coffreIn || 0) - (day.coffreOut || 0);
+    const netPlannedCoffre = (day.coffrePlannedIn || 0) - (day.coffrePlannedOut || 0);
 
-        if (projectId || isCoffre) {
-          day.projectPlanned.push({
-            project_id: projectId,
-            project_name: projectName,
-            type: isIncome ? 'income' : 'expense',
-            amount,
-          });
-        }
-      });
-
-      const netRealCoffre =
-        (day.coffreIn || 0) - (day.coffreOut || 0);
-      const netPlannedCoffre =
-        (day.coffrePlannedIn || 0) - (day.coffrePlannedOut || 0);
-
-      // 1) solde Coffre RÉEL (running)
+    // ✅ Soldes cumulatifs (uniquement pour les dates futures)
+    if (currentDate > today) {
       runningCoffreReal += netRealCoffre;
-      day.coffreBalance = runningCoffreReal;
-
-      // 2) solde Coffre PRÉVISIONNEL CUMULÉ
       runningCoffreProjected += netRealCoffre + netPlannedCoffre;
-      day.coffreProjectedBalance = runningCoffreProjected;
-
-      days.push(day);
-      current.setDate(current.getDate() + 1);
     }
+    
+    day.coffreBalance = runningCoffreReal;
+    day.coffreProjectedBalance = runningCoffreProjected;
 
-    return days;
-  }, [
-    transactions,
-    plannedTransactions,
-    projects,
-    startDate,
-    endDate,
-    balance,
-  ]);
+    days.push(day);
+    current.setDate(current.getDate() + 1);
+  }
+
+  return days;
+}, [transactions, plannedTransactions, projects, startDate, endDate, balance]);
+
 
   /* =========================
      2. Stats & alertes
