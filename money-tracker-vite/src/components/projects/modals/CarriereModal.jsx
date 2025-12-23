@@ -39,6 +39,9 @@ export function CarriereModal({
   const [endDate, setEndDate] = useState(null);
   const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
   const { addTransaction } = useFinance();
+  // Taux de change USD → MGA (Ariary)
+  const [usdToMgaRate, setUsdToMgaRate] = useState(4500);
+  const [rateLoadedAt, setRateLoadedAt] = useState(null);
 
   // ÉTATS SPÉCIFIQUES CARRIÈRE
   const [lieu, setLieu] = useState('');
@@ -47,6 +50,7 @@ export function CarriereModal({
   const [numeroPermis, setNumeroPermis] = useState('');
   const [typePermis, setTypePermis] = useState('PRE'); // PRE, PE, etc.
   const [isProcessing, setIsProcessing] = useState(false);
+  
 
   // GESTION DES LP1
   const [lp1List, setLp1List] = useState([]);
@@ -192,44 +196,83 @@ const parsedExpenses = expensesRaw.map(exp => {
 });
 
     // ✅ 7. Fusionner revenues avec transactions
-const parsedRevenues = revenuesRaw.map(rev => {
-  // ✅ CORRECTION : Trouver la ligne dans revenueLines
-  const revenueLine = currentProject.revenueLines?.find(line => {
-    const descMatch = line.description?.trim() === rev.description?.trim();
-    const lineAmount = parseFloat(line.projectedAmount || line.projected_amount || 0);
+// ✅ 7. Fusionner revenues avec transactions
+const parsedRevenues = revenuesRaw
+  .map((rev) => {
+    if (!rev) return null; // sécurité
+
+    const revenueLines = Array.isArray(currentProject.revenueLines)
+      ? currentProject.revenueLines
+      : [];
+
+    const revDesc = (rev.description || '').trim();
     const revAmount = parseFloat(rev.amount || 0);
-    const amountMatch = Math.abs(lineAmount - revAmount) < 0.01;
-    return descMatch && amountMatch;
-  });
 
-  // ✅ RÉCUPÉRER isReceived depuis la BDD
-  const isReceivedFromDB = revenueLine ? !!revenueLine.isReceived : false;
+    // Chercher la ligne de revenu BDD correspondante
+    const revenueLine = revenueLines.find((line) => {
+      if (!line) return false;
 
-  const matchingTx = projectTransactions.find(tx => {
-    const txLineId = tx.project_line_id || tx.projectLineId;
-    return revenueLine && String(txLineId) === String(revenueLine.id) && tx.type === 'income';
-  });
+      const lineDesc = (line.description || '').trim();
+      const lineProjectedAmount = parseFloat(
+        line.projectedAmount ||
+          line.projected_amount ||
+          0
+      );
 
-  let accountName = 'Inconnu';
-  if (matchingTx) {
-    const acc = accounts.find(a => a.id === (matchingTx.account_id || matchingTx.accountId));
-    accountName = acc?.name || 'Inconnu';
-  } else if (rev.account) {
-    accountName = rev.account;
-  }
+      const descMatch = lineDesc === revDesc;
+      const amountMatch = Math.abs(lineProjectedAmount - revAmount) < 0.01;
 
-  return {
-    id: rev.id || uuidv4(),
-    dbLineId: revenueLine?.id, // ✅ Stocker l'ID DB
-    description: rev.description || '',
-    amount: parseFloat(rev.amount || 0),
-    category: rev.category || 'Autre',
-    date: rev.date ? new Date(rev.date) : new Date(),
-    account: accountName,
-    isPaid: isReceivedFromDB, // ✅ CORRECTION : Utiliser isReceived
-    isRecurring: !!rev.isRecurring
-  };
-});
+      return descMatch && amountMatch;
+    });
+
+    const isReceivedFromDB = revenueLine
+      ? !!(revenueLine.isReceived || revenueLine.is_received)
+      : false;
+
+    // Chercher une transaction liée (optionnel)
+    let accountName = 'Inconnu';
+    const matchingTx = projectTransactions.find((tx) => {
+      const txLineId = tx.project_line_id || tx.projectLineId;
+      return (
+        revenueLine &&
+        String(txLineId) === String(revenueLine.id) &&
+        tx.type === 'income'
+      );
+    });
+
+    if (matchingTx) {
+      const acc = accounts.find(
+        (a) => a.id === (matchingTx.account_id || matchingTx.accountId)
+      );
+      accountName = acc?.name || 'Inconnu';
+    } else if (rev.account) {
+      accountName = rev.account;
+    }
+
+    const meta = rev.metadata || {};
+
+    return {
+      id: rev.id || uuidv4(),
+      dbLineId: revenueLine?.id,
+      description: rev.description || '',
+      amount: revAmount,
+      category: rev.category || 'Autre',
+      date: rev.date ? new Date(rev.date) : new Date(),
+      account: accountName,
+      isPaid: isReceivedFromDB,
+      isRecurring: !!rev.isRecurring,
+
+      // Champs LP1 “ventes & revenus”
+      nombreLP1: meta.nombreLP1 || 1,
+      prixUnitaireKg: meta.prixUnitaire || meta.prixUnitaireKg || 0,
+      quantiteKg: meta.quantite || 0,
+      totalLigne:
+        (meta.nombreLP1 || 1) *
+        (meta.prixUnitaire || meta.prixUnitaireKg || 0) *
+        (meta.quantite || 0) || revAmount,
+    };
+  })
+  .filter(Boolean);
 
     console.log('📋 Expenses parsées:', parsedExpenses.length, 'lignes');
     console.log('📋 Revenues parsées:', parsedRevenues.length, 'lignes');
@@ -274,14 +317,18 @@ useEffect(() => {
     setRevenues([]);
   };
 
-  // CALCULS AUTOMATIQUES LP1
+  // CALCULS AUTOMATIQUES LP1: résultat en ariary (conversion USD → MGA avec taux)
   const calculateLP1Values = (lp1) => {
-    const valeurTotale = lp1.quantiteKg * lp1.prixUnitaireUSD;
-    const ristourne = valeurTotale * TAUX_RISTOURNE;
-    const redevance = valeurTotale * TAUX_REDEVANCE;
-    const totalDTSPM = valeurTotale * TAUX_TOTAL_DTSPM;
-    return { valeurTotale, ristourne, redevance, totalDTSPM };
-  };
+  const valeurUSD = lp1.quantiteKg * lp1.prixUnitaireUSD;
+  const valeurTotale = valeurUSD * usdToMgaRate; // conversion en Ar
+
+  const ristourne = valeurTotale * TAUX_RISTOURNE;
+  const redevance = valeurTotale * TAUX_REDEVANCE;
+  const totalDTSPM = valeurTotale * TAUX_TOTAL_DTSPM;
+
+  return { valeurTotale, ristourne, redevance, totalDTSPM };
+};
+
 
   // AJOUTER UN LP1
   const handleAddLP1 = () => {
@@ -425,19 +472,37 @@ const updateExpense = (id, field, value) => {
 };
 
 // ============================================================
-// FONCTIONS DE GESTION DES REVENUS AVEC DATE (ADAPTÉ À TES IDs)
+// FONCTIONS DE GESTION DES REVENUS AVEC DATE + CALCUL MONTANT
 // ============================================================
 const updateRevenue = (id, field, value) => {
-  if (field === 'plannedDate') {
-    const formattedValue = value && value.length > 0 ? value : null;
-    setRevenues(revenues.map(r => 
-      r.id === id ? { ...r, [field]: formattedValue } : r
-    ));
-  } else {
-    setRevenues(revenues.map(r => 
-      r.id === id ? { ...r, [field]: value } : r
-    ));
-  }
+  setRevenues((prev) =>
+    prev.map((r) => {
+      if (r.id !== id) return r;
+
+      // 1) Gestion spéciale de plannedDate (string ou null)
+      if (field === 'plannedDate') {
+        const formattedValue = value && value.length > 0 ? value : null;
+        return { ...r, plannedDate: formattedValue };
+      }
+
+      // 2) Mise à jour standard du champ
+      const updated = { ...r, [field]: value };
+
+      // 3) Si l'un des 3 champs change, recalculer le montant
+      if (
+        field === 'nombreLP1' ||
+        field === 'prixUnitaireKg' ||
+        field === 'quantiteKg'
+      ) {
+        const nb = parseFloat(updated.nombreLP1 || 0);
+        const pu = parseFloat(updated.prixUnitaireKg || 0);
+        const qte = parseFloat(updated.quantiteKg || 0);
+        updated.amount = nb * qte * pu;
+      }
+
+      return updated;
+    })
+  );
 };
 
   // CATÉGORIES
@@ -1078,174 +1143,262 @@ const revenuesWithDate = revenues.map(rev => ({
           </div>
 
           {/* SECTION 3: GESTION DES LP1 */}
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                Laissez-Passer (LP1)
-              </h3>
-              <button
-                onClick={() => setShowLP1Form(!showLP1Form)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter LP1
-              </button>
-            </div>
+<div className="bg-blue-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      Laissez-Passer (LP1)
+    </h3>
+    <button
+      onClick={() => setShowLP1Form(!showLP1Form)}
+      className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter LP1
+    </button>
+  </div>
 
-            {/* Formulaire LP1 */}
-            {showLP1Form && (
-              <div className="bg-white p-4 rounded-lg mb-4 border-2 border-blue-200">
-                <h4 className="font-semibold mb-3">Nouveau LP1</h4>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">N° LP1 *</label>
-                    <input
-                      type="text"
-                      value={newLP1.numeroLP1}
-                      onChange={(e) => setNewLP1({ ...newLP1, numeroLP1: e.target.value })}
-                      className="w-full p-2 border rounded"
-                      placeholder="LP1-2025-001"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Substance *</label>
-                    <input
-                      type="text"
-                      value={newLP1.substance}
-                      onChange={(e) => setNewLP1({ ...newLP1, substance: e.target.value })}
-                      className="w-full p-2 border rounded"
-                      placeholder="Agate"
-                      list="substances-list"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Quantité (kg) *</label>
-                    <CalculatorInput
-                      value={newLP1.quantiteKg}
-                      onChange={(val) => setNewLP1({ ...newLP1, quantiteKg: val })}
-                      placeholder="27000"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Prix Unitaire (USD/kg) *</label>
-                    <CalculatorInput
-                      value={newLP1.prixUnitaireUSD}
-                      onChange={(val) => setNewLP1({ ...newLP1, prixUnitaireUSD: val })}
-                      placeholder="1.5"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Date Émission</label>
-                    <DatePicker
-                      selected={newLP1.dateEmission}
-                      onChange={(date) => setNewLP1({ ...newLP1, dateEmission: date })}
-                      dateFormat="dd/MM/yyyy"
-                      className="w-full p-2 border rounded"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">N° OV</label>
-                    <input
-                      type="text"
-                      value={newLP1.numeroOV}
-                      onChange={(e) => setNewLP1({ ...newLP1, numeroOV: e.target.value })}
-                      className="w-full p-2 border rounded"
-                      placeholder="OV-2025-001"
-                    />
-                  </div>
-                </div>
+  {/* BANDEAU TAUX DE CHANGE */}
+  <div className="mt-2 p-3 rounded-lg bg-white border border-blue-200 flex items-center justify-between gap-4">
+    <div>
+      <div className="text-xs text-gray-500">
+        Taux de change du jour (USD → MGA)
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <input
+          type="number"
+          className="w-28 px-2 py-1 rounded border border-gray-300 bg-white text-sm text-gray-900"
+          value={usdToMgaRate}
+          onChange={(e) => setUsdToMgaRate(parseFloat(e.target.value) || 0)}
+        />
+        <span className="text-gray-700 text-sm">Ar pour 1 USD</span>
+      </div>
+    </div>
+    {rateLoadedAt && (
+      <div className="text-xs text-gray-500 text-right">
+        Mis à jour le{' '}
+        {new Date(rateLoadedAt).toLocaleDateString()} à{' '}
+        {new Date(rateLoadedAt).toLocaleTimeString()}
+      </div>
+    )}
+  </div>
 
-                {/* Aperçu calculs */}
-                {newLP1.quantiteKg > 0 && newLP1.prixUnitaireUSD > 0 && (
-                  <div className="mt-3 p-3 bg-blue-100 rounded text-sm">
-                    <p className="font-semibold mb-1">Calculs automatiques :</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      <div>
-                        <span className="text-gray-600">Valeur totale:</span>
-                        <p className="font-bold">{formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD)}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Ristourne (2%):</span>
-                        <p className="font-bold text-orange-600">{formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD * TAUX_RISTOURNE)}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Redevance (3%):</span>
-                        <p className="font-bold text-red-600">{formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD * TAUX_REDEVANCE)}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Total DTSPM (5%):</span>
-                        <p className="font-bold text-red-800">{formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD * TAUX_TOTAL_DTSPM)}</p>
-                      </div>
-                    </div>
-                  </div>
+  {/* Formulaire LP1 */}
+  {showLP1Form && (
+    <div className="bg-white p-4 rounded-lg mb-4 border-2 border-blue-200 mt-4">
+      <h4 className="font-semibold mb-3">Nouveau LP1</h4>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            N° LP1 *
+          </label>
+          <input
+            type="text"
+            value={newLP1.numeroLP1}
+            onChange={(e) =>
+              setNewLP1({ ...newLP1, numeroLP1: e.target.value })
+            }
+            className="w-full p-2 border rounded"
+            placeholder="LP1-2025-001"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Substance *
+          </label>
+          <input
+            type="text"
+            value={newLP1.substance}
+            onChange={(e) =>
+              setNewLP1({ ...newLP1, substance: e.target.value })
+            }
+            className="w-full p-2 border rounded"
+            placeholder="Agate"
+            list="substances-list"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Quantité (kg) *
+          </label>
+          <CalculatorInput
+            value={newLP1.quantiteKg}
+            onChange={(val) =>
+              setNewLP1({ ...newLP1, quantiteKg: val })
+            }
+            placeholder="27000"
+            className="w-full p-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Prix Unitaire (USD/kg) *
+          </label>
+          <CalculatorInput
+            value={newLP1.prixUnitaireUSD}
+            onChange={(val) =>
+              setNewLP1({ ...newLP1, prixUnitaireUSD: val })
+            }
+            placeholder="1.5"
+            className="w-full p-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Date Émission
+          </label>
+          <DatePicker
+            selected={newLP1.dateEmission}
+            onChange={(date) =>
+              setNewLP1({ ...newLP1, dateEmission: date })
+            }
+            dateFormat="dd/MM/yyyy"
+            className="w-full p-2 border rounded"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            N° OV
+          </label>
+          <input
+            type="text"
+            value={newLP1.numeroOV}
+            onChange={(e) =>
+              setNewLP1({ ...newLP1, numeroOV: e.target.value })
+            }
+            className="w-full p-2 border rounded"
+            placeholder="OV-2025-001"
+          />
+        </div>
+      </div>
+
+      {/* Aperçu calculs */}
+      {newLP1.quantiteKg > 0 && newLP1.prixUnitaireUSD > 0 && (
+        <div className="mt-3 p-3 bg-blue-100 rounded text-sm">
+          <p className="font-semibold mb-1">
+            Calculs automatiques (en Ariary) :
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            <div>
+              <span className="text-gray-600">Valeur totale:</span>
+              <p className="font-bold">
+                {formatCurrency(
+                  newLP1.quantiteKg *
+                    newLP1.prixUnitaireUSD *
+                    usdToMgaRate
                 )}
-
-                <div className="flex gap-2 mt-3">
-                  <button 
-                    onClick={handleAddLP1} 
-                    className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
-                  >
-                    <Save className="w-4 h-4" />
-                    Enregistrer LP1
-                  </button>
-                  <button 
-                    onClick={() => setShowLP1Form(false)} 
-                    className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Liste des LP1 */}
-            <div className="space-y-2">
-              {lp1List.map((lp1) => (
-                <div key={lp1.id} className="bg-white p-3 rounded-lg border flex justify-between items-center">
-                  <div className="flex-1 grid grid-cols-6 gap-2 text-sm">
-                    <div>
-                      <span className="font-semibold text-blue-600">{lp1.numeroLP1}</span>
-                      <p className="text-xs text-gray-500">{lp1.substance}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Qt:</span>
-                      <p className="font-semibold">{lp1.quantiteKg} kg</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">PU:</span>
-                      <p className="font-semibold">${lp1.prixUnitaireUSD}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Valeur:</span>
-                      <p className="font-bold text-green-600">{formatCurrency(lp1.valeurTotale)}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">DTSPM:</span>
-                      <p className="font-bold text-red-600">{formatCurrency(lp1.totalDTSPM)}</p>
-                    </div>
-                    <div>
-                      <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800">
-                        {lp1.statut}
-                      </span>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => handleDeleteLP1(lp1.id)} 
-                    className="text-red-600 hover:bg-red-50 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              {lp1List.length === 0 && (
-                <p className="text-center text-gray-500 py-4">
-                  Aucun LP1 enregistré. Cliquez sur "Ajouter LP1" pour commencer.
-                </p>
-              )}
+              </p>
+            </div>
+            <div>
+              <span className="text-gray-600">Ristourne (2%):</span>
+              <p className="font-bold text-orange-600">
+                {formatCurrency(
+                  newLP1.quantiteKg *
+                    newLP1.prixUnitaireUSD *
+                    usdToMgaRate *
+                    TAUX_RISTOURNE
+                )}
+              </p>
+            </div>
+            <div>
+              <span className="text-gray-600">Redevance (3%):</span>
+              <p className="font-bold text-red-600">
+                {formatCurrency(
+                  newLP1.quantiteKg *
+                    newLP1.prixUnitaireUSD *
+                    usdToMgaRate *
+                    TAUX_REDEVANCE
+                )}
+              </p>
+            </div>
+            <div>
+              <span className="text-gray-600">Total DTSPM (5%):</span>
+              <p className="font-bold text-red-800">
+                {formatCurrency(
+                  newLP1.quantiteKg *
+                    newLP1.prixUnitaireUSD *
+                    usdToMgaRate *
+                    TAUX_TOTAL_DTSPM
+                )}
+              </p>
             </div>
           </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={handleAddLP1}
+          className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
+        >
+          <Save className="w-4 h-4" />
+          Enregistrer LP1
+        </button>
+        <button
+          onClick={() => setShowLP1Form(false)}
+          className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
+        >
+          Annuler
+        </button>
+      </div>
+    </div>
+  )}
+
+  {/* Liste des LP1 */}
+  <div className="space-y-2 mt-4">
+    {lp1List.map((lp1) => (
+      <div
+        key={lp1.id}
+        className="bg-white p-3 rounded-lg border flex justify-between items-center"
+      >
+        <div className="flex-1 grid grid-cols-6 gap-2 text-sm">
+          <div>
+            <span className="font-semibold text-blue-600">
+              {lp1.numeroLP1}
+            </span>
+            <p className="text-xs text-gray-500">{lp1.substance}</p>
+          </div>
+          <div>
+            <span className="text-gray-600">Qt:</span>
+            <p className="font-semibold">{lp1.quantiteKg} kg</p>
+          </div>
+          <div>
+            <span className="text-gray-600">PU (USD):</span>
+            <p className="font-semibold">${lp1.prixUnitaireUSD}</p>
+          </div>
+          <div>
+            <span className="text-gray-600">Valeur (Ar):</span>
+            <p className="font-bold text-green-600">
+              {formatCurrency(lp1.valeurTotale)}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-600">DTSPM (Ar):</span>
+            <p className="font-bold text-red-600">
+              {formatCurrency(lp1.totalDTSPM)}
+            </p>
+          </div>
+          <div>
+            <span className="text-xs px-2 py-1 rounded bg-yellow-100 text-yellow-800">
+              {lp1.statut}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={() => handleDeleteLP1(lp1.id)}
+          className="text-red-600 hover:bg-red-50 p-2 rounded"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    ))}
+    {lp1List.length === 0 && (
+      <p className="text-center text-gray-500 py-4">
+        Aucun LP1 enregistré. Cliquez sur "Ajouter LP1" pour commencer.
+      </p>
+    )}
+  </div>
+</div>
+
 
 {/* SECTION 4: CHARGES */}
 <div className="bg-red-50 p-4 rounded-lg">
@@ -1407,8 +1560,8 @@ const revenuesWithDate = revenues.map(rev => ({
       <TrendingUp className="w-5 h-5 text-green-600" />
       Ventes & Revenus ({revenues.length})
     </h3>
-    <button 
-      onClick={addRevenue} 
+    <button
+      onClick={addRevenue}
       className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
     >
       <Plus className="w-4 h-4" />
@@ -1417,35 +1570,37 @@ const revenuesWithDate = revenues.map(rev => ({
   </div>
 
   {/* HEADERS EXPLICITES */}
-  <div 
+  <div
     className="hidden sm:grid gap-2 px-3 py-2 bg-green-100 rounded-lg mb-2 text-xs font-bold text-gray-700"
-    style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}
+    style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 1.2fr 1fr 1fr 0.8fr 0.8fr' }}
   >
-    <div className="col-span-2">Description</div>
-    <div className="col-span-2">Catégorie</div>
-    <div className="col-span-2">Montant (Ar)</div>
-    <div className="col-span-2">📅 Date Réelle</div>
-    <div className="col-span-2">🔮 Date Planifiée</div>
-    <div className="col-span-1">Compte</div>
-    <div className="col-span-1">Action</div>
-    <div className="col-span-1">✓</div>
+    <div>Description</div>
+    <div>Catégorie</div>
+    <div>Nb LP1</div>
+    <div>PU (Ar/kg)</div>
+    <div>Qté (kg)</div>
+    <div>Montant (Ar)</div>
+    <div>📅 Date Réelle</div>
+    <div>🔮 Date Planifiée</div>
+    <div>Compte</div>
+    <div>Actions</div>
   </div>
 
   <div className="space-y-2 max-h-96 overflow-y-auto">
     {revenues.map((rev, idx) => (
-      <div 
-        key={rev.id} 
+      <div
+        key={rev.id}
         className={`bg-white p-3 rounded-lg border-2 grid gap-2 items-center ${
           rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
         }`}
-        style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}
+        style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.2fr 1.2fr 1fr 1fr 0.8fr 0.8fr' }}
       >
         {/* Description */}
         <input
           type="text"
           value={rev.description}
           onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
-          className="col-span-2 p-2 border rounded text-sm"
+          className="p-2 border rounded text-sm"
           placeholder="Description"
           disabled={rev.lp1Id}
         />
@@ -1454,85 +1609,133 @@ const revenuesWithDate = revenues.map(rev => ({
         <select
           value={rev.category}
           onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
-          className="col-span-2 p-2 border rounded text-sm"
+          className="p-2 border rounded text-sm"
           disabled={rev.lp1Id}
         >
           {revenueCategories.map((cat) => (
-            <option key={cat.value} value={cat.value}>{cat.label}</option>
+            <option key={cat.value} value={cat.value}>
+              {cat.label}
+            </option>
           ))}
         </select>
 
-        {/* Montant */}
+        {/* Nb LP1 */}
+        <input
+          type="number"
+          className="p-2 border rounded text-sm bg-white text-gray-900"
+          value={rev.nombreLP1 || 1}
+          placeholder="Nb"
+          onChange={(e) =>
+            updateRevenue(
+              rev.id,
+              'nombreLP1',
+              parseInt(e.target.value || '1', 10)
+            )
+          }
+        />
+
+        {/* PU (Ar/kg) */}
+        <input
+          type="number"
+          className="p-2 border rounded text-sm bg-white text-gray-900"
+          value={rev.prixUnitaireKg || 0}
+          placeholder="PU"
+          onChange={(e) =>
+            updateRevenue(
+              rev.id,
+              'prixUnitaireKg',
+              parseFloat(e.target.value || '0')
+            )
+          }
+        />
+
+        {/* Qté (kg) avec calculatrice */}
+<CalculatorInput
+  value={rev.quantiteKg || 0}
+  onChange={(val) =>
+    updateRevenue(
+      rev.id,
+      'quantiteKg',
+      parseFloat(val || '0')
+    )
+  }
+  placeholder="Qté"
+  className="p-2 border rounded text-sm bg-white text-gray-900"
+/>
+
+        {/* Montant (calculé automatiquement) */}
         <CalculatorInput
-          value={rev.amount}
+          value={formatCurrency(rev.amount || 0)}
           onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-          className="col-span-2 p-2 border rounded text-sm font-semibold"
+          className="p-2 border rounded text-sm font-semibold"
           disabled={rev.lp1Id}
         />
 
-        {/* DATE RÉELLE - Avec titre explicite */}
-        <div className="col-span-2">
-          <DatePicker
-            selected={rev.date}
-            onChange={(date) => updateRevenue(rev.id, 'date', date)}
-            dateFormat="dd/MM/yy"
-            className="w-full p-2 border rounded text-sm"
-            placeholderText="Encaissée"
-          />
-        </div>
+        {/* Date réelle */}
+        <DatePicker
+          selected={rev.date}
+          onChange={(date) => updateRevenue(rev.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="w-full p-2 border rounded text-sm"
+          placeholderText="Encaissée"
+        />
 
-        {/* DATE PLANIFIÉE - Avec titre explicite */}
-        <div className="col-span-2">
-          <input
-            type="date"
-            value={rev.plannedDate || ''}
-            onChange={(e) => updateRevenue(rev.id, 'plannedDate', e.target.value)}
-            className="w-full p-2 border border-green-300 rounded text-sm bg-green-50"
-            placeholder="Prévue"
-            title="Date planifiée de l'encaissement"
-          />
-        </div>
+        {/* Date planifiée */}
+        <input
+          type="date"
+          value={rev.plannedDate || ''}
+          onChange={(e) => updateRevenue(rev.id, 'plannedDate', e.target.value)}
+          className="w-full p-2 border border-green-300 rounded text-sm bg-green-50"
+          placeholder="Prévue"
+          title="Date planifiée de l'encaissement"
+        />
 
         {/* Compte */}
         <select
           value={rev.account}
           onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
-          className="col-span-2 p-2 border rounded text-sm"
+          className="p-2 border rounded text-sm"
         >
           <option value="">Compte</option>
           {accounts.map((acc) => (
-            <option key={acc.id} value={acc.name}>{acc.name}</option>
+            <option key={acc.id} value={acc.name}>
+              {acc.name}
+            </option>
           ))}
         </select>
 
-        {/* BOUTON ENCAISSER/CANCEL */}
-        {!rev.isPaid ? (
-          <button
-            onClick={() => handleEncaisser(rev, idx)}
-            disabled={!rev.account || !project?.id}
-            className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
-            title="Encaisser"
-          >
-            💵
-          </button>
-        ) : (
-          <button
-            onClick={() => handleCancelPaymentRevenue(rev, idx)}
-            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-            title="Annuler encaissement"
-          >
-            ❌
-          </button>
-        )}
+        {/* Actions: encaisser / annuler + supprimer */}
+        <div className="flex items-center gap-1">
+          {!rev.isPaid ? (
+            <button
+              onClick={() => handleEncaisser(rev, idx)}
+              disabled={!rev.account || !project?.id}
+              className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
+              title="Encaisser"
+            >
+              💵
+            </button>
+          ) : (
+            <button
+              onClick={() => handleCancelPaymentRevenue(rev, idx)}
+              className="bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600 text-xs"
+              title="Annuler encaissement"
+            >
+              ❌
+            </button>
+          )}
 
-        {/* Supprimer */}
-        <button
-          onClick={() => setRevenues(revenues.filter((r) => r.id !== rev.id))}
-          className="col-span-1 text-red-600 hover:bg-red-50 p-2 rounded"
-          disabled={rev.lp1Id || lp1List.some(lp => lp.id === rev.lp1Id)}
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+          <button
+            onClick={() =>
+              setRevenues(revenues.filter((r) => r.id !== rev.id))
+            }
+            className="text-red-600 hover:bg-red-50 p-1 rounded"
+            disabled={rev.lp1Id || lp1List.some((lp) => lp.id === rev.lp1Id)}
+            title="Supprimer la ligne"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     ))}
 
@@ -1545,7 +1748,9 @@ const revenuesWithDate = revenues.map(rev => ({
 
   <div className="mt-3 text-right">
     <span className="text-sm text-gray-600">Total Revenus: </span>
-    <span className="font-bold text-green-600 text-lg">{formatCurrency(totalRevenues)}</span>
+    <span className="font-bold text-green-600 text-lg">
+      {formatCurrency(totalRevenues)}
+    </span>
   </div>
 </div>
 
