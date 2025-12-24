@@ -2,10 +2,57 @@
 
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5002';
 
+// ============================================================================
+// 🆕 GESTION DU TOKEN CSRF
+// ============================================================================
+
+let csrfToken = null;
+
+/**
+ * Récupérer le token CSRF depuis le backend
+ */
+export const fetchCsrfToken = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/api/csrf-token`, {
+      credentials: 'include', // ✅ IMPORTANT : Envoie les cookies
+    });
+    
+    if (!response.ok) {
+      throw new Error('Impossible de récupérer le token CSRF');
+    }
+    
+    const data = await response.json();
+    csrfToken = data.csrfToken;
+    console.log('✅ Token CSRF récupéré');
+    return csrfToken;
+  } catch (error) {
+    console.error('❌ Erreur récupération token CSRF:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtenir le token CSRF (le récupère si nécessaire)
+ */
+const getCsrfToken = async () => {
+  if (!csrfToken) {
+    await fetchCsrfToken();
+  }
+  return csrfToken;
+};
+
+// ============================================================================
+// AUTH TOKEN (INCHANGÉ)
+// ============================================================================
+
 export const getAuthHeader = () => {
   const token = localStorage.getItem('token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
+
+// ============================================================================
+// HELPERS (INCHANGÉ)
+// ============================================================================
 
 const safeJson = async (response) => {
   try {
@@ -15,24 +62,46 @@ const safeJson = async (response) => {
   }
 };
 
+// ============================================================================
+// API REQUEST (AMÉLIORÉ AVEC CSRF)
+// ============================================================================
+
 export const apiRequest = async (endpoint, options = {}) => {
-  // ✅ CORRECTION: Normaliser l'endpoint pour ajouter /api/ si absent
+  // ✅ Normaliser l'endpoint
   let normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   
-  // Si l'endpoint ne commence pas par /api/ et n'est pas /backup
   if (!normalizedEndpoint.startsWith('/api/') && !normalizedEndpoint.startsWith('/backup')) {
     normalizedEndpoint = `/api${normalizedEndpoint}`;
   }
   
   const url = `${API_BASE}${normalizedEndpoint}`;
+  const method = (options.method || 'GET').toUpperCase();
+
+  // ✅ Vérifier si la requête nécessite un token CSRF
+  const requiresCsrf = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+
+  // Headers de base
+  const headers = {
+    'Content-Type': 'application/json',
+    ...getAuthHeader(),
+    ...(options.headers || {}),
+  };
+
+  // ✅ Ajouter le token CSRF pour les requêtes mutantes
+  if (requiresCsrf) {
+    try {
+      const token = await getCsrfToken();
+      headers['X-CSRF-Token'] = token;
+    } catch (csrfError) {
+      console.warn('⚠️ Impossible d\'ajouter le token CSRF, tentative sans...');
+    }
+  }
 
   const config = {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeader(),
-      ...(options.headers || {}),
-    },
+    method,
+    credentials: 'include', // ✅ IMPORTANT : Envoie les cookies
+    headers,
   };
 
   try {
@@ -41,25 +110,48 @@ export const apiRequest = async (endpoint, options = {}) => {
     if (!response.ok) {
       const error = await safeJson(response);
 
-      // ✅ COMMIT 3: Gestion centralisée 401
+      // ✅ GESTION 401 : Session expirée (INCHANGÉ)
       if (response.status === 401) {
         console.warn('🔒 Session expirée - Déconnexion automatique');
-        
-        // 1. Supprimer le token
         localStorage.removeItem('token');
-        
-        // 2. Notifier les autres composants (UserContext écoute cet événement)
         window.dispatchEvent(new Event('auth:logout'));
         
-        // 3. Throw une erreur standardisée
         throw {
           message: 'Session expirée. Veuillez vous reconnecter.',
           status: 401,
-          isAuthError: true, // ✅ Flag pour identifier les erreurs d'auth
+          isAuthError: true,
         };
       }
 
-      // Autres erreurs HTTP (400, 403, 404, 500, etc.)
+      // ✅ NOUVEAU : GESTION 403 CSRF
+      if (response.status === 403 && error.code === 'EBADCSRFTOKEN') {
+        console.warn('⚠️ Token CSRF invalide, régénération...');
+        
+        // Réinitialiser et réessayer UNE SEULE FOIS
+        if (!options._csrfRetry) {
+          csrfToken = null; // Reset du token
+          return apiRequest(endpoint, { ...options, _csrfRetry: true });
+        }
+        
+        throw {
+          message: 'Erreur de sécurité CSRF. Veuillez recharger la page.',
+          status: 403,
+          isCsrfError: true,
+        };
+      }
+
+      // ✅ NOUVEAU : GESTION 429 Rate Limit
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After') || '15';
+        throw {
+          message: `Trop de requêtes. Réessayez dans ${retryAfter} minutes.`,
+          status: 429,
+          isRateLimitError: true,
+          retryAfter,
+        };
+      }
+
+      // Autres erreurs HTTP
       const serverMessage = error.message || error.error || error.msg || null;
       const details = error.errors || null;
 
@@ -75,7 +167,7 @@ export const apiRequest = async (endpoint, options = {}) => {
     return await safeJson(response);
 
   } catch (error) {
-    // ✅ Ne pas logger les erreurs 401 (déjà gérées)
+    // Ne pas logger les erreurs 401 (déjà gérées)
     if (error?.status !== 401) {
       console.error('API Error:', endpoint, error);
     }
@@ -83,7 +175,10 @@ export const apiRequest = async (endpoint, options = {}) => {
   }
 };
 
-// ✅ BONUS: Helper functions pour simplifier l'utilisation
+// ============================================================================
+// HELPER FUNCTIONS (INCHANGÉES)
+// ============================================================================
+
 export const api = {
   get: (endpoint) => apiRequest(endpoint, { method: 'GET' }),
   

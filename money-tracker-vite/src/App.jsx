@@ -72,6 +72,7 @@ import { parseJSONSafe, normalizeDate } from './domain/finance/parsers';
 import { transactionSignature, deduplicateTransactions } from './domain/finance/signature';
 import { createSignature } from "./utils/transactionUtils";
 import { projectsService } from './services/projectsService'
+import { fetchCsrfToken } from "./services/api";
 
 // ✅ GARDER : Utilisé pour l'import bulk uniquement
 import transactionsService from './services/transactionsService';
@@ -233,28 +234,45 @@ export default function App() {
   const [transactionDetailsModal, setTransactionDetailsModal] = useState(null);
   const [showNotes, setShowNotes] = useState(false);
 
-  // ==========================================================================
-  // EFFETS - CHARGEMENT INITIAL
-  // ==========================================================================
-  // Migration des projets depuis localStorage vers la base de données
-  useEffect(() => {
-    const migrateProjects = async () => {
-      try {
-        const result = await projectsService.migrateFromLocalStorage();
-        if (result.migrated > 0) {
-          showToast(`✅ ${result.migrated} projets migrés vers la base de données`, "success");
-          if (refreshProjects) refreshProjects();
-        }
-      } catch (error) {
-        console.error("Migration échouée:", error);
-      }
-    };
+  // ========================================================================== 
+// EFFETS - CHARGEMENT INITIAL
+// ==========================================================================
 
+// ✅ NOUVEAU : Initialisation CSRF au démarrage
+useEffect(() => {
+  const initCsrf = async () => {
     if (auth.isAuthenticated) {
-      migrateProjects();
+      try {
+        await fetchCsrfToken();
+        console.log('✅ Protection CSRF activée');
+      } catch (error) {
+        console.warn('⚠️ CSRF init failed (non-bloquant):', error);
+        // L'app continue de fonctionner en mode dégradé
+      }
     }
-  }, [auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
 
+  initCsrf();
+}, [auth.isAuthenticated]);
+
+// Migration des projets depuis localStorage vers la base de données
+useEffect(() => {
+  const migrateProjects = async () => {
+    try {
+      const result = await projectsService.migrateFromLocalStorage();
+      if (result.migrated > 0) {
+        showToast(`✅ ${result.migrated} projets migrés vers la base de données`, "success");
+        if (refreshProjects) refreshProjects();
+      }
+    } catch (error) {
+      console.error("Migration échouée:", error);
+    }
+  };
+
+  if (auth.isAuthenticated) {
+    migrateProjects();
+  }
+}, [auth.isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ==========================================================================
   // HANDLERS - AUTHENTIFICATION
