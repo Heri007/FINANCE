@@ -1038,7 +1038,7 @@ const handleProjectUpdated = async (projectId) => {
       {showAddAccount && <AccountModal onClose={() => setShowAddAccount(false)} onSave={handleCreateAccount} />}
       {showImport && <ImportModal isOpen={showImport} accounts={accounts} onClose={() => setShowImport(false)} onImport={handleImportTransactions} />}
       {showBackupImport && <BackupImportModal onClose={() => setShowBackupImport(false)} onRestoreSuccess={handleRestoreSuccess} />}
-      {selectedAccount && <AccountDetails account={selectedAccount} transactions={transactions} onClose={() => setSelectedAccount(null)} onDelete={deleteTransaction} />}
+      {selectedAccount && <AccountDetails account={selectedAccount} transactions={transactions} onClose={() => setSelectedAccount(null)} onDeleteTransaction={(id) => deleteTransaction(id)} />}
       {showReports && <ReportsModal onClose={() => setShowReports(false)} transactions={transactions} accounts={accounts} />}
       {showBookkeeper && (
   <BookkeeperDashboard

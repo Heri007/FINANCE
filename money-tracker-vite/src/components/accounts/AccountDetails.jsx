@@ -1,24 +1,58 @@
 // src/components/accounts/AccountDetails.jsx
 import React from 'react';
-import { X, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Trash2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { categoryIcons } from '../../utils/constants';
 
-export function AccountDetails({ account, transactions, onClose, onSelectTransaction }) {
+export function AccountDetails({
+  account,
+  transactions,
+  onClose,
+  onSelectTransaction,
+  onDeleteTransaction,
+}) {
   // Filtrer les transactions de ce compte
   const accountTransactions = transactions
-    .filter(t => (t.account_id || t.accountId) === account.id)
-    .sort((a, b) => new Date(b.transaction_date || b.date) - new Date(a.transaction_date || a.date));
+    .filter((t) => (t.account_id || t.accountId) === account.id)
+    .sort(
+      (a, b) =>
+        new Date(b.transaction_date || b.date) -
+        new Date(a.transaction_date || a.date)
+    );
 
   // Calculer les statistiques
-  const stats = accountTransactions.reduce((acc, t) => {
-    if (t.type === 'income') {
-      acc.income += parseFloat(t.amount);
-    } else {
-      acc.expense += parseFloat(t.amount);
+  const stats = accountTransactions.reduce(
+    (acc, t) => {
+      if (t.type === 'income') {
+        acc.income += parseFloat(t.amount);
+      } else {
+        acc.expense += parseFloat(t.amount);
+      }
+      return acc;
+    },
+    { income: 0, expense: 0 }
+  );
+
+  const handleCopyData = async () => {
+    try {
+      const data = {
+        account: {
+          id: account.id,
+          name: account.name,
+          balance: account.balance,
+        },
+        stats,
+        transactions: accountTransactions,
+        exportedAt: new Date().toISOString(),
+      };
+
+      await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+      alert('Données du compte copiées dans le presse-papiers.');
+    } catch (err) {
+      console.error('Erreur copie compte:', err);
+      alert('Impossible de copier les données.');
     }
-    return acc;
-  }, { income: 0, expense: 0 });
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -32,11 +66,22 @@ export function AccountDetails({ account, transactions, onClose, onSelectTransac
                 {formatCurrency(account.balance)}
               </p>
             </div>
-            <button onClick={onClose} className="text-white/80 hover:text-white">
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyData}
+                className="px-3 py-1 text-xs rounded border border-white/40 hover:bg-white/10"
+              >
+                Copier données
+              </button>
+              <button
+                onClick={onClose}
+                className="text-white/80 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
-          
+
           {/* Statistiques */}
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div className="bg-white/20 rounded-xl p-3">
@@ -44,14 +89,18 @@ export function AccountDetails({ account, transactions, onClose, onSelectTransac
                 <TrendingUp className="w-5 h-5 text-emerald-300" />
                 <span className="text-sm">Revenus</span>
               </div>
-              <p className="text-xl font-bold">{formatCurrency(stats.income)}</p>
+              <p className="text-xl font-bold">
+                {formatCurrency(stats.income)}
+              </p>
             </div>
             <div className="bg-white/20 rounded-xl p-3">
               <div className="flex items-center space-x-2">
                 <TrendingDown className="w-5 h-5 text-rose-300" />
                 <span className="text-sm">Dépenses</span>
               </div>
-              <p className="text-xl font-bold">{formatCurrency(stats.expense)}</p>
+              <p className="text-xl font-bold">
+                {formatCurrency(stats.expense)}
+              </p>
             </div>
           </div>
         </div>
@@ -61,35 +110,70 @@ export function AccountDetails({ account, transactions, onClose, onSelectTransac
           <h3 className="font-semibold text-gray-800 mb-4">
             Transactions ({accountTransactions.length})
           </h3>
-          
+
           {accountTransactions.length === 0 ? (
             <p className="text-gray-500 text-center py-8">
               Aucune transaction pour ce compte.
             </p>
           ) : (
             <div className="space-y-2">
-              {accountTransactions.map(t => (
+              {accountTransactions.map((t) => (
                 <div
                   key={t.id}
-                  onClick={() => onSelectTransaction?.(t)}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition cursor-pointer"
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition"
                 >
-                  <div className="flex items-center space-x-3">
+                  {/* Zone clic pour sélectionner la transaction */}
+                  <div
+                    className="flex items-center space-x-3 flex-1 cursor-pointer"
+                    onClick={() => onSelectTransaction?.(t)}
+                  >
                     <span className="text-2xl">
                       {categoryIcons[t.category] || '📝'}
                     </span>
                     <div>
-                      <p className="font-medium text-gray-800">{t.description}</p>
+                      <p className="font-medium text-gray-800">
+                        {t.description || 'Sans description'}
+                      </p>
                       <p className="text-sm text-gray-500">
                         {t.category} • {formatDate(t.transaction_date || t.date)}
                       </p>
                     </div>
                   </div>
-                  <span className={`font-bold ${
-                    t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
-                  }`}>
-                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                  </span>
+
+                  {/* Montant + bouton corbeille */}
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`font-bold ${
+                        t.type === 'income'
+                          ? 'text-emerald-600'
+                          : 'text-rose-600'
+                      }`}
+                    >
+                      {t.type === 'income' ? '+' : '-'}
+                      {formatCurrency(t.amount)}
+                    </span>
+
+                    {onDeleteTransaction && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (
+                            window.confirm(
+                              `Supprimer définitivement cette transaction de ${formatCurrency(
+                                t.amount
+                              )} ?`
+                            )
+                          ) {
+                            onDeleteTransaction(t.id);
+                          }
+                        }}
+                        className="p-1 rounded hover:bg-red-50 text-red-600"
+                        title="Supprimer définitivement"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
