@@ -98,61 +98,69 @@ const HumanResourcesPage = ({ projects = [] }) => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  try {
+    const formData = new FormData();
+    formData.append('firstName', formValues.firstName);
+    formData.append('lastName', formValues.lastName);
+    formData.append('position', formValues.position);
+    formData.append('department', formValues.department);
+    formData.append('email', formValues.email);
+    formData.append('phone', formValues.phone || '');
+    formData.append('facebook', formValues.facebook || '');
+    formData.append('linkedin', formValues.linkedin || '');
+    formData.append('location', formValues.location || '');
+    formData.append('salary', formValues.salary || 0);
+    formData.append('startDate', formValues.startDate);
+    formData.append('contractType', formValues.contractType);
+    formData.append('skills', JSON.stringify(formValues.skills));
+    formData.append('emergencyContact', JSON.stringify(formValues.emergencyContact));
     
-    try {
-      const formData = new FormData();
-      formData.append('firstName', formValues.firstName);
-      formData.append('lastName', formValues.lastName);
-      formData.append('position', formValues.position);
-      formData.append('department', formValues.department);
-      formData.append('email', formValues.email);
-      formData.append('phone', formValues.phone || '');
-      formData.append('facebook', formValues.facebook || '');
-      formData.append('linkedin', formValues.linkedin || '');
-      formData.append('location', formValues.location || '');
-      formData.append('salary', formValues.salary || 0);
-      formData.append('startDate', formValues.startDate);
-      formData.append('contractType', formValues.contractType);
-      formData.append('skills', JSON.stringify(formValues.skills));
-      formData.append('emergencyContact', JSON.stringify(formValues.emergencyContact));
-      
-      if (photoFile) {
-        formData.append('photo', photoFile);
-      }
-
-      const response = await fetch(`${API_BASE}/api/employees`, {
-        method: 'POST',
-        body: formData,
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Erreur lors de la création');
-      }
-
-      const newEmployee = await response.json();
-      setEmployees(prev => [...prev, newEmployee]);
-      
-      setFormValues({
-        firstName: '', lastName: '', position: '', department: '', email: '',
-        phone: '', facebook: '', linkedin: '', location: '', salary: 0,
-        startDate: new Date().toISOString().split('T')[0],
-        contractType: 'CDI', skills: [],
-        emergencyContact: { name: '', phone: '', relationship: '' }
-      });
-      setPhotoFile(null);
-      setPhotoPreview(null);
-      setShowAddModal(false);
-      
-      toast.success('Employé ajouté avec succès');
-    } catch (err) {
-      console.error('Erreur ajout employé:', err);
-      toast.error(err.message || 'Erreur lors de l\'ajout');
+    if (photoFile) {
+      formData.append('photo', photoFile);
     }
-  };
+
+    // 🔐 Récupérer le token CSRF
+    const csrfToken = await fetchCsrfToken();
+
+    const response = await fetch(`${API_BASE}/api/employees`, {
+      method: 'POST',
+      credentials: 'include',           // ✅ envoie les cookies (CSRF)
+      headers: {
+        ...getAuthHeader(),             // ✅ Authorization: Bearer
+        'X-CSRF-Token': csrfToken,      // ✅ protection CSRF
+        // NE PAS définir 'Content-Type' → laissé à FormData
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || 'Erreur lors de la création');
+    }
+
+    const newEmployee = await response.json();
+    setEmployees(prev => [...prev, newEmployee]);
+    
+    setFormValues({
+      firstName: '', lastName: '', position: '', department: '', email: '',
+      phone: '', facebook: '', linkedin: '', location: '', salary: 0,
+      startDate: new Date().toISOString().split('T')[0],
+      contractType: 'CDI', skills: [],
+      emergencyContact: { name: '', phone: '', relationship: '' },
+    });
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setShowAddModal(false);
+    
+    toast.success('Employé ajouté avec succès');
+  } catch (err) {
+    console.error('Erreur ajout employé:', err);
+    toast.error(err.message || 'Erreur lors de l\'ajout');
+  }
+};
 
   const handleDeleteEmployee = async (id) => {
   if (!window.confirm('⚠️ Voulez-vous vraiment supprimer cet employé ?')) return;

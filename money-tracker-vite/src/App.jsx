@@ -1118,6 +1118,7 @@ const handleProjectUpdated = async (projectId) => {
           transactions={transactions}
           onClose={() => setTransactionDetailsModal(null)}
         />
+      
       )}
       {/* ✅ AJOUTER ICI: NotesSlide en Modal */}
       <NotesSlide

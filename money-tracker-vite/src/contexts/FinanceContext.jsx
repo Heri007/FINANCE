@@ -727,22 +727,12 @@ const payload = newTransactions.map(t => ({
 
     if (successCount > 0) {
       // 8. Recalculer tous les soldes
-      console.log('🔄 Recalcul des soldes...');
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch(`${API_BASE}/api/accounts/recalculate-all`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
-        if (!response.ok) {
-          console.warn('Erreur recalcul soldes:', response.status);
-        }
-      } catch (recalcError) {
-        console.error('Erreur recalcul:', recalcError);
-      }
+console.log('🔄 Recalcul des soldes...');
+try {
+  await api.post('/accounts/recalculate-all', {}); // pas de payload
+} catch (recalcError) {
+  console.error('Erreur recalcul:', recalcError);
+}
 
       // 9. Rafraîchir les données
       await refreshAccounts();

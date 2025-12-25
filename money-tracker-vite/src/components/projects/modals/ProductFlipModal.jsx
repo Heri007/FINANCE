@@ -331,13 +331,12 @@ export function ProductFlipModal({
   const handlePayerDepense = async (exp, index) => {
   try {
     if (!exp.account) return alert('Choisis un compte');
-    
+
     const accountObj = accounts.find(a => a.name === exp.account);
     if (!accountObj) return alert('Compte introuvable');
 
     if (!project?.id) return alert('Erreur: Projet introuvable.');
 
-    // Demander si c'est un paiement déjà effectué
     const alreadyPaid = window.confirm(
       `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
       `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
@@ -345,42 +344,28 @@ export function ProductFlipModal({
       `- NON (Annuler) → Je crée une transaction et débite le compte.`
     );
 
-    const payload = alreadyPaid ? {
-      paid_externally: true,
-      amount: parseFloat(exp.amount),
-      paid_date: exp.realDate || new Date().toISOString().split('T')[0]
-    } : {
-      create_transaction: true,
-      amount: parseFloat(exp.amount),
-      paid_date: exp.realDate || new Date().toISOString().split('T')[0]
-    };
+    const payload = alreadyPaid
+      ? {
+          paid_externally: true,
+          amount: parseFloat(exp.amount),
+          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: parseFloat(exp.amount),
+          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
+        };
 
-    // Appeler la route backend
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(payload)
-      }
+    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    const result = await api.patch(
+      `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
+      payload
     );
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur serveur');
-    }
-
-    const result = await response.json();
-
-    // Mettre à jour l'état local
     const updated = [...expenses];
     updated[index] = { ...updated[index], isPaid: true };
     setExpenses(updated);
 
-    // Sauvegarder le projet
     await saveProjectState(updated, revenues);
 
     if (onProjectUpdated) onProjectUpdated();
@@ -393,12 +378,11 @@ export function ProductFlipModal({
 };
 
 
-
   // ===== ENCAISSER REVENU =====
   const handleEncaisser = async (rev, index) => {
   try {
     if (!rev.account) return alert('Choisis un compte');
-    
+
     const accountObj = accounts.find(a => a.name === rev.account);
     if (!accountObj) return alert('Compte introuvable');
 
@@ -411,34 +395,23 @@ export function ProductFlipModal({
       `- NON (Annuler) → Je crée une transaction et crédite le compte.`
     );
 
-    const payload = alreadyReceived ? {
-      received_externally: true,
-      amount: parseFloat(rev.amount),
-      received_date: rev.realDate || new Date().toISOString().split('T')[0]
-    } : {
-      create_transaction: true,
-      amount: parseFloat(rev.amount),
-      received_date: rev.realDate || new Date().toISOString().split('T')[0]
-    };
+    const payload = alreadyReceived
+      ? {
+          received_externally: true,
+          amount: parseFloat(rev.amount),
+          received_date: rev.realDate || new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: parseFloat(rev.amount),
+          received_date: rev.realDate || new Date().toISOString().split('T')[0],
+        };
 
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(payload)
-      }
+    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    const result = await api.patch(
+      `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
+      payload
     );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur serveur');
-    }
-
-    const result = await response.json();
 
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: true };
@@ -456,35 +429,23 @@ export function ProductFlipModal({
 };
 
   // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
-  const handleCancelPaymentExpense = async (exp, index) => {
+ const handleCancelPaymentExpense = async (exp, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
 
     if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      }
+    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    const result = await api.patch(
+      `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
+      {} // pas de payload spécifique
     );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur serveur');
-    }
-
-    const result = await response.json();
 
     const updated = [...expenses];
     updated[index] = { ...updated[index], isPaid: false };
     setExpenses(updated);
 
-    await saveProjectState(updated, revenues);
+    await saveProjectState(expenses, updated);
 
     if (onProjectUpdated) onProjectUpdated();
 
@@ -495,29 +456,18 @@ export function ProductFlipModal({
   }
 };
 
+
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
 
     if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
 
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      }
+    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    const result = await api.patch(
+      `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
+      {} // pas de payload spécifique
     );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur serveur');
-    }
-
-    const result = await response.json();
 
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: false };
@@ -533,6 +483,7 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     alert('Erreur annulation: ' + (err.message || err));
   }
 };
+
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {

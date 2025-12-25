@@ -6,6 +6,7 @@ import { fr } from 'date-fns/locale';
 import operatorService from './services/operatorService';
 import { CopyButton } from './components/common/CopyButton';
 import GanttTimelineModal from './components/operator/GanttTimelineModal';
+import { api } from './services/api'; // adapte le chemin
 
 
 const formatCurrency = (amount) => {
@@ -70,20 +71,7 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
 
   const handleUpdateProject = async (projectId, updates) => {
   try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/api/operator/projects/${projectId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(updates)
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur lors de la mise à jour du projet');
-    }
+    await api.put(`/operator/projects/${projectId}`, updates);
 
     // Recharger les projets
     await loadProjects();
@@ -95,6 +83,7 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
     return false;
   }
 };
+
 
   // CRUD SOPs
   const handleCreateSOP = async (sopData) => {

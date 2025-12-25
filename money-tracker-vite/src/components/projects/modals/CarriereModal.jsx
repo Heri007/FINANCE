@@ -629,19 +629,12 @@ const handlePayExpense = async (expenseId) => {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-      {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({
-          paidexternally: alreadyPaid,
-          amount: expense.amount,
-          paiddate: expense.date ? new Date(expense.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          accountid: accountObj.id
-        })
-      }
-    );
+   //(CSRF + JWT auto)
+const result = await api.patch(
+  `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
+  payload
+);
+
 
     if (!response.ok) {
       const error = await response.json();
@@ -730,9 +723,10 @@ const handleEncaisser = async (rev, index) => {
 // ==================== ANNULER PAIEMENT DÉPENSE ====================
 const handleCancelPayment = async (expenseIdOrObject) => {
   try {
-    const frontendExpenseId = typeof expenseIdOrObject === 'object' 
-      ? expenseIdOrObject.id 
-      : expenseIdOrObject;
+    const frontendExpenseId =
+      typeof expenseIdOrObject === 'object'
+        ? expenseIdOrObject.id
+        : expenseIdOrObject;
 
     console.log(`🔄 Annulation paiement pour ligne frontend ID: ${frontendExpenseId}`);
     
@@ -751,22 +745,27 @@ const handleCancelPayment = async (expenseIdOrObject) => {
       isPaid: expense.isPaid
     });
 
-    // ✅ CORRECTION : Utiliser dbLineId d'abord
+    // Utiliser dbLineId d'abord
     let dbLineId = expense.dbLineId;
-    
+
     if (!dbLineId) {
-      // Fallback : chercher dans expenseLines
       const expenseLine = project?.expenseLines?.find(line => {
         const descMatch = line.description?.trim() === expense.description?.trim();
-        
+
         if (expense.isPaid) {
           return descMatch;
         }
-        
-        const lineAmount = parseFloat(line.actualamount || line.actual_amount || line.projectedamount || line.projected_amount || 0);
+
+        const lineAmount = parseFloat(
+          line.actualamount ||
+          line.actual_amount ||
+          line.projectedamount ||
+          line.projected_amount ||
+          0
+        );
         const expenseAmount = parseFloat(expense.amount || 0);
         const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
-        
+
         return descMatch && amountMatch;
       });
 
@@ -782,36 +781,24 @@ const handleCancelPayment = async (expenseIdOrObject) => {
       console.log('✅ Utilisation du dbLineId stocké:', dbLineId);
     }
 
-    const token = localStorage.getItem('token');
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
-        }
-      }
+    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    const data = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
+      {} // pas de payload spécifique
     );
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('❌ Erreur backend complète:', error);  // ✅ AJOUT
-      throw new Error(error.message || 'Erreur lors de l\'annulation');
-    }
-
-    const data = await response.json();
     console.log('✅ Paiement annulé:', data);
 
     // Mise à jour optimiste
-    setExpenses(prev => prev.map(e =>
-      e.id === frontendExpenseId 
-        ? { ...e, isPaid: false, actualAmount: 0 } 
-        : e
-    ));
+    setExpenses(prev =>
+      prev.map(e =>
+        e.id === frontendExpenseId
+          ? { ...e, isPaid: false, actualAmount: 0 }
+          : e
+      )
+    );
 
     await loadProjectData();
-    
   } catch (error) {
     console.error('❌ Erreur handleCancelPayment:', error);
     alert(`Erreur lors de l'annulation: ${error.message}`);
@@ -819,30 +806,17 @@ const handleCancelPayment = async (expenseIdOrObject) => {
   }
 };
 
-
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
 
     if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
 
-    const response = await fetch(
-      `http://localhost:5002/api/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      }
+    // Appel backend via client API (CSRF + JWT gérés automatiquement)
+    const result = await api.patch(
+      `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
+      {} // pas de payload spécifique
     );
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erreur serveur');
-    }
-
-    const result = await response.json();
 
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: false };
@@ -852,12 +826,13 @@ const handleCancelPaymentRevenue = async (rev, index) => {
 
     if (onProjectUpdated) onProjectUpdated();
 
-    alert(result.message);
+    alert(result.message || 'Encaissement annulé');
   } catch (err) {
     console.error('Erreur handleCancelPaymentRevenue:', err);
     alert('Erreur annulation: ' + (err.message || err));
   }
 };
+
 
   // ==================== SAUVEGARDER L'ÉTAT DU PROJET ====================
   const saveProjectState = async (currentExpenses, currentRevenues) => {
