@@ -8,17 +8,22 @@ import { projectsService } from '../../../services/projectsService';
 import { transactionsService } from '../../../services/transactionsService';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
+import { api } from '../../../services/api';
+import { useFinance } from '../../../contexts/FinanceContext';
 
 export function ExportModal({ 
   isOpen, 
   onClose, 
+  onSave,
   accounts = [], 
   project = null,
   onProjectSaved,
   onProjectUpdated,
   createTransaction 
 }) {
-  
+
+    const { refreshProjects } = useFinance();
+    
   // ===== VÉRIFICATION SÉCURITÉ =====
   if (!createTransaction) {
     console.error('❌ createTransaction manquant dans ExportModal !');
@@ -46,140 +51,210 @@ export function ExportModal({
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
 
+
   // ===== CHARGEMENT PROJET EXISTANT =====
-  useEffect(() => {
-    const loadProjectData = async () => {
-      if (project) {
-        setProjectName(project.name || '');
-        setDescription(project.description || '');
-        setStatus(project.status || 'active');
+useEffect(() => {
+  const loadProjectData = async () => {
+
+    if (project) {
+      setProjectName(project.name || '');
+      setDescription(project.description || '');
+      setStatus(project.status || 'active');
+      
+      const start = project.startDate || project.start_date;
+      const end = project.endDate || project.end_date;
+      setStartDate(start ? new Date(start) : new Date());
+      setEndDate(end ? new Date(end) : null);
+
+      // Charger metadata
+      if (project.metadata) {
+        const meta = typeof project.metadata === 'string' 
+          ? JSON.parse(project.metadata) 
+          : project.metadata;
         
-        const start = project.startDate || project.start_date;
-        const end = project.endDate || project.end_date;
-        setStartDate(start ? new Date(start) : new Date());
-        setEndDate(end ? new Date(end) : null);
+        setProductType(meta.productType || '');
+        setDestination(meta.destination || '');
+        setContainerType(meta.containerType || '20FT');
+        setCommissionRateProprio(meta.commissionRateProprio || 0.20);
+        setCommissionRateRandou(meta.commissionRateRandou || 0.10);
+      }
 
-        // Charger metadata
-        if (project.metadata) {
-          const meta = typeof project.metadata === 'string' 
-            ? JSON.parse(project.metadata) 
-            : project.metadata;
+      // Fonction helper pour parser les listes
+      const parseList = (data) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        try { return JSON.parse(data); } catch { return []; }
+      };
+
+      let currentExpenses = parseList(project.expenses).map(e => ({
+        ...e,
+        id: e.id || uuidv4(),
+        date: e.date ? new Date(e.date) : new Date(),
+        amount: parseFloat(e.amount) || 0
+      }));
+
+      let currentRevenues = parseList(project.revenues).map(r => ({
+        ...r,
+        id: r.id || uuidv4(),
+        date: r.date ? new Date(r.date) : new Date(),
+        amount: parseFloat(r.amount) || 0
+      }));
+
+      // ✅ CHARGER LE PROJET COMPLET AVEC LES LIGNES DB
+      if (project.id) {
+        try {
+          // ✅ AJOUT CRITIQUE: Charger le projet complet
+          console.log('📥 Chargement projet complet avec lignes DB...');
+          const fullProject = await projectsService.getById(project.id);
           
-          setProductType(meta.productType || '');
-          setDestination(meta.destination || '');
-          setContainerType(meta.containerType || '20FT');
-          setCommissionRateProprio(meta.commissionRateProprio || 0.20);
-          setCommissionRateRandou(meta.commissionRateRandou || 0.10);
+          // ✅ Parser les lignes DB
+          let expenseLines = parseList(fullProject?.expenseLines || fullProject?.expense_lines);
+          let revenueLines = parseList(fullProject?.revenueLines || fullProject?.revenue_lines);
+          
+          console.log('📋 Lignes DB chargées:', {
+            expenses: expenseLines.length,
+            revenues: revenueLines.length
+          });
+          
+          // ✅ CRUCIAL: Stocker dans project pour handleCancelPayment
+          project.expenseLines = expenseLines;
+          project.revenueLines = revenueLines;
+          
+          // Récupérer les transactions
+          const allTx = await transactionsService.getAll();
+          const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
+          console.log(`📥 Transactions récupérées pour Export ${project.name}:`, projectTx.length);
+
+          // ✅ Fusionner avec les lignes DB en paramètre
+          const mergeTransactions = (lines, type, dbLines) => {
+            const newLines = [...lines];
+
+            projectTx
+              .filter(t => t.type === type)
+              .forEach(tx => {
+                const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+                const realDate = tx.transaction_date || tx.date;
+
+                // ✅ Recherche améliorée
+                const existingIdx = newLines.findIndex(l => {
+                  // Match par project_line_id
+                  if (tx.project_line_id && String(l.id) === String(tx.project_line_id)) {
+                    return true;
+                  }
+                  
+                  // Match par description + montant (tolérance)
+                  const descMatch = l.description === tx.description;
+                  const amountMatch = Math.abs(parseFloat(l.amount) - parseFloat(tx.amount)) < 0.01;
+                  const notPaid = !l.isPaid;
+                  
+                  return descMatch && amountMatch && notPaid;
+                });
+
+                // ✅ Trouver le dbLineId depuis dbLines
+                const findDbLine = (desc, amount) => {
+                  return dbLines.find(dl => {
+                    const dlDesc = (dl.description || '').trim().toLowerCase();
+                    const searchDesc = (desc || '').trim().toLowerCase();
+                    const dlAmount = parseFloat(
+                      dl.projected_amount || dl.projectedamount || 
+                      dl.projectedAmount || dl.actual_amount ||
+                      dl.actualamount || dl.actualAmount ||
+                      dl.amount || 0
+                    );
+                    
+                    return dlDesc === searchDesc && Math.abs(dlAmount - amount) < 0.01;
+                  });
+                };
+
+                if (existingIdx >= 0) {
+                  // ✅ Mettre à jour ligne existante
+                  const dbLine = findDbLine(tx.description, parseFloat(tx.amount));
+                  
+                  newLines[existingIdx] = {
+                    ...newLines[existingIdx],
+                    isPaid: true,
+                    account: accName,
+                    realDate: realDate ? new Date(realDate) : null,
+                    dbLineId: dbLine?.id || tx.project_line_id, // ✅ CRITIQUE
+                  };
+                  
+                  console.log('✅ Ligne fusionnée avec dbLineId:', {
+                    description: newLines[existingIdx].description,
+                    dbLineId: newLines[existingIdx].dbLineId
+                  });
+                } else {
+                  // ✅ Créer nouvelle ligne
+                  const dbLine = findDbLine(tx.description, parseFloat(tx.amount));
+                  
+                  newLines.push({
+                    id: tx.project_line_id || uuidv4(),
+                    description: tx.description,
+                    amount: parseFloat(tx.amount),
+                    category: tx.category,
+                    date: new Date(),
+                    realDate: realDate ? new Date(realDate) : null,
+                    account: accName,
+                    isPaid: true,
+                    isRecurring: false,
+                    dbLineId: dbLine?.id || tx.project_line_id, // ✅ CRITIQUE
+                  });
+                  
+                  console.log('➕ Nouvelle ligne créée avec dbLineId:', {
+                    description: tx.description,
+                    dbLineId: dbLine?.id || tx.project_line_id
+                  });
+                }
+              });
+
+            return newLines;
+          };
+
+          // ✅ APPELS CORRIGÉS avec dbLines en paramètre
+          currentExpenses = mergeTransactions(currentExpenses, 'expense', expenseLines);
+          currentRevenues = mergeTransactions(currentRevenues, 'income', revenueLines);
+
+          console.log('📋 Lignes DB chargées:', {
+  expenses: expenseLines.length,
+  revenues: revenueLines.length
+});
+
+// ✅ Après le log, afficher le contenu
+console.log('📝 expenseLines:', expenseLines);
+console.log('📝 project.expenses (JSON):', parseList(project.expenses));
+          
+        } catch (err) {
+          console.error("❌ Erreur synchronisation:", err);
         }
+      }
 
-        // Fonction helper pour parser les listes
-        const parseList = (data) => {
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          try { return JSON.parse(data); } catch { return []; }
-        };
+      setExpenses(currentExpenses);
+      setRevenues(currentRevenues);
 
-        let currentExpenses = parseList(project.expenses).map(e => ({
-          ...e,
-          id: e.id || uuidv4(),
-          date: e.date ? new Date(e.date) : new Date(),
-          amount: parseFloat(e.amount) || 0
-        }));
-
-        let currentRevenues = parseList(project.revenues).map(r => ({
-          ...r,
-          id: r.id || uuidv4(),
-          date: r.date ? new Date(r.date) : new Date(),
-          amount: parseFloat(r.amount) || 0
-        }));
-
-        // ✅ RÉCUPÉRER LES TRANSACTIONS RÉELLES LIÉES AU PROJET
-        if (project.id) {
-          try {
-            const allTx = await transactionsService.getAll();
-            const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
-            console.log(`📥 Transactions récupérées pour Export ${project.name}:`, projectTx.length);
-
-            // Fusionner les transactions réelles avec les lignes budgétaires
-            const mergeTransactions = (lines, type) => {
-  const newLines = [...lines];
-
-  projectTx
-    .filter(t => t.type === type)
-    .forEach(tx => {
-      const accName =
-        accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-      const realDate = tx.transaction_date || tx.date;
-
-      const existingIdx = newLines.findIndex(
-        l =>
-          String(l.id) === String(tx.project_line_id) ||
-          (l.amount === parseFloat(tx.amount) &&
-            l.description === tx.description &&
-            !l.isPaid)
+      // ✅ DÉTECTER LES PARAMÈTRES EXPORT
+      const containerRevenues = currentRevenues.filter(r => 
+        r.category === 'Vente Export Global' || 
+        r.description.includes('Export Global')
       );
 
-      if (existingIdx >= 0) {
-        newLines[existingIdx] = {
-          ...newLines[existingIdx],
-          isPaid: true,
-          account: accName,
-          realDate: realDate ? new Date(realDate) : null, // ✅ Date réelle
-        };
-      } else {
-        newLines.push({
-          id: tx.project_line_id || uuidv4(),
-          description: tx.description,
-          amount: parseFloat(tx.amount),
-          category: tx.category,
-          date: new Date(), // ✅ Date planifiée par défaut
-          realDate: realDate ? new Date(realDate) : null, // ✅ Date réelle
-          account: accName,
-          isPaid: true,
-          isRecurring: false,
-        });
-      }
-    });
-
-  return newLines;
-};
-
-
-            currentExpenses = mergeTransactions(currentExpenses, 'expense');
-            currentRevenues = mergeTransactions(currentRevenues, 'income');
-          } catch (err) {
-            console.error("Erreur synchronisation transactions:", err);
+      if (containerRevenues.length > 0) {
+        const matchCount = containerRevenues.description.match(/(\d+)\s+Containers/i);
+        if (matchCount && matchCount) {
+          const count = parseInt(matchCount, 10);
+          setContainerCount(count);
+          if (count > 0) {
+            setPricePerContainer(containerRevenues.amount / count);
           }
         }
-
-        setExpenses(currentExpenses);
-        setRevenues(currentRevenues);
-
-        // ✅ DÉTECTER LES PARAMÈTRES EXPORT DEPUIS LES REVENUES
-        const containerRevenues = currentRevenues.filter(r => 
-          r.category === 'Vente Export Global' || 
-          r.description.includes('Export Global')
-        );
-
-        if (containerRevenues.length > 0) {
-          const matchCount = containerRevenues[0].description.match(/(\d+)\s+Containers/i);
-          if (matchCount && matchCount[1]) {
-            const count = parseInt(matchCount[1], 10);
-            setContainerCount(count);
-            if (count > 0) {
-              setPricePerContainer(containerRevenues[0].amount / count);
-            }
-          }
-        }
-      } else {
-        // Reset pour nouveau projet
-        resetForm();
       }
-    };
+    } else {
+      resetForm();
+    }
+  };
 
-    loadProjectData();
-  }, [project, isOpen, accounts]);
+  loadProjectData();
+}, [project, isOpen, accounts]);
 
+  // ===== RÉINITIALISER LE FORMULAIRE =====
   const resetForm = () => {
     setProjectName('');
     setDescription('');
@@ -337,57 +412,158 @@ export function ExportModal({
   };
 
   // ===== PAYER DÉPENSE =====
- const handlePayerDepense = async (exp, index) => {
+const handlePayerDepense = async (exp, index) => {
   try {
     if (!exp.account) return alert('Choisis un compte');
-
+    
     const accountObj = accounts.find(a => a.name === exp.account);
     if (!accountObj) return alert('Compte introuvable');
 
     if (!project?.id) return alert('Erreur: Projet introuvable.');
 
+    console.log('🔍 Recherche/création dbLineId pour:', {
+      description: exp.description,
+      amount: exp.amount,
+      id: exp.id
+    });
+
+    // ✅ Chercher ou créer le dbLineId
+    let dbLineId = exp.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('📋 expenseLines disponibles:', project.expenseLines);
+      
+      // Chercher dans expenseLines existantes
+      const expenseAmount = parseFloat(exp.amount || 0);
+      
+      let expenseLine = project?.expenseLines?.find(line => {
+        // Match par UUID
+        if (line.id === exp.id || line.uuid === exp.id) return true;
+        
+        // Match par description + montant
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (exp.description || '').trim().toLowerCase();
+        
+        if (lineDesc !== expDesc) return false;
+        
+        const lineAmount = parseFloat(
+          line.projectedamount || 
+          line.projected_amount || 
+          line.projectedAmount ||
+          0
+        );
+        
+        return Math.abs(lineAmount - expenseAmount) < 0.01;
+      });
+
+      // ✅ Si pas trouvée, créer la ligne en base
+      if (!expenseLine) {
+        console.log('📝 Ligne introuvable, création en cours...');
+        
+        const createConfirm = confirm(
+          `La ligne "${exp.description}" n'existe pas encore en base.
+
+` +
+          `Voulez-vous la créer maintenant ?
+
+` +
+          `Montant: ${formatCurrency(exp.amount)}
+` +
+          `Catégorie: ${exp.category || 'Non catégorisé'}`
+        );
+        
+        if (!createConfirm) {
+          console.log('❌ Création annulée par l\'utilisateur');
+          return;
+        }
+        
+        try {
+          // Créer la ligne via API
+          const newLine = await api.post(`/projects/${project.id}/expense-lines`, {
+            description: exp.description,
+            category: exp.category || 'Non catégorisé',
+            projectedamount: parseFloat(exp.amount),
+            actualamount: 0,
+            transactiondate: exp.date || new Date().toISOString(),
+            ispaid: false
+          });
+          
+          expenseLine = newLine;
+          console.log('✅ Ligne créée:', newLine);
+          
+          // Recharger le projet pour avoir les nouvelles données
+          if (onProjectUpdated) {
+            await onProjectUpdated(project.id);
+          }
+        } catch (createError) {
+          console.error('❌ Erreur création ligne:', createError);
+          alert(`Impossible de créer la ligne en base:
+${createError.message}`);
+          return;
+        }
+      }
+
+      dbLineId = expenseLine.id;
+      console.log('✅ dbLineId:', dbLineId);
+    }
+
+    // ✅ Demander confirmation de paiement
     const alreadyPaid = window.confirm(
-      `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
+      `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.
+
+` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?
+` +
+      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.
+` +
       `- NON (Annuler) → Je crée une transaction et débite le compte.`
     );
 
-    const payload = alreadyPaid
-      ? {
-          paid_externally: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-        }
-      : {
-          create_transaction: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-        };
+    const payload = alreadyPaid ? {
+      paidexternally: true,
+      amount: parseFloat(exp.amount),
+      paiddate: exp.realDate ? new Date(exp.realDate).toISOString().split('T') : new Date().toISOString().split('T'),
+      accountid: accountObj.id
+    } : {
+      create_transaction: true,
+      amount: parseFloat(exp.amount),
+      paiddate: exp.realDate ? new Date(exp.realDate).toISOString().split('T') : new Date().toISOString().split('T'),
+      accountid: accountObj.id
+    };
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
+    console.log('📤 Envoi requête mark-paid:', {
+      url: `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      payload
+    });
+
     const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
+      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
       payload
     );
 
+    console.log('✅ Réponse serveur:', result);
+
     // Mettre à jour l'état local
     const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: true };
+    updated[index] = { ...updated[index], isPaid: true, dbLineId }; // ✅ Sauvegarder le dbLineId
     setExpenses(updated);
 
     await saveProjectState(updated, revenues);
 
-    if (onProjectUpdated) onProjectUpdated();
+    // ✅ CORRECTION: Utiliser refreshProjects direct
+      console.log('🔄 Rafraîchissement après paiement...');
+      await refreshProjects();
+
+    if (onProjectUpdated) {
+      await onProjectUpdated(project.id);
+    }
 
     alert(result.message || 'Dépense marquée comme payée !');
   } catch (error) {
-    console.error('Erreur handlePayerDepense:', error);
+    console.error('❌ Erreur handlePayerDepense:', error);
     alert(error?.message || 'Erreur paiement');
   }
 };
-
-
 
   // ===== ENCAISSER REVENU =====
  const handleEncaisser = async (rev, index) => {
@@ -429,6 +605,9 @@ export function ExportModal({
     setRevenues(updated);
 
     await saveProjectState(expenses, updated);
+     // ✅ CORRECTION: Utiliser refreshProjects direct
+      console.log('🔄 Rafraîchissement après encaissement...');
+      await refreshProjects();
 
     if (onProjectUpdated) onProjectUpdated();
 
@@ -439,64 +618,240 @@ export function ExportModal({
   }
 };
 
-
-
   // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
-  const handleCancelPaymentExpense = async (exp, index) => {
+const handleCancelPaymentExpense = async (exp, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
-
     if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
+    
+    // ✅ AMÉLIORATION: Stratégie de recherche plus robuste
+    let dbLineId = exp.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('🔍 Recherche dbLineId pour:', {
+        description: exp.description,
+        amount: exp.amount,
+        expenseLines: project?.expenseLines?.length || 0
+      });
+      
+      // ✅ Recharger le projet pour avoir les expenseLines à jour
+      const freshProject = await projectsService.getById(project.id);
+      
+      // Parser expenseLines si c'est une string JSON
+      let expenseLines = freshProject?.expenseLines || freshProject?.expense_lines || [];
+      if (typeof expenseLines === 'string') {
+        try {
+          expenseLines = JSON.parse(expenseLines);
+        } catch (e) {
+          expenseLines = [];
+        }
+      }
+      
+      console.log('📋 Lignes disponibles:', expenseLines);
+      
+      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
+        console.error('❌ Aucune ligne expense trouvée dans le projet');
+        alert('Impossible de trouver les lignes de dépenses. Le projet doit être rechargé.');
+        
+        // ✅ Forcer le refresh
+        await refreshProjects();
+        return;
+      }
+      
+      const expenseAmount = parseFloat(exp.amount) || 0;
+      
+      // ✅ Recherche améliorée avec plusieurs stratégies
+      const expenseLine = expenseLines.find(line => {
+        // Stratégie 1: Match par UUID stocké
+        if (line.uuid && exp.id && line.uuid === exp.id) {
+          console.log('✅ Match par UUID:', line.uuid);
+          return true;
+        }
+        
+        // Stratégie 2: Match par ID stocké
+        if (line.id && exp.dbLineId && line.id === exp.dbLineId) {
+          console.log('✅ Match par ID:', line.id);
+          return true;
+        }
+        
+        // Stratégie 3: Match par description + montant + isPaid=true
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (exp.description || '').trim().toLowerCase();
+        
+        if (lineDesc !== expDesc) return false;
+        
+        // Vérifier tous les champs de montant possibles
+        const lineAmount = parseFloat(
+          line.projected_amount || 
+          line.projectedamount || 
+          line.projectedAmount || 
+          line.actual_amount || 
+          line.actualamount ||
+          line.actualAmount ||
+          line.amount ||
+          0
+        );
+        
+        const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
+        const isPaidMatch = line.is_paid === true || line.isPaid === true;
+        
+        if (amountMatch && isPaidMatch) {
+          console.log('✅ Match par description+montant+isPaid:', {
+            description: lineDesc,
+            amount: lineAmount,
+            isPaid: isPaidMatch
+          });
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (!expenseLine) {
+        console.error('❌ Ligne expense DB introuvable pour annulation');
+        console.error('Critères de recherche:', {
+          description: exp.description,
+          amount: expenseAmount,
+          uuid: exp.id,
+          dbLineId: exp.dbLineId
+        });
+        
+        alert(`Impossible de trouver la ligne de dépense en base.
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
+` +
+              `Description: ${exp.description}
+` +
+              `Montant: ${formatCurrency(exp.amount)}
+
+` +
+              `Lignes disponibles: ${expenseLines.length}`);
+        return;
+      }
+      
+      dbLineId = expenseLine.id;
+      console.log('✅ dbLineId trouvé:', dbLineId);
+    }
+    
+    // ✅ Appel backend via client API (CSRF + JWT auto)
     const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
-      {} // pas de payload
+      `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
+      {} // pas de payload spécifique
     );
-
+    
+    // Mettre à jour l'état local
     const updated = [...expenses];
     updated[index] = { ...updated[index], isPaid: false };
     setExpenses(updated);
-
-    await saveProjectState(expenses, updated);
-
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message);
+    
+    await saveProjectState(updated, revenues);
+    
+    // ✅ AJOUT: Rafraîchir les projets
+    console.log('🔄 Rafraîchissement après annulation...');
+    await refreshProjects();
+    
+    alert(result.message || 'Paiement annulé avec succès!');
   } catch (err) {
-    console.error('Erreur handleCancelPaymentExpense:', err);
+    console.error('❌ Erreur handleCancelPaymentExpense:', err);
     alert('Erreur annulation: ' + (err.message || err));
   }
 };
-
 
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
-
     if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+    
+    // ✅ Même logique que handleCancelPaymentExpense
+    let dbLineId = rev.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('🔍 Recherche dbLineId pour revenu:', {
+        description: rev.description,
+        amount: rev.amount
+      });
+      
+      // Recharger le projet
+      const freshProject = await projectsService.getById(project.id);
+      
+      let revenueLines = freshProject?.revenueLines || freshProject?.revenue_lines || [];
+      if (typeof revenueLines === 'string') {
+        try {
+          revenueLines = JSON.parse(revenueLines);
+        } catch (e) {
+          revenueLines = [];
+        }
+      }
+      
+      if (!Array.isArray(revenueLines) || revenueLines.length === 0) {
+        console.error('❌ Aucune ligne revenue trouvée');
+        alert('Impossible de trouver les lignes de revenus.');
+        await refreshProjects();
+        return;
+      }
+      
+      const revenueAmount = parseFloat(rev.amount) || 0;
+      
+      const revenueLine = revenueLines.find(line => {
+        // Match par UUID
+        if (line.uuid && rev.id && line.uuid === rev.id) return true;
+        
+        // Match par ID
+        if (line.id && rev.dbLineId && line.id === rev.dbLineId) return true;
+        
+        // Match par description + montant
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const revDesc = (rev.description || '').trim().toLowerCase();
+        if (lineDesc !== revDesc) return false;
+        
+        const lineAmount = parseFloat(
+          line.projected_amount || 
+          line.projectedamount || 
+          line.projectedAmount ||
+          line.amount ||
+          0
+        );
+        
+        const isReceivedMatch = line.is_received === true || line.isReceived === true;
+        
+        return Math.abs(lineAmount - revenueAmount) < 0.01 && isReceivedMatch;
+      });
+      
+      if (!revenueLine) {
+        console.error('❌ Ligne revenue DB introuvable pour annulation');
+        alert(`Impossible de trouver la ligne de revenu en base.
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
+` +
+              `Description: ${rev.description}
+` +
+              `Montant: ${formatCurrency(rev.amount)}`);
+        return;
+      }
+      
+      dbLineId = revenueLine.id;
+      console.log('✅ dbLineId trouvé:', dbLineId);
+    }
+    
     const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-      {} // pas de payload particulier
+      `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`,
+      {}
     );
-
+    
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: false };
     setRevenues(updated);
-
+    
     await saveProjectState(expenses, updated);
-
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message);
+    
+    // ✅ AJOUT: Rafraîchir
+    console.log('🔄 Rafraîchissement après annulation...');
+    await refreshProjects();
+    
+    alert(result.message || 'Encaissement annulé avec succès!');
   } catch (err) {
-    console.error('Erreur handleCancelPaymentRevenue:', err);
+    console.error('❌ Erreur handleCancelPaymentRevenue:', err);
     alert('Erreur annulation: ' + (err.message || err));
   }
 };
-
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
@@ -541,7 +896,16 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     roi: parseFloat(newRoi),
     expenses: JSON.stringify(expensesWithDate),  // ✅ AVEC plannedDate
     revenues: JSON.stringify(revenuesWithDate),  // ✅ AVEC plannedDate
-    metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
+    metadata: JSON.stringify({
+  pricePerContainer,
+  containerCount,
+  commissionRateProprio,
+  commissionRateRandou,
+  productType,
+  destination,
+  containerType
+})
+
   };
 
   console.log('📤 Payload envoyé:', {

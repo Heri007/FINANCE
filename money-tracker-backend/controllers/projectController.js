@@ -548,40 +548,41 @@ const revenuesJson = safeJsonArray(revenues);  // ✅ Plus explicite
     }
 
     // UPSERT (Mise à jour ou Création)
-    for (const item of expensesList) {
-      // Si l'ID est un entier (existant en base)
-      if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
-        await client.query(
-  `UPDATE project_expense_lines 
-   SET description=$1, category=$2, projected_amount=$3, actual_amount=$4, is_paid=$4, transaction_date=$5
-   WHERE id=$6`, 
-  [
-  item.description || '', 
-  item.category || 'Autre', 
-  parseFloat(item.amount || 0),
-  parseFloat(item.actualAmount || 0), // ✅ Ajouté
-  item.isPaid || false,
-  item.transactionDate || item.plannedDate,
-  parseInt(item.id, 10)
-]
-);
-      } else {
-        // Si l'ID est un UUID (nouveau du frontend)
-        await client.query(
-  `INSERT INTO project_expense_lines 
-   (project_id, description, category, projected_amount, actual_amount, is_paid, transaction_date)
-   VALUES ($1, $2, $3, $4, 0, $5, $6)`,
-  [
-    id,
-    item.description || '',
-    item.category || 'Autre',
-    parseFloat(item.amount || 0),
-    item.isPaid || false,
-    item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
-  ]
-);
-      }
-    }
+for (const item of expensesList) {
+  // Si l'ID est un entier (existant en base)
+  if (Number.isInteger(item.id) || (typeof item.id === 'string' && /^\d+$/.test(item.id))) {
+    await client.query(
+      `UPDATE project_expense_lines 
+       SET description=$1, category=$2, projected_amount=$3, actual_amount=$4, is_paid=$5, transaction_date=$6
+       WHERE id=$7`, 
+      [
+        item.description || '', 
+        item.category || 'Autre', 
+        parseFloat(item.amount || 0),
+        parseFloat(item.actualAmount || 0),
+        item.isPaid || false,
+        item.transactionDate || item.plannedDate,
+        parseInt(item.id, 10)
+      ]
+    );
+  } else {
+    // Si l'ID est un UUID (nouveau du frontend)
+    await client.query(
+      `INSERT INTO project_expense_lines 
+       (project_id, description, category, projected_amount, actual_amount, is_paid, transaction_date)
+       VALUES ($1, $2, $3, $4, 0, $5, $6)`,
+      [
+        id,
+        item.description || '',
+        item.category || 'Autre',
+        parseFloat(item.amount || 0),
+        item.isPaid || false,
+        item.transactionDate || item.plannedDate || (item.date ? item.date.split('T')[0] : null),
+      ]
+    );
+  }
+}
+
 
     // B. REVENUS (Même logique)
     const revenuesList = Array.isArray(revenues) ? revenues : JSON.parse(revenues || '[]');
@@ -881,6 +882,87 @@ exports.getUnpaidExpenses = async (req, res) => {
   }
 };
 
+// POST /api/projects/:projectId/expense-lines - Créer une nouvelle ligne de dépense
+exports.createExpenseLine = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { 
+      description, 
+      category, 
+      projectedamount, 
+      actualamount, 
+      transactiondate, 
+      ispaid 
+    } = req.body;
+
+    console.log('📝 Création expense line:', { projectId, description, projectedamount });
+
+    // ✅ Utiliser project_id, projected_amount, etc. (snake_case)
+    const result = await pool.query(
+      `INSERT INTO project_expense_lines 
+       (project_id, description, category, projected_amount, actual_amount, transaction_date, is_paid, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       RETURNING *`,
+      [
+        projectId,  // sera mis dans project_id
+        description, 
+        category || 'Non catégorisé', 
+        projectedamount,  // sera mis dans projected_amount
+        actualamount || 0, 
+        transactiondate || new Date(), 
+        ispaid || false
+      ]
+    );
+
+    console.log('✅ Expense line créée:', result.rows[0]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Erreur création expense line:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Créer une ligne de revenu
+exports.createRevenueLine = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { 
+      description, 
+      category, 
+      projectedamount, 
+      actualamount, 
+      transactiondate, 
+      isreceived 
+    } = req.body;
+
+    console.log('📝 Création revenue line:', { projectId, description, projectedamount });
+
+    const result = await pool.query(
+      `INSERT INTO project_revenue_lines 
+       (projectid, description, category, projectedamount, actualamount, transactiondate, isreceived, createdat)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       RETURNING *`,
+      [
+        projectId, 
+        description, 
+        category || 'Non catégorisé', 
+        projectedamount, 
+        actualamount || 0, 
+        transactiondate || new Date(), 
+        isreceived || false
+      ]
+    );
+
+    console.log('✅ Revenue line créée:', result.rows[0]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('❌ Erreur création revenue line:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+// Marquer une ligne de dépense comme payée
 // Marquer une ligne de dépense comme payée
 exports.markExpenseLinePaid = async (req, res) => {
   console.log('🔵 markExpenseLinePaid appelé');
@@ -892,10 +974,10 @@ exports.markExpenseLinePaid = async (req, res) => {
   try {
     const { projectId, lineId } = req.params;
     const { 
-      paidexternally,  // true = paiement externe sans créer de transaction
-      amount,          // Montant réel payé
-      paiddate,        // Date du paiement (format YYYY-MM-DD)
-      accountid        // ID du compte à débiter
+      paidexternally, // true = paiement depuis Coffre (compte externe)
+      amount, // Montant réel payé
+      paiddate, // Date du paiement (format YYYY-MM-DD)
+      accountid // ID du compte à débiter (optionnel si paidexternally)
     } = req.body;
     
     console.log('🔍 Données:', { projectId, lineId, paidexternally, amount, paiddate, accountid });
@@ -934,52 +1016,78 @@ exports.markExpenseLinePaid = async (req, res) => {
     
     let transactionId = null;
     
-    // 3. Si pas paiement externe, créer une transaction
-    if (!paidexternally) {
-      console.log('💳 Création transaction...');
-      
-      if (!accountid) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ message: 'Compte requis' });
-      }
-      
-      const txResult = await client.query(
-        `INSERT INTO transactions (
-          account_id, type, amount, category, description, 
-          transaction_date, is_planned, is_posted, project_id, project_line_id, user_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        RETURNING id`,
-        [
-          accountid,
-          'expense',
-          amount,
-          line.category || 'Projet - Dépense',
-          line.description || 'Paiement projet',
-          paiddate,
-          false,      // is_planned
-          true,       // is_posted
-          projectId,
-          lineId.toString(),  // project_line_id (text)
-          req.user?.user_id || 1
-        ]
-      );
-      
-      transactionId = txResult.rows[0].id;
-      console.log('✅ Transaction créée:', transactionId);
-    } else {
-      console.log('⚠️ Paiement externe');
-    }
+    // 3. ✅ CORRECTION: Si paidexternally = true, créer transaction depuis Coffre
+   // 3. ✅ CORRECTION: Si paidexternally = true, créer transaction depuis Coffre
+if (paidexternally) {
+  console.log('💳 Création transaction depuis Coffre...');
+  
+  const coffreAccountId = 5; // ID du compte Coffre
+  
+  const txResult = await client.query(
+    `INSERT INTO transactions (
+      account_id, type, amount, category, description, 
+      transaction_date, is_planned, is_posted, project_id, project_line_id, user_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING id`,
+    [
+      coffreAccountId,
+      'expense',
+      amount,
+      line.category || 'Projet - Dépense',
+      line.description || 'Paiement projet',
+      paiddate,
+      false, // is_planned
+      true,  // is_posted
+      projectId,
+      lineId.toString(), // project_line_id (text)
+      req.user?.user_id || 1
+    ]
+  );
+  
+  transactionId = txResult.rows[0].id;
+  console.log('✅ Transaction créée depuis Coffre:', transactionId);
+  
+} else if (accountid) {
+  // Si un compte spécifique est fourni
+  console.log('💳 Création transaction depuis compte:', accountid);
+  
+  const txResult = await client.query(
+    `INSERT INTO transactions (
+      account_id, type, amount, category, description, 
+      transaction_date, is_planned, is_posted, project_id, project_line_id, user_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING id`,
+    [
+      accountid,
+      'expense',
+      amount,
+      line.category || 'Projet - Dépense',
+      line.description || 'Paiement projet',
+      paiddate,
+      false, // is_planned
+      true,  // is_posted
+      projectId,
+      lineId.toString(),
+      req.user?.user_id || 1
+    ]
+  );
+  
+  transactionId = txResult.rows[0].id;
+  console.log('✅ Transaction créée:', transactionId);
+} else {
+  console.log('⚠️ Aucun compte spécifié, pas de transaction créée');
+}
     
     // 4. Mettre à jour la ligne
     console.log('📝 Mise à jour ligne...');
     const updateResult = await client.query(
       `UPDATE project_expense_lines
-       SET is_paid = TRUE,
-           actual_amount = $1,
-           transaction_date = $2,
-           last_synced_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
+      SET is_paid = TRUE,
+          actual_amount = $1,
+          transaction_date = $2,
+          last_synced_at = NOW()
+      WHERE id = $3
+      RETURNING *`,
       [amount, paiddate, lineId]
     );
     

@@ -128,6 +128,27 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
       await deleteTransaction(transaction.id);
       console.log('🗑️ Transaction supprimée');
 
+      // ✅ Nettoyer le JSON du projet si transaction liée
+    if (transaction.project_id) {
+      try {
+        const project = await projectsService.getById(transaction.project_id);
+        let expenses = JSON.parse(project.expenses || '[]');
+        
+        expenses = expenses.filter(exp => {
+          const match = exp.description === transaction.description &&
+                       Math.abs(parseFloat(exp.amount || 0) - parseFloat(transaction.amount)) < 0.01;
+          return !match;
+        });
+        
+        await projectsService.updateProject(transaction.project_id, {
+          expenses: JSON.stringify(expenses)
+        });
+      } catch (e) {
+        console.error('Erreur nettoyage projet:', e);
+      }
+    }
+
+
       if (projectId) {
         try {
           const proj = projects.find(p => String(p.id) === String(projectId));

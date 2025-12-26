@@ -50,24 +50,16 @@ export function ProjectDetailsModal({
   // =======================================================================
   // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
   // =======================================================================
-  const normalizeData = useMemo(() => {
-  console.log("📥 Normalisation projet:", project.name, {
-    hasExpenseLines: !!project.expenseLines,
-    hasExpenses: !!project.expenses,
-    expenseLinesCount: project.expenseLines?.length,
-    expensesCount: project.expenses?.length
-  });
-
+ const normalizeData = useMemo(() => {
+  console.log('🔄 Normalisation projet', project.name);
+  
   // Fonction pour parser et nettoyer n'importe quelle liste
   const cleanList = (jsonOrArray, type) => {
     let list = [];
     
-    // Si c'est déjà un tableau
     if (Array.isArray(jsonOrArray)) {
       list = jsonOrArray;
-    }
-    // Si c'est une chaîne JSON
-    else if (typeof jsonOrArray === 'string') {
+    } else if (typeof jsonOrArray === 'string') {
       try {
         list = JSON.parse(jsonOrArray);
       } catch (e) {
@@ -75,78 +67,103 @@ export function ProjectDetailsModal({
         list = [];
       }
     }
-
-    console.log(`🔧 ${type} raw:`, list.length, 'items');
-
+    
     return list.map(item => {
-      // Déterminer si c'est une ligne normalisée (avec ID entier) ou ancien format
       const isNormalizedLine = item.id && Number.isInteger(item.id);
       
       return {
-        // ID: priorité à l'ID normalisé, sinon UUID
         id: isNormalizedLine ? item.id : (item.id || Math.random().toString(36)),
-        
         description: item.description || item.category || 'Sans description',
         category: item.category || 'Autre',
-        
-        // Montant: chercher dans différents champs
         amount: parseFloat(
           item.amount || 
-          item.projectedAmount || 
-          item.projected_amount || 
-          item.actualAmount || 
-          item.actual_amount || 
+          item.projectedAmount || item.projectedamount || 
+          item.actualAmount || item.actualamount || 
+          item.montant ||
           0
         ),
-        
-        // État de paiement: chercher dans différents champs
         isPaid: !!(
-          item.isPaid || 
-          item.is_paid || 
-          item.isReceived || 
-          item.is_received
+          item.isPaid || item.ispaid || 
+          item.isReceived || item.isreceived
         ),
-        
-        // Date: chercher dans différents champs
-        date: item.date || 
-              item.transactionDate || 
-              item.transaction_date || 
-              new Date(),
-        
-        // Compte: chercher dans différents champs (important pour le frontend)
-        account: item.account || 'Coffre', // Valeur par défaut
-        
-        // Phase: seulement dans l'ancien format
-        phase: item.phase || ''
+        date: item.date || item.transactionDate || item.transactiondate || new Date(),
+        account: item.account || 'Coffre',
+        phase: item.phase,
       };
     });
   };
 
-  // Sinon, fallback sur expenses/revenues
-  let expenses = [];
-  let revenues = [];
-
+  // ✅ CORRECTION: FUSIONNER au lieu de prioriser
+  let expensesFromLines = [];
+  let expensesFromJSON = [];
+  
   if (project.expenseLines && project.expenseLines.length > 0) {
-    console.log('✅ Utilisation de expenseLines');
-    expenses = cleanList(project.expenseLines, 'expenseLines');
-  } else if (project.expenses) {
-    console.log('⚠️ Fallback sur expenses (ancien format)');
-    expenses = cleanList(project.expenses, 'expenses');
+    expensesFromLines = cleanList(project.expenseLines, 'expenseLines');
+    console.log('📋 expenseLines DB:', expensesFromLines.length);
   }
-
+  
+  if (project.expenses) {
+    expensesFromJSON = cleanList(project.expenses, 'expenses');
+    console.log('📋 expenses JSON:', expensesFromJSON.length);
+  }
+  
+  // ✅ Fusionner en évitant les doublons
+  const expenses = [...expensesFromLines];
+  
+  expensesFromJSON.forEach(jsonExp => {
+    const exists = expenses.some(dbExp => {
+      const descMatch = (dbExp.description || '').trim().toLowerCase() === 
+                       (jsonExp.description || '').trim().toLowerCase();
+      const amountMatch = Math.abs(dbExp.amount - jsonExp.amount) < 0.01;
+      
+      return descMatch && amountMatch;
+    });
+    
+    if (!exists) {
+      console.log('➕ Ajout expense JSON manquant:', jsonExp.description);
+      expenses.push(jsonExp);
+    }
+  });
+  
+  // ✅ Même logique pour revenues
+  let revenuesFromLines = [];
+  let revenuesFromJSON = [];
+  
   if (project.revenueLines && project.revenueLines.length > 0) {
-    console.log('✅ Utilisation de revenueLines');
-    revenues = cleanList(project.revenueLines, 'revenueLines');
-  } else if (project.revenues) {
-    console.log('⚠️ Fallback sur revenues (ancien format)');
-    revenues = cleanList(project.revenues, 'revenues');
+    revenuesFromLines = cleanList(project.revenueLines, 'revenueLines');
   }
+  
+  if (project.revenues) {
+    revenuesFromJSON = cleanList(project.revenues, 'revenues');
+  }
+  
+  const revenues = [...revenuesFromLines];
+  
+  revenuesFromJSON.forEach(jsonRev => {
+    const exists = revenues.some(dbRev => {
+      const descMatch = (dbRev.description || '').trim().toLowerCase() === 
+                       (jsonRev.description || '').trim().toLowerCase();
+      const amountMatch = Math.abs(dbRev.amount - jsonRev.amount) < 0.01;
+      
+      return descMatch && amountMatch;
+    });
+    
+    if (!exists) {
+      console.log('➕ Ajout revenue JSON manquant:', jsonRev.description);
+      revenues.push(jsonRev);
+    }
+  });
+  
+  console.log('✅ Fusionné:', {
+    expenses: expenses.length,
+    revenues: revenues.length
+  });
 
-  console.log(`✅ ${expenses.length} dépenses, ${revenues.length} revenus normalisés.`);
   return { expenses, revenues };
 }, [project]);
 
-  const { expenses, revenues } = normalizeData;
+const { expenses, revenues } = normalizeData;
+
 
   // =======================================================================
   // 2. CALCULS FINANCIERS

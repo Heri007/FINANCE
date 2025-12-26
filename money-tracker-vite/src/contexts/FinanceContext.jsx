@@ -104,23 +104,34 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
   }, [isAuthenticated]);
 
   const refreshProjects = useCallback(async () => {
-    if (!isAuthenticated) return;
-
-    setProjectsLoading(true);
-    try {
-      const data = await projectsService.getAll();
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (error) {
-      if (error?.status === 401) {
-        setProjects([]);
-        return;
-      }
-      console.error('Erreur chargement projets:', error);
+  if (!isAuthenticated) return;
+  setProjectsLoading(true);
+  try {
+    const data = await projectsService.getAll();
+    
+    // ✅ AJOUT: Normaliser les données avant de les stocker
+    const normalized = Array.isArray(data) ? data.map(project => ({
+      ...project,
+      // Parser expenses/revenues si c'est du JSON string
+      expenses: parseJSONSafe(project.expenses),
+      revenues: parseJSONSafe(project.revenues),
+      expenseLines: project.expenseLines || project.expense_lines || [],
+      revenueLines: project.revenueLines || project.revenue_lines || []
+    })) : [];
+    
+    setProjects(normalized);
+  } catch (error) {
+    if (error?.status === 401) {
       setProjects([]);
-    } finally {
-      setProjectsLoading(false);
+      return;
     }
-  }, [isAuthenticated]);
+    console.error('Erreur chargement projets:', error);
+    setProjects([]);
+  } finally {
+    setProjectsLoading(false);
+  }
+}, [isAuthenticated]);
+
 
   const refreshReceivables = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -163,7 +174,6 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
   refreshProjects();
   refreshReceivables();
   refreshProjectLines(); // ✅ AJOUT
-  loadData(); // ✅ appelle ton log Coffre
 }, [
   isAuthenticated,
   refreshAccounts,
@@ -290,35 +300,6 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
     [refreshTransactions, refreshAccounts]
   );
 
-  const loadData = async () => {
-  try {
-    setLoading(true);
-
-    const [accountsRes, transactionsRes, projectsRes] = await Promise.all([
-      apiRequest('/accounts'),
-      apiRequest('/transactions'),
-      apiRequest('/projects'),
-    ]);
-
-    // accountsRes / transactionsRes / projectsRes sont déjà les data JSON directes
-    const accountsData = Array.isArray(accountsRes) ? accountsRes : accountsRes?.data || [];
-    const transactionsData = Array.isArray(transactionsRes) ? transactionsRes : transactionsRes?.data || [];
-    const projectsData = Array.isArray(projectsRes) ? projectsRes : projectsRes?.data || [];
-
-    const coffre = accountsData.find((a) => a.name === 'Coffre');
-    console.log('🧾 Coffre account depuis API:', coffre);
-
-    setAccounts(accountsData);
-    setTransactions(transactionsData);
-    setProjects(projectsData);
-
-  } catch (error) {
-    console.error('Erreur chargement données:', error);
-  } finally {
-    setLoading(false);
-  }
-};
-
   // ============================================================
   // MUTATIONS - PROJECTS
   // ============================================================
@@ -383,15 +364,19 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
       }
 
       const parseExpenses = (data) => {
-        if (!data || typeof data !== 'string') return [];
-        try {
-          const parsed = JSON.parse(data);
-          return Array.isArray(parsed) ? parsed : [];
-        } catch (e) {
-          console.error('Parse expenses failed', e);
-          return [];
-        }
-      };
+  // ✅ AJOUT: Gérer si data est déjà un array
+  if (Array.isArray(data)) return data;
+  
+  if (!data || typeof data !== 'string') return [];
+  try {
+    const parsed = JSON.parse(data);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error('Parse expenses failed', e);
+    return [];
+  }
+};
+
 
       const parsedExpenses = parseExpenses(project.expenses);
       const parsedRevenues = parseExpenses(project.revenues);
@@ -440,8 +425,7 @@ console.log('🧪 RAW pendingRevenues:', pendingRevenues);
       await updateProject(projectId, { status: 'active' });
 
       await refreshProjects();
-      await refreshTransactions();
-      await refreshAccounts();
+      await Promise.all([refreshTransactions(), refreshAccounts()]);
 
       return { success: true, transactionCount: newTransactions.length };
     } catch (error) {
@@ -729,7 +713,7 @@ const payload = newTransactions.map(t => ({
       // 8. Recalculer tous les soldes
 console.log('🔄 Recalcul des soldes...');
 try {
-  await api.post('/accounts/recalculate-all', {}); // pas de payload
+  await apiRequest('accounts/recalculate-all', { method: 'POST' });
 } catch (recalcError) {
   console.error('Erreur recalcul:', recalcError);
 }

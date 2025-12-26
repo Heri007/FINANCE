@@ -322,10 +322,11 @@ router.put('/projects/:id', async (req, res) => {
     const { start_date, end_date, progress, status } = req.body;
 
     // Vérifier que le projet appartient à cet opérateur
-    const checkProject = await client.query(
-      'SELECT id FROM projects WHERE id = $1 AND operator_id = $2',
-      [id, req.user.userId]
-    );
+const checkProject = await client.query(
+  'SELECT id FROM projects WHERE id = $1',
+  [id]
+);
+
 
     if (checkProject.rows.length === 0) {
       return res.status(404).json({ error: 'Projet non trouvé ou non autorisé' });

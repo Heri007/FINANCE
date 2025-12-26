@@ -65,6 +65,7 @@ router.post('/:id/reactivate', projectsController.reactivateProject);
 // Routes lignes spécifiques à un projet
 router.get('/:id/expense-lines', projectsController.getProjectExpenseLines);
 router.get('/:id/revenue-lines', projectsController.getProjectRevenueLines);
+router.post('/:projectId/expense-lines', projectsController.createExpenseLine);
 
 // CRUD projet par ID
 router.get('/:id', projectsController.getProjectById);
