@@ -832,9 +832,9 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     }
     
     const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`,
-      {}
-    );
+  `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`, // ✅ OK
+  {}
+);
     
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: false };

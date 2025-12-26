@@ -210,7 +210,7 @@ exports.updateTransaction = async (req, res, next) => {
 
 
 // ============================================================================
-// 5. DELETE - Supprimer
+// 5. DELETE - Supprimer une transaction
 // ============================================================================
 exports.deleteTransaction = async (req, res, next) => {
   const client = await pool.connect();
@@ -218,25 +218,97 @@ exports.deleteTransaction = async (req, res, next) => {
     await client.query('BEGIN');
     const { id } = req.params;
 
+    // 1. Récupérer la transaction avant suppression
     const checkResult = await client.query('SELECT * FROM transactions WHERE id = $1', [id]);
     if (checkResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Transaction introuvable' });
     }
-    const transaction = checkResult.rows[0];
+    
+    const transaction = checkResult.rows;
+    console.log('🗑️ Suppression transaction:', {
+      id: transaction.id,
+      description: transaction.description,
+      amount: transaction.amount,
+      project_line_id: transaction.project_line_id
+    });
 
-    // Annuler l'impact solde si postée
-    if (transaction.is_posted) {
-      const updateQuery = transaction.type === 'income'
-        ? 'UPDATE accounts SET balance = balance - $1 WHERE id = $2'
-        : 'UPDATE accounts SET balance = balance + $1 WHERE id = $2';
+    // 2. ✅ CRITIQUE: Si liée à une ligne projet, la réinitialiser
+    if (transaction.project_line_id) {
+      console.log('🔄 Réinitialisation ligne expense ID:', transaction.project_line_id);
       
-      await client.query(updateQuery, [transaction.amount, transaction.account_id]);
+      // Vérifier si c'est une expense ou revenue
+      const expenseCheck = await client.query(
+        'SELECT id FROM project_expense_lines WHERE id = $1',
+        [transaction.project_line_id]
+      );
+      
+      const revenueCheck = await client.query(
+        'SELECT id FROM project_revenue_lines WHERE id = $1',
+        [transaction.project_line_id]
+      );
+      
+      if (expenseCheck.rows.length > 0) {
+        // Réinitialiser expense line
+        await client.query(
+          `UPDATE project_expense_lines 
+           SET is_paid = false, 
+               actual_amount = 0, 
+               transaction_date = NULL,
+               transaction_id = NULL,
+               last_synced_at = NOW()
+           WHERE id = $1`,
+          [transaction.project_line_id]
+        );
+        console.log('✅ Ligne expense réinitialisée:', transaction.project_line_id);
+      } else if (revenueCheck.rows.length > 0) {
+        // Réinitialiser revenue line
+        await client.query(
+          `UPDATE project_revenue_lines 
+           SET is_received = false, 
+               actual_amount = 0, 
+               transaction_date = NULL,
+               transaction_id = NULL,
+               last_synced_at = NOW()
+           WHERE id = $1`,
+          [transaction.project_line_id]
+        );
+        console.log('✅ Ligne revenue réinitialisée:', transaction.project_line_id);
+      } else {
+        console.warn('⚠️ Ligne projet introuvable:', transaction.project_line_id);
+      }
     }
 
+    // 3. Annuler l'impact sur le solde si postée
+    if (transaction.is_posted) {
+      const updateQuery = transaction.type === 'income'
+        ? 'UPDATE accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2'
+        : 'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2';
+      
+      await client.query(updateQuery, [transaction.amount, transaction.account_id]);
+      console.log('✅ Compte recrédité:', transaction.account_id, transaction.amount);
+    }
+
+    // Après avoir annulé le solde, avant DELETE
+if (transaction.project_line_id) {
+  await client.query(
+    'UPDATE project_expense_lines SET is_paid = FALSE, actual_amount = 0, transaction_id = NULL WHERE id = $1',
+    [transaction.project_line_id]
+  );
+}
+
+    // 4. Supprimer la transaction
     await client.query('DELETE FROM transactions WHERE id = $1', [id]);
+    console.log('✅ Transaction supprimée:', id);
+
     await client.query('COMMIT');
-    res.json({ message: 'Transaction supprimée' });
+    
+    res.json({ 
+      message: 'Transaction supprimée',
+      expenseLineReset: !!transaction.project_line_id,
+      accountCredited: transaction.is_posted
+    });
+    
   } catch (error) {
     await client.query('ROLLBACK');
     logger.error('❌ Erreur deleteTransaction:', { error: error.message });
