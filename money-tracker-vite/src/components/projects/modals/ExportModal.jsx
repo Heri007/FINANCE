@@ -593,12 +593,19 @@ ${createError.message}`);
           amount: parseFloat(rev.amount),
           received_date: rev.realDate || new Date().toISOString().split('T')[0],
         };
+// ✅ APRÈS recherche de dbLineId
+let dbLineId = rev.dbLineId;
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
-      payload
-    );
+if (!dbLineId) {
+  // ... logique de recherche ...
+  dbLineId = revenueLine.id;
+}
+
+const result = await api.patch(
+  `/projects/${project.id}/revenue-lines/${dbLineId}/mark-received`,  // ✅ Utilise dbLineId
+  payload
+);
+
 
     const updated = [...revenues];
     updated[index] = { ...updated[index], isPaid: true };

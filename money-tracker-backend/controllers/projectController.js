@@ -998,7 +998,7 @@ exports.markExpenseLinePaid = async (req, res) => {
   const client = await pool.connect();
   
   try {
-    const { projectId, lineId } = req.params;
+    const { id, lineId } = req.params;  // Au lieu de projectId
     const { 
       paidexternally, // true = paiement depuis Coffre (compte externe)
       amount, // Montant réel payé
@@ -1046,7 +1046,17 @@ exports.markExpenseLinePaid = async (req, res) => {
     if (paidexternally) {
       console.log('💳 Création transaction depuis Coffre...');
       
-      const coffreAccountId = 5; // ID du compte Coffre
+      // ✅ AMÉLIORATION : Vérifier dynamiquement
+const coffreResult = await client.query(
+  "SELECT id FROM accounts WHERE name = 'Coffre' OR id = 5 LIMIT 1"
+);
+
+if (coffreResult.rows.length === 0) {
+  await client.query('ROLLBACK');
+  return res.status(404).json({ message: 'Compte Coffre introuvable' });
+}
+
+const coffreAccountId = coffreResult.rows[0].id;
       
       // Créer la transaction
       const txResult = await client.query(
@@ -1169,7 +1179,7 @@ exports.markExpenseLinePaid = async (req, res) => {
 exports.markRevenueLineReceived = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { projectId, lineId } = req.params;
+    const { id, lineId } = req.params;  // Au lieu de projectId
     const { 
       received_externally,
       transaction_id,
@@ -1300,7 +1310,7 @@ exports.markRevenueLineReceived = async (req, res) => {
 exports.cancelExpenseLinePayment = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { projectId, lineId } = req.params;
+    const { id, lineId } = req.params;  // Au lieu de projectId
 
     await client.query('BEGIN');
 
@@ -1381,7 +1391,7 @@ if (line.transaction_id) {
 exports.cancelRevenueLineReceipt = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { projectId, lineId } = req.params;
+    const { id, lineId } = req.params;  // Au lieu de projectId
 
     await client.query('BEGIN');
 
@@ -1454,7 +1464,7 @@ exports.cancelRevenueLineReceipt = async (req, res) => {
 exports.cancelExpensePayment = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { projectId, lineId } = req.params;
+    const { id, lineId } = req.params;  // Au lieu de projectId
     
     await client.query('BEGIN');
     

@@ -39,30 +39,16 @@ router.post('/:id/reactivate', projectsController.reactivateProject);
 // ---------- ROUTES LIGNES SPÉCIFIQUES ----------
 
 // Marquer lignes comme payées/reçues
-router.patch(
-  '/:projectId/expense-lines/:lineId/mark-paid',
-  projectsController.markExpenseLinePaid
-);
-
-router.patch(
-  '/:projectId/revenue-lines/:lineId/mark-received',
-  projectsController.markRevenueLineReceived
-);
+router.patch('/:id/expense-lines/:lineId/mark-paid', projectsController.markExpenseLinePaid);
+router.patch('/:id/revenue-lines/:lineId/mark-received', projectsController.markRevenueLineReceived);
 
 // Annuler paiement/encaissement
-router.patch(
-  '/:projectId/expense-lines/:lineId/cancel-payment',
-  projectsController.cancelExpenseLinePayment
-);
-
-router.patch(
-  '/:projectId/revenue-lines/:lineId/cancel-receipt',
-  projectsController.cancelRevenueLineReceipt
-);
+router.patch('/:id/expense-lines/:lineId/cancel-payment', projectsController.cancelExpenseLinePayment);
+router.patch('/:id/revenue-lines/:lineId/cancel-receipt', projectsController.cancelRevenueLineReceipt);
 
 // Créer des lignes
-router.post('/:projectId/expense-lines', projectsController.createExpenseLine);
-router.post('/:projectId/revenue-lines', projectsController.createRevenueLine); // ✅ AJOUTÉ
+router.post('/:id/expense-lines', projectsController.createExpenseLine);
+router.post('/:id/revenue-lines', projectsController.createRevenueLine);
 
 // Lister les lignes d'un projet
 router.get('/:id/expense-lines', projectsController.getProjectExpenseLines);

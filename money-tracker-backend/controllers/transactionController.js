@@ -234,50 +234,23 @@ exports.deleteTransaction = async (req, res, next) => {
     });
 
     // 2. ✅ CRITIQUE: Si liée à une ligne projet, la réinitialiser
-    if (transaction.project_line_id) {
-      console.log('🔄 Réinitialisation ligne expense ID:', transaction.project_line_id);
-      
-      // Vérifier si c'est une expense ou revenue
-      const expenseCheck = await client.query(
-        'SELECT id FROM project_expense_lines WHERE id = $1',
-        [transaction.project_line_id]
-      );
-      
-      const revenueCheck = await client.query(
-        'SELECT id FROM project_revenue_lines WHERE id = $1',
-        [transaction.project_line_id]
-      );
-      
-      if (expenseCheck.rows.length > 0) {
-        // Réinitialiser expense line
-        await client.query(
-          `UPDATE project_expense_lines 
-           SET is_paid = false, 
-               actual_amount = 0, 
-               transaction_date = NULL,
-               transaction_id = NULL,
-               last_synced_at = NOW()
-           WHERE id = $1`,
-          [transaction.project_line_id]
-        );
-        console.log('✅ Ligne expense réinitialisée:', transaction.project_line_id);
-      } else if (revenueCheck.rows.length > 0) {
-        // Réinitialiser revenue line
-        await client.query(
-          `UPDATE project_revenue_lines 
-           SET is_received = false, 
-               actual_amount = 0, 
-               transaction_date = NULL,
-               transaction_id = NULL,
-               last_synced_at = NOW()
-           WHERE id = $1`,
-          [transaction.project_line_id]
-        );
-        console.log('✅ Ligne revenue réinitialisée:', transaction.project_line_id);
-      } else {
-        console.warn('⚠️ Ligne projet introuvable:', transaction.project_line_id);
-      }
-    }
+    // ✅ EXCELLENT CODE
+if (transaction.project_line_id) {
+  const expenseCheck = await client.query('SELECT id FROM project_expense_lines WHERE id = $1', [transaction.project_line_id]);
+  const revenueCheck = await client.query('SELECT id FROM project_revenue_lines WHERE id = $1', [transaction.project_line_id]);
+  
+  if (expenseCheck.rows.length > 0) {
+    await client.query(
+      'UPDATE project_expense_lines SET is_paid = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
+      [transaction.project_line_id]
+    );
+  } else if (revenueCheck.rows.length > 0) {
+    await client.query(
+      'UPDATE project_revenue_lines SET is_received = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
+      [transaction.project_line_id]
+    );
+  }
+}
 
     // 3. Annuler l'impact sur le solde si postée
     if (transaction.is_posted) {
