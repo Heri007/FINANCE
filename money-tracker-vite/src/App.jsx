@@ -54,6 +54,7 @@ import {
   Lightbulb,
   Zap,
   Target,
+  BarChart, PieChart, LineChart, AreaChart, 
 } from 'lucide-react';
 
 
@@ -82,6 +83,7 @@ import transactionsService from './services/transactionsService';
 // ============================================================================
 import { Header } from "./components/layout/Header";
 import { Navigation } from "./components/layout/Navigation";
+import GanttTimelineModal from './components/operator/GanttTimelineModal';
 
 // ============================================================================
 // COMPOSANTS - COMPTES
@@ -214,6 +216,7 @@ export default function App() {
   // Navigation principale
   const [activeTab, setActiveTab] = useState("overview");
   const [activeView, setActiveView] = useState("dashboard");
+  const [showGanttTimeline, setShowGanttTimeline] = useState(false);
   
   // Modals de création/édition
   const [showAdd, setShowAdd] = useState(false);
@@ -784,8 +787,10 @@ const handleProjectUpdated = async (projectId) => {
       <Navigation
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          onOpenGanttTimeline={() => setShowGanttTimeline(true)}
+          isGanttOpen={showGanttTimeline}
         />
-
+      
         <main className="px-8 py-8">
           {activeTab === "overview" && (
             <div className="space-y-8">
@@ -1068,6 +1073,7 @@ const handleProjectUpdated = async (projectId) => {
 )}
       {showOperator && <OperatorDashboard onClose={() => setShowOperator(false)} projects={projects} transactions={transactions} accounts={accounts} />}
       {showContentReplicator && <ContentReplicator onClose={() => setShowContentReplicator(false)} />}
+  
       
       <ProjectsListModal
         isOpen={showProjectsList}
@@ -1086,6 +1092,71 @@ const handleProjectUpdated = async (projectId) => {
         transactions={transactions}
         totalBalance={totalBalance}
       />
+<ProjectsListModal
+  isOpen={showProjectsList}
+  onClose={() => setShowProjectsList(false)}
+  onNewProject={() => { setEditingProject(null); setShowProjectPlanner(true); }}
+  onEditProject={handleEditProject}
+  onActivateProject={handleActivateProject}
+  onDeleteProject={deleteProject}
+  onCompleteProject={handleCompleteProject}
+  onProjectUpdate={refreshProjects}
+  onDeactivateProject={deactivateProject}
+  onReactivateProject={handleReactivateProject}
+  onTransactionClick={handleTransactionClick}
+  accounts={accounts}
+  projects={projects}
+  transactions={transactions}
+  totalBalance={totalBalance}
+/>
+
+{/* ✅ CORRECTION : Ajouter toutes les props nécessaires */}
+{showGanttTimeline && (
+  <GanttTimelineModal 
+    isOpen={showGanttTimeline}
+    onClose={() => {
+      console.log('🔴 Fermeture Gantt Timeline');
+      setShowGanttTimeline(false);
+    }}
+    projects={projects}                           // ✅ AJOUTER
+    onUpdateProject={async (id, updates) => {     // ✅ AJOUTER
+      console.log('Mise à jour projet:', id, updates);
+      try {
+        await projectsService.update(id, updates);
+        await refreshProjects();
+      } catch (error) {
+        console.error('Erreur mise à jour projet:', error);
+        alert(`Erreur: ${error.message}`);
+      }
+    }}
+    onRefresh={refreshProjects}                   // ✅ AJOUTER
+  />
+)}
+
+<ProjectPlannerHub
+  isOpen={showProjectPlanner}
+  onClose={() => {
+    setShowProjectPlanner(false);
+    setEditingProject(null);
+  }}
+  accounts={accounts}
+  project={editingProject}
+  onProjectSaved={handleProjectUpdated}
+  onProjectUpdated={handleProjectUpdated}
+  createTransaction={createTransaction}
+/>
+
+{editingTransaction && (
+  <TransactionEditModal
+    transaction={editingTransaction}
+    isOpen={!!editingTransaction}
+    onClose={() => setEditingTransaction(null)}
+    onDelete={handleTransactionDelete}
+    onDeleted={handleTransactionDelete}
+    onUpdate={handleTransactionUpdate}
+    accounts={accounts}
+  />
+)}
 
     <ProjectPlannerHub
   isOpen={showProjectPlanner}
@@ -1125,6 +1196,8 @@ const handleProjectUpdated = async (projectId) => {
         isOpen={showNotes}
         onClose={() => setShowNotes(false)}
       />
+
+
     </>
   );
 }

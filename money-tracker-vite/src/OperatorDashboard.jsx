@@ -5,7 +5,6 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMont
 import { fr } from 'date-fns/locale';
 import operatorService from './services/operatorService';
 import { CopyButton } from './components/common/CopyButton';
-import GanttTimelineModal from './components/operator/GanttTimelineModal';
 import { api } from './services/api'; // adapte le chemin
 
 
@@ -364,19 +363,7 @@ const calculateInvestedAmount = (project) => {
               <p className="text-purple-100 mt-1">Execution • SOPs • Tâches • Projets Actifs</p>
             </div>
             <div className="flex items-center gap-3">
-              <button
-  onClick={() => {
-    console.log('🖱️ CLIC sur bouton Gantt Timeline');
-    console.log('📊 Projets disponibles:', projects);
-    console.log('📊 Nombre de projets:', projects?.length);
-    setShowGanttTimeline(true);
-    console.log('✅ showGanttTimeline mis à true');
-  }}
-  className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors shadow-md"
->
-  <Calendar size={20} />
-  Gantt Timeline
-</button>
+              
               <CopyButton getText={generateCopyText} />
               <button
                 onClick={onClose}
