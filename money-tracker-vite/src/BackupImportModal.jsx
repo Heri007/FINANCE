@@ -1,7 +1,7 @@
 // src/BackupImportModal.jsx - VERSION SIMPLIFIÉE ET CORRIGÉE
 import React, { useState } from 'react';
 import { X, Upload, AlertTriangle } from 'lucide-react';
-import { API_BASE } from './services/api';
+import api from './services/api';
 
 export function BackupImportModal({ onClose, onRestoreSuccess }) {
   const [file, setFile] = useState(null);
