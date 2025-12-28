@@ -9,6 +9,7 @@ import { CalculatorInput } from '../../common/CalculatorInput';
 import projectsService from '../../../services/projectsService';
 import transactionsService from '../../../services/transactionsService';
 import { useFinance } from '../../../contexts/FinanceContext';
+import api from '../../../services/api';
 
 
 // Taux selon le Code Minier 2023 (Loi n°2023-007)
@@ -532,10 +533,7 @@ const handlePayExpense = async (expenseId) => {
     }
 
     console.log('💳 Paiement de la ligne:', expenseId, expense.description);
-    
-    // ✅ AJOUT : Logger l'expense complet
     console.log('🔍 Expense state complet:', expense);
-    
     console.log('📋 ExpenseLines disponibles:', project?.expenseLines?.map(line => ({
       id: line.id,
       description: line.description,
@@ -548,6 +546,7 @@ const handlePayExpense = async (expenseId) => {
       `Paiement de ${expense.description}\nMontant: ${expense.amount.toLocaleString()} Ar\nCompte: ${expense.account}\n\nCe paiement a-t-il DÉJÀ ÉTÉ EFFECTUÉ physiquement?\n\nCliquez OK si DÉJÀ PAYÉ (pas d'impact sur le Coffre)\nCliquez Annuler pour CRÉER UNE TRANSACTION (débite le Coffre)`
     );
 
+    // ✅ 1. TROUVER OU VALIDER LE dbLineId
     let dbLineId = expense.dbLineId;
     
     if (!dbLineId) {
@@ -564,11 +563,10 @@ const handlePayExpense = async (expenseId) => {
         const expDesc = expense.description?.trim();
         const descMatch = lineDesc === expDesc;
         
-        // ✅ CORRECTION : Essayer avec projected_amount ET projectedamount
         const lineProjectedAmount = parseFloat(
           line.projectedamount || 
           line.projected_amount || 
-          line.projectedAmount ||  // CamelCase aussi
+          line.projectedAmount ||
           0
         );
         const expenseAmount = parseFloat(expense.amount || 0);
@@ -578,10 +576,6 @@ const handlePayExpense = async (expenseId) => {
           lineDesc,
           expDesc,
           descMatch,
-          lineDescLength: lineDesc?.length,
-          expDescLength: expDesc?.length,
-          lineDescCharCodes: lineDesc?.split('').map(c => c.charCodeAt(0)),
-          expDescCharCodes: expDesc?.split('').map(c => c.charCodeAt(0)),
           lineAmount: lineProjectedAmount,
           expenseAmount,
           amountMatch,
@@ -601,7 +595,6 @@ const handlePayExpense = async (expenseId) => {
             description: line.description,
             projectedamount: line.projectedamount,
             projected_amount: line.projected_amount,
-            // ✅ Afficher TOUS les champs possibles
             allKeys: Object.keys(line)
           }))
         });
@@ -615,40 +608,52 @@ const handlePayExpense = async (expenseId) => {
       console.log('✅ Utilisation du dbLineId stocké:', dbLineId);
     }
 
+    // ✅ 2. VALIDER LE COMPTE
     const accountObj = accounts.find(a => a.name === expense.account);
     if (!accountObj) {
       alert(`Compte ${expense.account} introuvable`);
       return;
     }
 
-    const token = localStorage.getItem('token');
-    const headers = {
-      'Content-Type': 'application/json'
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    // ✅ 3. CONSTRUIRE LE PAYLOAD
+    const payload = alreadyPaid
+      ? {
+          paidexternally: true,
+          amount: expense.amount,
+          paiddate: expense.date 
+            ? new Date(expense.date).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+          accountid: accountObj.id,
+        }
+      : {
+          create_transaction: true,
+          amount: expense.amount,
+          paiddate: expense.date 
+            ? new Date(expense.date).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+          accountid: accountObj.id,
+        };
 
-   //(CSRF + JWT auto)
-const result = await api.patch(
-  `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-  payload
-);
+    console.log('📤 Payload envoyé:', payload);
 
+    // ✅ 4. APPEL API (CSRF + JWT auto via le client api)
+    const result = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      payload
+    );
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Erreur lors du paiement');
-    }
+    console.log('✅ Réponse serveur:', result);
 
-    const data = await response.json();
-    console.log('✅ Ligne marquée comme payée:', data);
-
+    // ✅ 5. METTRE À JOUR L'ÉTAT LOCAL
     setExpenses(expenses.map(e =>
       e.id === expenseId ? { ...e, isPaid: true, dbLineId } : e
     ));
 
+    // ✅ 6. RAFRAÎCHIR LES DONNÉES
     await loadProjectData();
+
+    alert(result.message || 'Dépense payée avec succès!');
+
   } catch (error) {
     console.error('❌ Erreur paiement:', error);
     alert(`Erreur lors du paiement: ${error.message}`);

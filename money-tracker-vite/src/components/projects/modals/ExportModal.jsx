@@ -486,36 +486,83 @@ const handlePayerDepense = async (exp, index) => {
           expenseLine = newLine;
           console.log('✅ Ligne créée:', newLine);
           
-          // Recharger le projet pour avoir les nouvelles données
+          // ✅ AJOUT 1: Attendre que la transaction SQL soit commitée
+          console.log('⏳ Attente sécurité COMMIT (500ms)...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // ✅ AJOUT 2: Vérifier que la ligne existe vraiment avec retry
+          let lineExists = false;
+          let retries = 0;
+          const maxRetries = 5;
+          
+          while (!lineExists && retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            try {
+              // ✅ CORRECTION: Vérifier via le projet complet au lieu d'un endpoint inexistant
+              const freshProject = await api.get(`/projects/${project.id}`);
+              const lineFound = freshProject.expenseLines?.some(line => 
+                String(line.id) === String(newLine.id)
+              );
+              
+              if (lineFound) {
+                lineExists = true;
+                console.log(`✅ Ligne ${newLine.id} vérifiée et présente dans le projet après ${retries + 1} tentative(s)`);
+              } else {
+                throw new Error('Ligne pas encore dans le projet');
+              }
+            } catch (verifyError) {
+              retries++;
+              if (retries < maxRetries) {
+                console.log(`⏳ Ligne ${newLine.id} pas encore visible dans le projet, retry ${retries}/${maxRetries}...`);
+              } else {
+                console.error(`❌ Ligne ${newLine.id} toujours introuvable après ${maxRetries} tentatives`);
+                throw new Error('La ligne créée n\'est pas accessible. Réessayez dans quelques secondes.');
+              }
+            }
+          }
+          
+          // ✅ AJOUT 3: Maintenant qu'on est sûr que la ligne existe, on peut recharger
           if (onProjectUpdated) {
+            console.log('🔄 Rechargement du projet après vérification ligne...');
             await onProjectUpdated(project.id);
           }
+          
         } catch (createError) {
           console.error('❌ Erreur création ligne:', createError);
           alert(`Impossible de créer la ligne en base:\n${createError.message}`);
           return;
         }
-      }
+      } // ⬅️ FIN du if (!expenseLine)
 
+      // ✅ CORRECTION: Cette ligne doit être ICI (après le if, pas dedans)
       dbLineId = expenseLine.id;
       console.log('✅ dbLineId:', dbLineId);
+      
+    } else {
+      console.log('✅ dbLineId déjà stocké:', dbLineId);
     }
 
-    // ✅ Demander confirmation de paiement
-    const alreadyPaid = window.confirm(
-      `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et débite le compte.`
+    // ✅ Demander confirmation de paiement (LOGIQUE INVERSÉE)
+    const createTransaction = window.confirm(
+      `💰 PAIEMENT: ${formatCurrency(exp.amount)}\n` +
+      `Compte: ${exp.account}\n\n` +
+      `❓ Voulez-vous CRÉER UNE TRANSACTION et débiter le compte ?\n\n` +
+      `👉 Cliquez OK pour PAYER MAINTENANT\n` +
+      `   (le compte SERA débité de ${formatCurrency(exp.amount)})\n\n` +
+      `👉 Cliquez ANNULER si le paiement EST DÉJÀ FAIT\n` +
+      `   (le compte ne sera PAS débité)`
     );
 
-    const payload = alreadyPaid ? {
-      paidexternally: true,
+    const payload = createTransaction ? {
+      // OK = Créer transaction
+      create_transaction: true,
       amount: parseFloat(exp.amount),
       paiddate: exp.realDate ? new Date(exp.realDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       accountid: accountObj.id
     } : {
-      create_transaction: true,
+      // Annuler = Paiement externe
+      paidexternally: true,
       amount: parseFloat(exp.amount),
       paiddate: exp.realDate ? new Date(exp.realDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       accountid: accountObj.id
@@ -533,14 +580,16 @@ const handlePayerDepense = async (exp, index) => {
 
     console.log('✅ Réponse serveur:', result);
 
-    // Mettre à jour l'état local
+    // ✅ Mettre à jour l'état local
     const updated = [...expenses];
     updated[index] = { ...updated[index], isPaid: true, dbLineId };
     setExpenses(updated);
 
-    await saveProjectState(updated, revenues);
+    // ❌ SUPPRIMÉ: Ne plus appeler saveProjectState ici
+    // Le backend a déjà tout mis à jour correctement
+    // await saveProjectState(updated, revenues);
 
-    // ✅ AJOUT: Recalcul automatique après paiement
+    // ✅ Recalcul automatique après paiement
     console.log('🔄 Recalcul automatique des totaux...');
     try {
       await api.post(`/projects/${project.id}/recalculate`, {});
@@ -549,7 +598,7 @@ const handlePayerDepense = async (exp, index) => {
       console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
     }
 
-    // Rafraîchir les données
+    // ✅ Rafraîchir les données
     console.log('🔄 Rafraîchissement après paiement...');
     await refreshProjects();
 
@@ -558,14 +607,15 @@ const handlePayerDepense = async (exp, index) => {
     }
 
     alert(result.message || 'Dépense marquée comme payée !');
+    
   } catch (error) {
     console.error('❌ Erreur handlePayerDepense:', error);
     alert(error?.message || 'Erreur paiement');
   }
 };
 
-  // ===== ENCAISSER REVENU =====
- const handleEncaisser = async (rev, index) => {
+// ===== ENCAISSER REVENU =====
+const handleEncaisser = async (rev, index) => {
   try {
     if (!rev.account) return alert('Choisis un compte');
 
@@ -580,7 +630,7 @@ const handlePayerDepense = async (exp, index) => {
       id: rev.id
     });
 
-    // ✅ Chercher ou créer le dbLineId (AJOUT - manquait dans votre code)
+    // ✅ Chercher ou créer le dbLineId
     let dbLineId = rev.dbLineId;
     
     if (!dbLineId) {
@@ -639,36 +689,83 @@ const handlePayerDepense = async (exp, index) => {
           revenueLine = newLine;
           console.log('✅ Ligne revenu créée:', newLine);
           
-          // Recharger le projet pour avoir les nouvelles données
+          // ✅ AJOUT 1: Attendre que la transaction SQL soit commitée
+          console.log('⏳ Attente sécurité COMMIT (500ms)...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // ✅ AJOUT 2: Vérifier que la ligne existe vraiment avec retry
+          let lineExists = false;
+          let retries = 0;
+          const maxRetries = 5;
+          
+          while (!lineExists && retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            try {
+              // ✅ CORRECTION: Vérifier via le projet complet au lieu d'un endpoint inexistant
+              const freshProject = await api.get(`/projects/${project.id}`);
+              const lineFound = freshProject.revenueLines?.some(line => 
+                String(line.id) === String(newLine.id)
+              );
+              
+              if (lineFound) {
+                lineExists = true;
+                console.log(`✅ Ligne revenu ${newLine.id} vérifiée et présente dans le projet après ${retries + 1} tentative(s)`);
+              } else {
+                throw new Error('Ligne revenue pas encore dans le projet');
+              }
+            } catch (verifyError) {
+              retries++;
+              if (retries < maxRetries) {
+                console.log(`⏳ Ligne revenu ${newLine.id} pas encore visible dans le projet, retry ${retries}/${maxRetries}...`);
+              } else {
+                console.error(`❌ Ligne revenu ${newLine.id} toujours introuvable après ${maxRetries} tentatives`);
+                throw new Error('La ligne de revenu créée n\'est pas accessible. Réessayez dans quelques secondes.');
+              }
+            }
+          }
+          
+          // ✅ AJOUT 3: Maintenant qu'on est sûr que la ligne existe, on peut recharger
           if (onProjectUpdated) {
+            console.log('🔄 Rechargement du projet après vérification ligne revenu...');
             await onProjectUpdated(project.id);
           }
+          
         } catch (createError) {
           console.error('❌ Erreur création ligne revenu:', createError);
           alert(`Impossible de créer la ligne en base:\n${createError.message}`);
           return;
         }
-      }
+      } // ⬅️ FIN du if (!revenueLine)
 
+      // ✅ CORRECTION: Cette ligne doit être ICI (après le if, pas dedans)
       dbLineId = revenueLine.id;
       console.log('✅ dbLineId revenu:', dbLineId);
+      
+    } else {
+      console.log('✅ dbLineId revenu déjà stocké:', dbLineId);
     }
 
-    // ✅ Demander confirmation d'encaissement
-    const alreadyReceived = window.confirm(
-      `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
-      `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+    // ✅ Demander confirmation d'encaissement (LOGIQUE INVERSÉE)
+    const createTransaction = window.confirm(
+      `💰 ENCAISSEMENT: ${formatCurrency(rev.amount)}\n` +
+      `Compte: ${rev.account}\n\n` +
+      `❓ Voulez-vous CRÉER UNE TRANSACTION et créditer le compte ?\n\n` +
+      `👉 Cliquez OK pour ENCAISSER MAINTENANT\n` +
+      `   (le compte SERA crédité de ${formatCurrency(rev.amount)})\n\n` +
+      `👉 Cliquez ANNULER si l'encaissement EST DÉJÀ FAIT\n` +
+      `   (le compte ne sera PAS crédité)`
     );
 
-    const payload = alreadyReceived ? {
-      received_externally: true,
+    const payload = createTransaction ? {
+      // OK = Créer transaction
+      create_transaction: true,
       amount: parseFloat(rev.amount),
       received_date: rev.realDate ? new Date(rev.realDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       accountid: accountObj.id
     } : {
-      create_transaction: true,
+      // Annuler = Encaissement externe
+      received_externally: true,
       amount: parseFloat(rev.amount),
       received_date: rev.realDate ? new Date(rev.realDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       accountid: accountObj.id
@@ -686,14 +783,16 @@ const handlePayerDepense = async (exp, index) => {
 
     console.log('✅ Réponse serveur:', result);
 
-    // Mettre à jour l'état local
+    // ✅ Mettre à jour l'état local
     const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: true, dbLineId }; // ✅ Sauvegarder le dbLineId
+    updated[index] = { ...updated[index], isPaid: true, dbLineId };
     setRevenues(updated);
 
-    await saveProjectState(expenses, updated);
+    // ❌ SUPPRIMÉ: Ne plus appeler saveProjectState ici
+    // Le backend a déjà tout mis à jour correctement
+    // await saveProjectState(expenses, updated);
 
-    // ✅ AJOUT: Recalcul automatique après encaissement
+    // ✅ Recalcul automatique après encaissement
     console.log('🔄 Recalcul automatique des totaux...');
     try {
       await api.post(`/projects/${project.id}/recalculate`, {});
@@ -702,7 +801,7 @@ const handlePayerDepense = async (exp, index) => {
       console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
     }
 
-    // Rafraîchir les données
+    // ✅ Rafraîchir les données
     console.log('🔄 Rafraîchissement après encaissement...');
     await refreshProjects();
 
@@ -711,6 +810,7 @@ const handlePayerDepense = async (exp, index) => {
     }
 
     alert(result.message || 'Revenu marqué comme reçu !');
+    
   } catch (error) {
     console.error('❌ Erreur handleEncaisser:', error);
     alert(error?.message || 'Erreur encaissement');
