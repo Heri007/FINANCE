@@ -15,6 +15,11 @@ router.use(authMiddleware);
 router.get('/expense-lines/unpaid', projectsController.getUnpaidExpenses);
 router.get('/revenue-lines/pending', projectsController.getPendingRevenues);
 
+
+// ✅ AJOUTER ICI (ligne ~22)
+router.post('/recalculate-all', projectsController.recalculateAllTotals);
+
+
 // ============================================================================
 // ✅ ROUTES CRUD PROJETS
 // ============================================================================
@@ -35,6 +40,9 @@ router.patch('/:id/toggle-status', projectsController.toggleProjectActive);
 router.post('/:id/archive', projectsController.archiveProject);
 router.post('/:id/complete', projectsController.completeProject);
 router.post('/:id/reactivate', projectsController.reactivateProject);
+
+// ✅ AJOUTER ICI (ligne ~32)
+router.post('/:id/recalculate', projectsController.recalculateTotals);
 
 // ---------- ROUTES LIGNES SPÉCIFIQUES ----------
 
@@ -58,5 +66,6 @@ router.get('/:id/revenue-lines', projectsController.getProjectRevenueLines);
 router.get('/:id', projectsController.getProjectById);
 router.put('/:id', validate('project'), projectsController.updateProject);
 router.delete('/:id', projectsController.deleteProject);
+
 
 module.exports = router;
