@@ -19,6 +19,41 @@ import { useUser } from './UserContext';
 import { parseJSONSafe } from '../domain/finance/parsers';
 import { buildTransactionSignature as createSignature } from '../domain/finance/signature';
 
+/**
+ * Normalise une date au format YYYY-MM-DD (sans timezone)
+ * @param {string|Date|null} value - Valeur de date à normaliser
+ * @returns {string|null} - Date au format YYYY-MM-DD ou null
+ */
+const toYmd = (value) => {
+  if (!value) return null;
+  
+  try {
+    // Si c'est déjà une string YYYY-MM-DD, la retourner telle quelle
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return value;
+    }
+    
+    // Si c'est une string ISO ou autre format, extraire la partie date
+    if (typeof value === 'string') {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return null;
+      return d.toISOString().split('T')[0];
+    }
+    
+    // Si c'est un objet Date
+    if (value instanceof Date) {
+      if (Number.isNaN(value.getTime())) return null;
+      return value.toISOString().split('T')[0];
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Erreur normalisation date:', error, value);
+    return null;
+  }
+};
+
+
 const FinanceContext = createContext(null);
 
 export function FinanceProvider({ children }) {
@@ -831,74 +866,67 @@ const totalBalance = useMemo(() => {
 // ============================================================
 const plannedTransactions = useMemo(() => {
   const result = [];
-
-  // 1) Dépenses non payées (project_expense_lines)
-  (projectExpenseLines || [])
-    .filter(
-      (line) =>
-        line.isPaid === false ||
-        line.isPaid === null ||
-        line.isPaid === undefined
-    )
-    .forEach((line) => {
-      const rawDate = line.transactionDate || line.transaction_date || null;
-      if (!rawDate) return;
-
+  
+  // 1️⃣ Dépenses non payées (projectExpenseLines)
+  projectExpenseLines
+    .filter(line => line.isPaid === false || line.isPaid === null || line.isPaid === undefined)
+    .forEach(line => {
+      const rawDate = line.transactionDate || line.transactiondate || null;
+      const normalizedDate = toYmd(rawDate); // ✅ NORMALISATION
+      
+      if (!normalizedDate) {
+        console.warn('Ligne projet sans date valide:', line.id, rawDate);
+        return;
+      }
+      
       result.push({
-        project_id: line.projectId ?? line.project_id,
-        project_name: line.projectName ?? line.project_name,
-        type: 'planned_expense',
-        amount: Number(line.projectedAmount ?? line.projected_amount ?? 0),
-        date: rawDate,
+        projectid: line.projectId ?? line.projectid,
+        projectname: line.projectName ?? line.projectname,
+        type: 'plannedexpense',
+        amount: Number(line.projectedAmount ?? line.projectedamount ?? 0),
+        date: normalizedDate, // ✅ Format YYYY-MM-DD garanti
         account: line.account || 'Coffre',
         category: line.category || 'Projet - Charge',
         description: line.description || '',
-        line_id: line.id,
+        lineid: line.id,
       });
     });
 
-    console.log('🧪 projectExpenseLines sample:', projectExpenseLines[0]);
-    console.log('🧪 projectRevenueLines sample:', projectRevenueLines[0]);
+  console.log('projectExpenseLines sample:', projectExpenseLines[0]);
+  console.log('projectRevenueLines sample:', projectRevenueLines[0]);
 
-
-  // 2) Revenus non reçus (project_revenue_lines)
-  (projectRevenueLines || [])
-    .filter(
-      (line) =>
-        line.isReceived === false ||
-        line.isReceived === null ||
-        line.isReceived === undefined
-    )
-    .forEach((line) => {
-      const rawDate = line.transactionDate || line.transaction_date || null;
-      if (!rawDate) return;
-
+  // 2️⃣ Revenus non reçus (projectRevenueLines)
+  projectRevenueLines
+    .filter(line => line.isReceived === false || line.isReceived === null || line.isReceived === undefined)
+    .forEach(line => {
+      const rawDate = line.transactionDate || line.transactiondate || null;
+      const normalizedDate = toYmd(rawDate); // ✅ NORMALISATION
+      
+      if (!normalizedDate) {
+        console.warn('Ligne projet sans date valide:', line.id, rawDate);
+        return;
+      }
+      
       result.push({
-        project_id: line.projectId ?? line.project_id,
-        project_name: line.projectName ?? line.project_name,
-        type: 'planned_income',
-        amount: Number(line.projectedAmount ?? line.projected_amount ?? 0),
-        date: rawDate,
+        projectid: line.projectId ?? line.projectid,
+        projectname: line.projectName ?? line.projectname,
+        type: 'plannedincome',
+        amount: Number(line.projectedAmount ?? line.projectedamount ?? 0),
+        date: normalizedDate, // ✅ Format YYYY-MM-DD garanti
         account: line.account || 'Coffre',
         category: line.category || 'Projet - Revenu',
         description: line.description || '',
-        line_id: line.id,
+        lineid: line.id,
       });
     });
 
-  console.log('📊 plannedTransactions (depuis project_*_lines):', result.length);
-  console.log(
-    ' - Dépenses à payer:',
-    result.filter((r) => r.type === 'planned_expense').length
-  );
-  console.log(
-    ' - Revenus à recevoir:',
-    result.filter((r) => r.type === 'planned_income').length
-  );
-
-  return result;
+  console.log('✅ plannedTransactions depuis project lines:', result.length);
+  console.log('  - Dépenses à payer:', result.filter(r => r.type === 'plannedexpense').length);
+  console.log('  - Revenus à recevoir:', result.filter(r => r.type === 'plannedincome').length);
   
+  return result;
 }, [projectExpenseLines, projectRevenueLines]);
+
 
 console.log('🔮 plannedTransactions créées depuis project lines:', 
   plannedTransactions.slice(0, 5).map(tx => ({

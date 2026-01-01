@@ -165,89 +165,79 @@ console.log('💰 DEBUG TreasuryTimeline props:', {
   })
 });
 
+// ========================================
 // --- Transactions PRÉVISIONNELLES (futures uniquement) ---
-plannedTransactions.forEach((tx, index) => { // ✅ Ajouter index
-  // ✅ CORRECTION TIMEZONE : Parser en ignorant l'heure UTC
-  const dateStr = tx.plannedDate || tx.transaction_date || tx.date;
-  let txDate;
+// ========================================
+
+console.log('DEBUG plannedTransactions:', {
+  total: plannedTransactions.length,
+  currentDateStr: currentDate.toLocaleDateString(),
+  todayStr: today.toLocaleDateString(),
+  sample: plannedTransactions.slice(0, 3).map(tx => ({
+    date: tx.date,
+    type: tx.type,
+    amount: tx.amount,
+    account: tx.accountname || tx.accountName || tx.account,
+    projectname: tx.projectname,
+  })),
+});
+
+plannedTransactions.forEach((tx, index) => {
+  // ✅ SIMPLIFICATION: date normalisée au format YYYY-MM-DD
+  const txDateStr = tx.date;
   
-  if (typeof dateStr === 'string' && (dateStr.includes('T') || dateStr.includes('Z'))) {
-    // Extraire juste la partie date (YYYY-MM-DD)
-    const [datePart] = dateStr.split('T');
-    const [year, month, day] = datePart.split('-').map(Number);
-    txDate = new Date(year, month - 1, day); // Créer en heure locale (EAT)
-  } else {
-    txDate = new Date(dateStr);
+  if (!txDateStr) {
+    if (index < 3) console.log('⚠️ Transaction prév. sans date (index', index, '):', tx);
+    return;
   }
   
-  txDate.setHours(0, 0, 0, 0);
-
-  // ✅ Ne traiter que les transactions de currentDate
-  if (txDate.getTime() !== currentDate.getTime()) return;
+  // ✅ Comparaison directe des strings YYYY-MM-DD
+  if (txDateStr !== dateStr) return;
   
-  // ✅ LOG DÉTAILLÉ (seulement pour les 3 premières OU le jour actuel)
-  if (index < 3 || currentDate.getTime() === today.getTime()) {
-    console.log(`📅 Transaction prév. #${index}:`, {
-      dateRaw: tx.plannedDate || tx.transaction_date || tx.date,
-      txDate: txDate.toLocaleDateString(),
-      txDateTime: txDate.getTime(),
+  // LOG détaillé seulement pour les 3 premières OU le jour actuel
+  const isToday = currentDate.getTime() === today.getTime();
+  if (index < 3 || isToday) {
+    console.log('Transaction prév. (index', index, '):', {
+      dateRaw: txDateStr,
       currentDate: currentDate.toLocaleDateString(),
-      currentDateTime: currentDate.getTime(),
       today: today.toLocaleDateString(),
-      todayTime: today.getTime(),
-      txDateEqualsCurrentDate: txDate.getTime() === currentDate.getTime(),
-      txDateLessThanToday: txDate.getTime() < today.getTime(),
-      currentDateLessThanToday: currentDate.getTime() <= today.getTime(),
-      account: tx.account_name || tx.accountName || tx.account,
+      account: tx.accountname || tx.accountName || tx.account,
       amount: tx.amount,
-      type: tx.type
+      type: tx.type,
     });
   }
   
-  // ✅ CORRECTION : Ignorer SEULEMENT si currentDate est strictement dans le passé
+  // ✅ CORRECTION: Ignorer SEULEMENT si currentDate est strictement dans le passé
   if (currentDate < today) {
-    if (index < 3) {
-      console.log(`❌ Rejeté (date passée) #${index}:`, {
-        currentDate: currentDate.toLocaleDateString(),
-        today: today.toLocaleDateString()
-      });
-    }
+    if (index < 3) console.log('Rejet date passée (index', index, '):', currentDate.toLocaleDateString(), '<', today.toLocaleDateString());
     return;
   }
   
-  const amount = Number(tx.amount) || 0;
-  const isIncome = String(tx.type).toLowerCase() === 'income' || 
-                   String(tx.type).toLowerCase() === 'planned_income';
-  
-  const account = tx.account_name || tx.accountName || tx.account || '';
+  const amount = Number(tx.amount || 0);
+  const isIncome = String(tx.type).toLowerCase().includes('income');
+  const account = tx.accountname || tx.accountName || tx.account;
   const isCoffre = account === 'Coffre';
-
-  // ✅ LOG si pas Coffre
+  
+  // LOG si pas Coffre
   if (!isCoffre) {
-    if (index < 3) {
-      console.log(`⚠️ Rejeté (pas Coffre) #${index}:`, {
-        account,
-        expected: 'Coffre'
-      });
-    }
+    if (index < 3) console.log('Rejet pas Coffre (index', index, '):', account, 'expected: Coffre');
     return;
   }
-
-  const projectId = tx.project_id || tx.projectId || null;
-  const projectName = projects.find((p) => String(p.id) === String(projectId))
-    ?.name || tx.project_name || null;
-
-  // ✅ LOG transaction acceptée
-  if (index < 3 || currentDate.getTime() === today.getTime()) {
-    console.log(`✅ Transaction prév. ACCEPTÉE #${index}:`, {
-      date: txDate.toLocaleDateString(),
+  
+  const projectId = tx.projectid || tx.projectId || null;
+  const projectName = projects.find(p => String(p.id) === String(projectId))?.name || tx.projectname || null;
+  
+  // LOG transaction acceptée
+  if (index < 3 || isToday) {
+    console.log('✅ Transaction prév. ACCEPTÉE (index', index, '):', {
+      date: txDateStr,
       type: isIncome ? 'income' : 'expense',
       amount,
       account,
-      project: projectName
+      project: projectName,
     });
   }
-
+  
   if (isIncome) {
     day.plannedRevenues += amount;
     day.coffrePlannedIn += amount;
@@ -255,14 +245,17 @@ plannedTransactions.forEach((tx, index) => { // ✅ Ajouter index
     day.plannedExpenses += amount;
     day.coffrePlannedOut += amount;
   }
-
+  
   day.projectPlanned.push({
-    project_id: projectId,
-    project_name: projectName,
-    type: isIncome ? 'income' : 'expense',
-    amount,
+  projectid: projectId,
+  projectname: projectName,
+  type: isIncome ? 'income' : 'expense',
+  amount,
+  description: tx.description || tx.label || '', // ✅ AJOUT
+  category: tx.category || '', // ✅ BONUS
   });
 });
+
 
     const netRealCoffre = (day.coffreIn || 0) - (day.coffreOut || 0);
     const netPlannedCoffre = (day.coffrePlannedIn || 0) - (day.coffrePlannedOut || 0);
@@ -449,7 +442,7 @@ return (
       </div>
     )}
 
-    {/* Cards Container - Scrollable si l'écran est petit, mais ici on gère le scroll interne */}
+        {/* Cards Container - Scrollable si l'écran est petit, mais ici on gère le scroll interne */}
     <div className="flex-grow overflow-y-auto pr-1 pb-1">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {visibleDays.map((day) => {
@@ -470,13 +463,20 @@ return (
               {/* --- Card Header: Date & Solde --- */}
               <div className="flex justify-between items-start mb-2 border-b border-slate-100 pb-2">
                 <div className="flex flex-col">
-                   <span className="font-bold text-slate-700 capitalize text-lg">{dateLabel}</span>
-                   <span className="text-[10px] text-red-400 font-medium">Fin de journée</span>
+                  <span className="font-bold text-slate-700 capitalize text-lg">{dateLabel}</span>
+                  <span className="text-[10px] text-red-400 font-medium">Fin de journée</span>
                 </div>
                 <div className="text-right">
                   <div className={`text-lg font-bold leading-none ${isNegative ? 'text-rose-600' : 'text-slate-800'}`}>
-                    {(day.coffreProjectedBalance || 0).toLocaleString()} <span className="text-[18px] font-normal text-blue-800">Ar</span>
+                    {(day.coffreProjectedBalance || 0).toLocaleString()} 
+                    <span className="text-[18px] font-normal text-blue-800">Ar</span>
                   </div>
+                  {/* ✅ Afficher aussi le solde réel si différent */}
+                  {day.coffreBalance !== day.coffreProjectedBalance && (
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      Réel: {day.coffreBalance.toLocaleString()} Ar
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -486,10 +486,12 @@ return (
                 <div className="bg-blue-50/50 rounded p-1.5 border border-blue-100/50">
                   <div className="text-[11px] uppercase font-bold text-blue-700 mb-0.5">Prévisions</div>
                   <div className="text-[11px] text-slate-600 flex justify-between">
-                    <span>Entrées:</span> <span className="font-medium">{(day.plannedRevenues || 0).toLocaleString()}</span>
+                    <span>Entrées:</span> 
+                    <span className="font-medium">{(day.plannedRevenues || 0).toLocaleString()}</span>
                   </div>
                   <div className="text-[11px] text-slate-600 flex justify-between">
-                    <span>Sorties:</span> <span className="font-medium">{(day.plannedExpenses || 0).toLocaleString()}</span>
+                    <span>Sorties:</span> 
+                    <span className="font-medium">{(day.plannedExpenses || 0).toLocaleString()}</span>
                   </div>
                   <div className={`text-[11px] mt-0.5 pt-0.5 border-t border-blue-100 text-right font-bold ${netPlanned >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {netPlanned > 0 ? '+' : ''}{netPlanned.toLocaleString()}
@@ -500,13 +502,15 @@ return (
                 <div className="bg-emerald-50/30 rounded p-1.5 border border-emerald-100/50">
                   <div className="text-[11px] uppercase font-bold text-emerald-700 mb-0.5">Réalisé(s)</div>
                   <div className="text-[11px] text-slate-600 flex justify-between">
-                    <span>Entrées:</span> <span className="font-medium">{(day.revenues || 0).toLocaleString()}</span>
+                    <span>Entrées:</span> 
+                    <span className="font-medium">{(day.revenues || 0).toLocaleString()}</span>
                   </div>
                   <div className="text-[11px] text-slate-600 flex justify-between">
-                    <span>Sorties:</span> <span className="font-medium">{(day.expenses || 0).toLocaleString()}</span>
+                    <span>Sorties:</span> 
+                    <span className="font-medium">{(day.expenses || 0).toLocaleString()}</span>
                   </div>
                   <div className={`text-[11px] mt-0.5 pt-0.5 border-t border-emerald-100 text-right font-bold ${netReal >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                     {netReal > 0 ? '+' : ''}{netReal.toLocaleString()}
+                    {netReal > 0 ? '+' : ''}{netReal.toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -515,6 +519,7 @@ return (
               <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent pr-1">
                 {(day.projectPlanned.length > 0 || day.projectReal.length > 0) ? (
                   <div className="space-y-2">
+                    
                     {/* Projets Prévus */}
                     {day.projectPlanned.length > 0 && (
                       <div>
@@ -522,11 +527,29 @@ return (
                           Projets (Prévu)
                         </div>
                         {day.projectPlanned.map((p, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-[11px] py-0.5 group/item">
-                            <span className="text-slate-600 truncate max-w-[65%] group-hover/item:text-slate-900 transition-colors" title={p.project_name}>
-                              {p.project_name || `Projet #${p.project_id}`}
-                            </span>
-                            <span className={`text-[11px] ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <div 
+                            key={idx} 
+                            className="flex justify-between items-start text-[10px] py-1 group/item gap-2 hover:bg-blue-50 rounded px-1 -mx-1 transition-colors"
+                          >
+                            <div className="flex flex-col max-w-[70%] flex-1 gap-0.5">
+                              <span 
+                                className="text-slate-700 truncate font-semibold leading-tight text-[11px]"
+                                title={p.projectname || `Projet #${p.projectid}`}
+                              >
+                                {p.projectname || `Projet #${p.projectid}`}
+                              </span>
+                              {p.description && (
+                                <span 
+                                  className="text-[9px] text-slate-600 truncate leading-tight"
+                                  title={p.description}
+                                >
+                                  📄 {p.description}
+                                </span>
+                              )}
+                            </div>
+                            <span 
+                              className={`text-[11px] font-bold whitespace-nowrap ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}
+                            >
                               {p.type === 'income' ? '+' : '-'}{p.amount.toLocaleString()}
                             </span>
                           </div>
@@ -537,22 +560,38 @@ return (
                     {/* Projets Réalisés */}
                     {day.projectReal.length > 0 && (
                       <div>
-                         <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[9px] font-bold text-emerald-600 uppercase tracking-wide mb-1 border-b border-emerald-50 py-0.5 mt-1">
+                        <div className="sticky top-0 bg-white/95 backdrop-blur-sm z-10 text-[9px] font-bold text-emerald-600 uppercase tracking-wide mb-1 border-b border-emerald-50 py-0.5 mt-1">
                           Projets (Réel)
                         </div>
                         {day.projectReal.map((p, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 group/item">
-                            <div className="flex flex-col max-w-[65%]">
-                               <span className="text-slate-700 truncate font-medium">{p.label || 'Sans libellé'}</span>
-                               <span className="text-[8px] text-slate-400 truncate">{p.project_name || 'Hors projet'}</span>
+                          <div 
+                            key={idx} 
+                            className="flex justify-between items-start text-[10px] py-1 group/item gap-2 hover:bg-emerald-50 rounded px-1 -mx-1 transition-colors"
+                          >
+                            <div className="flex flex-col max-w-[70%] flex-1 gap-0.5">
+                              <span 
+                                className="text-slate-700 truncate font-medium leading-tight"
+                                title={p.label || 'Sans libellé'}
+                              >
+                                {p.label || 'Sans libellé'}
+                              </span>
+                              <span 
+                                className="text-[8px] text-slate-400 truncate leading-tight"
+                                title={p.project_name || 'Hors projet'}
+                              >
+                                {p.project_name || 'Hors projet'}
+                              </span>
                             </div>
-                            <span className={`font-medium ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            <span 
+                              className={`font-medium text-[11px] ${p.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}
+                            >
                               {p.type === 'income' ? '+' : '-'}{p.amount.toLocaleString()}
                             </span>
                           </div>
                         ))}
                       </div>
                     )}
+                    
                   </div>
                 ) : (
                   <div className="h-full flex items-center justify-center text-slate-300 text-[10px] italic">
@@ -560,6 +599,8 @@ return (
                   </div>
                 )}
               </div>
+              {/* ✅ FIN de Card Footer */}
+
             </div>
           );
         })}
@@ -570,7 +611,9 @@ return (
     <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-3 gap-4">
       <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
         <div className="flex items-center gap-2 mb-1">
-          <div className="p-1 bg-white rounded-full shadow-sm text-emerald-600"><TrendingUp size={12} /></div>
+          <div className="p-1 bg-white rounded-full shadow-sm text-emerald-600">
+            <TrendingUp size={12} />
+          </div>
           <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wide">Entrées Réelles</span>
         </div>
         <div className="text-lg font-bold text-emerald-700">
@@ -580,7 +623,9 @@ return (
 
       <div className="bg-rose-50 rounded-lg p-3 border border-rose-100">
         <div className="flex items-center gap-2 mb-1">
-          <div className="p-1 bg-white rounded-full shadow-sm text-rose-600"><TrendingDown size={12} /></div>
+          <div className="p-1 bg-white rounded-full shadow-sm text-rose-600">
+            <TrendingDown size={12} />
+          </div>
           <span className="text-[10px] uppercase font-bold text-rose-800 tracking-wide">Sorties Réelles</span>
         </div>
         <div className="text-lg font-bold text-rose-700">
@@ -590,11 +635,13 @@ return (
 
       <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
         <div className="flex items-center gap-2 mb-1">
-          <div className="p-1 bg-white rounded-full shadow-sm text-blue-600"><DollarSign size={12} /></div>
+          <div className="p-1 bg-white rounded-full shadow-sm text-blue-600">
+            <DollarSign size={12} />
+          </div>
           <span className="text-[10px] uppercase font-bold text-blue-800 tracking-wide">Variation Nette</span>
         </div>
         <div className={`text-lg font-bold ${(stats.totalInflows || 0) - (stats.totalOutflows || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-          {( (stats.totalInflows || 0) - (stats.totalOutflows || 0) ).toLocaleString()} Ar
+          {((stats.totalInflows || 0) - (stats.totalOutflows || 0)).toLocaleString()} Ar
         </div>
       </div>
     </div>
