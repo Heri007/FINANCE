@@ -4,6 +4,89 @@ import { X, Plus, Eye, Edit, Trash2, TrendingUp, Calendar, DollarSign, CheckCirc
 import { ProjectDetailsModal } from './ProjectDetailsModal';
 import TransactionEditModal from './TransactionEditModal';
 
+// Ajouter cette fonction en haut du composant ProjectsListModal
+const getProjectColorScheme = (project) => {
+  const type = project.type?.toUpperCase() || 'DEFAULT';
+  
+  const colorSchemes = {
+    'LIVESTOCK': {
+      // 🐔 Élevage - Rose/Pink (chaleureux, vivant)
+      gradient: 'from-pink-500 to-rose-500',
+      badge: 'bg-pink-100 text-pink-700 border-pink-200',
+      card: 'bg-gradient-to-br from-pink-50 to-rose-50 border-pink-200',
+      hover: 'hover:shadow-pink-200',
+      icon: '🐔',
+      iconBg: 'bg-pink-100',
+      iconColor: 'text-pink-600',
+      budgetBg: 'bg-pink-100',
+      budgetText: 'text-pink-800'
+    },
+    'MINING': {
+      // ⛏️ Mines - Ambre/Orange (terre, minéraux)
+      gradient: 'from-amber-500 to-orange-500',
+      badge: 'bg-amber-100 text-amber-700 border-amber-200',
+      card: 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200',
+      hover: 'hover:shadow-amber-200',
+      icon: '⛏️',
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-600',
+      budgetBg: 'bg-amber-100',
+      budgetText: 'text-amber-800'
+    },
+    'TRADE': {
+      // 📦 Commerce - Bleu (confiance, échanges)
+      gradient: 'from-blue-500 to-cyan-500',
+      badge: 'bg-blue-100 text-blue-700 border-blue-200',
+      card: 'bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200',
+      hover: 'hover:shadow-blue-200',
+      icon: '📦',
+      iconBg: 'bg-blue-100',
+      iconColor: 'text-blue-600',
+      budgetBg: 'bg-blue-100',
+      budgetText: 'text-blue-800'
+    },
+    'FISHING': {
+      // 🎣 Pêche - Turquoise/Teal (mer, eau)
+      gradient: 'from-teal-500 to-cyan-500',
+      badge: 'bg-teal-100 text-teal-700 border-teal-200',
+      card: 'bg-gradient-to-br from-teal-50 to-cyan-50 border-teal-200',
+      hover: 'hover:shadow-teal-200',
+      icon: '🎣',
+      iconBg: 'bg-teal-100',
+      iconColor: 'text-teal-600',
+      budgetBg: 'bg-teal-100',
+      budgetText: 'text-teal-800'
+    },
+    'INVESTMENT': {
+      // 💰 Investissement - Violet/Purple (richesse, premium)
+      gradient: 'from-purple-500 to-indigo-500',
+      badge: 'bg-purple-100 text-purple-700 border-purple-200',
+      card: 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200',
+      hover: 'hover:shadow-purple-200',
+      icon: '💰',
+      iconBg: 'bg-purple-100',
+      iconColor: 'text-purple-600',
+      budgetBg: 'bg-purple-100',
+      budgetText: 'text-purple-800'
+    },
+    'DEFAULT': {
+      // ⚡ Défaut - Gris (neutre)
+      gradient: 'from-gray-500 to-slate-500',
+      badge: 'bg-gray-100 text-gray-700 border-gray-200',
+      card: 'bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200',
+      hover: 'hover:shadow-gray-200',
+      icon: '⚡',
+      iconBg: 'bg-gray-100',
+      iconColor: 'text-gray-600',
+      budgetBg: 'bg-gray-100',
+      budgetText: 'text-gray-800'
+    }
+  };
+
+  return colorSchemes[type] || colorSchemes['DEFAULT'];
+};
+
+
 // ✅ Fonction utilitaire pour parser le JSON en toute sécurité
 const safeParseJSON = (data) => {
   if (!data) return [];
@@ -267,130 +350,232 @@ export function ProjectsListModal({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProjects.map(project => {
-                const realCost = calculateTotalCost(project);
-                const isRecurrent = project.type === 'recurrent';
+{filteredProjects.map(project => {
+  const realCost = calculateTotalCost(project);
+  const isRecurrent = project.type === 'recurrent';
+  const colors = getProjectColorScheme(project); // ← NOUVEAU
 
-                return (
-                  <div key={project.id} className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
-                    <div className={`absolute top-0 right-0 px-3 py-1 rounded-bl-xl text-xs font-bold uppercase tracking-wider ${
-                      project.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {project.status === 'active' ? 'Actif' : 'Brouillon'}
-                    </div>
-
-                    <div className="p-5">
-                      <h3 className="font-bold text-gray-800 text-lg mb-1 truncate pr-16">{project.name}</h3>
-                      <p className="text-sm text-gray-500 line-clamp-2 h-10 mb-4">
-                        {project.description || "Aucune description"}
-                      </p>
-                      
-                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-4 bg-gray-50 p-2 rounded-lg">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span>{formatDate(project.startDate || project.start_date)}</span>
-                        <span className="mx-1">•</span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${isRecurrent ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
-                          {isRecurrent ? 'Récurrent' : 'Ponctuel'}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-end border-t pt-4">
-                        <div>
-                          <div className="text-xs text-gray-400 uppercase font-bold">Budget</div>
-                          <div className="text-xl font-bold text-gray-800">{formatCurrency(realCost)}</div>
-                        </div>
-                        <div className="flex gap-1">
-                          <button 
-                            onClick={() => setSelectedProject(project)} 
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
-                            title="Voir détails"
-                          >
-                            <Eye className="w-5 h-5" />
-                          </button>
-                          <button 
-                                      onClick={() => onEditProject(project)} 
-                                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" 
-                                      title="Modifier"
-                                   >
-                                      <Edit className="w-5 h-5" />
-                                   </button>
-                                   
-{/* ✅ BOUTON DÉSACTIVER (si projet actif) */}
-  {project.status === 'active' && (
-    <button onClick={async () => {
-      if (!confirm(`Désactiver le projet "${project.name}" ? Le projet sera exclu des calculs globaux.`)) return;
-      try {
-        await onDeactivateProject(project.id);
-        alert(`Projet "${project.name}" désactivé avec succès`);
-          } catch (error) {
-      console.error('Erreur désactivation', error);
-      // ✅ AJOUTER CES LOGS
-      console.log('🔴 Objet erreur complet:', error);
-      console.log('🔴 error.details:', error.details);
-      alert('Erreur: ' + error.message);
-       }
-      }}
-      className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-      title="Désactiver"
-      >
-  <AlertCircle className="w-5 h-5" />
-    </button>
-  )}
-  {/* ✅ BOUTON RÉACTIVER (si projet paused) */}
-  {project.status === 'paused' && (
-    <button
-      onClick={async () => {
-        if (!confirm(`Réactiver le projet "${project.name}" ?`)) return;
-        
-        try {
-          await onReactivateProject(project.id);
-          alert(`✅ Projet "${project.name}" réactivé avec succès`);
-        } catch (error) {
-          console.error('Erreur réactivation', error);
-          alert('Erreur: ' + error.message);
-        }
-      }}
-      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-      title="Réactiver"
+  return (
+    <div 
+      key={project.id} 
+      className={`
+        ${colors.card}
+        rounded-2xl 
+        border-2 
+        shadow-lg 
+        ${colors.hover}
+        hover:scale-102
+        transition-all 
+        duration-300
+        group 
+        relative 
+        overflow-hidden
+      `}
     >
-      <CheckCircle className="w-5 h-5" />
-    </button>
-    )}
-    {/* Bouton Compléter (seulement si actif) */}
-      {project.status === 'active' && (
-        <button
-          onClick={async () => {
-            if (!window.confirm(`Marquer "${project.name}" comme terminé ?\n\nCette action va :\n- Changer le statut en "completed"\n- Définir la date de fin à aujourd'hui\n- Exclure le projet des calculs actifs`)) {
-              return;
-            }
-            
-            try {
-              await onCompleteProject(project.id);
-              alert('✅ Projet complété avec succès !');
-            } catch (e) {
-              alert('❌ Erreur: ' + e.message);
-            }
-          }}
-          className="p-2 text-green-600 hover:bg-green-50 rounded"
-          title="Marquer comme terminé"
-        >
-          <CheckCircle size={16} />
-        </button>
-      )}
+      {/* BADGE STATUT + ICÔNE TYPE */}
+      <div className="absolute top-0 right-0 flex items-center gap-2">
+        {/* Icône type de projet */}
+        <div className={`
+          ${colors.iconBg}
+          px-3 py-2 
+          rounded-bl-xl 
+          rounded-tr-xl
+          text-2xl
+        `}>
+          {colors.icon}
+        </div>
+        
+        {/* Badge statut */}
+        <div className={`
+          ${project.status === 'active' 
+            ? 'bg-emerald-500 text-white' 
+            : 'bg-gray-400 text-white'
+          }
+          px-3 py-1 
+          rounded-bl-xl 
+          text-xs 
+          font-bold 
+          uppercase 
+          tracking-wider
+        `}>
+          {project.status === 'active' ? '✓ Actif' : 'Brouillon'}
+        </div>
+      </div>
 
-  <button 
-    onClick={() => onDeleteProject(project.id)} 
-    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
-    title="Supprimer"
-  >
-    <Trash2 className="w-5 h-5" />
-  </button>
-                                </div>
-                             </div>
-                          </div>
-                       </div>
-                    );
-                 })}
+      {/* CONTENU PRINCIPAL */}
+      <div className="p-6 pt-12">
+        {/* Titre avec barre colorée */}
+        <div className={`
+          border-l-4 
+          ${colors.gradient.replace('from-', 'border-').split(' ')[0].replace('to-', '')}
+          pl-3 
+          mb-4
+        `}>
+          <h3 className="font-bold text-gray-900 text-xl mb-1 truncate pr-4">
+            {project.name}
+          </h3>
+          <p className={`
+            text-xs 
+            font-semibold 
+            uppercase 
+            tracking-wide
+            ${colors.iconColor}
+          `}>
+            {project.type || 'Non spécifié'}
+          </p>
+        </div>
+
+        {/* Description */}
+        <p className="text-sm text-gray-600 line-clamp-2 h-10 mb-4 italic">
+          {project.description || 'Aucune description'}
+        </p>
+
+        {/* Dates + Type */}
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-white px-3 py-1.5 rounded-lg shadow-sm">
+            <Calendar className="w-4 h-4 text-gray-400" />
+            <span className="font-medium">{formatDate(project.startDate || project.startdate)}</span>
+          </div>
+          
+          <span className={`
+            text-xs 
+            px-3 
+            py-1.5 
+            rounded-full 
+            font-bold
+            ${isRecurrent 
+              ? 'bg-purple-500 text-white' 
+              : 'bg-blue-500 text-white'
+            }
+          `}>
+            {isRecurrent ? '🔄 Récurrent' : '📅 Ponctuel'}
+          </span>
+        </div>
+
+        {/* SECTION BUDGET - VERSION AMÉLIORÉE */}
+        <div className={`
+          ${colors.budgetBg}
+          rounded-xl 
+          p-4 
+          mb-4
+          border-2
+          ${colors.badge.split(' ')[2]}
+        `}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <DollarSign className={`w-5 h-5 ${colors.iconColor}`} />
+              <span className="text-xs font-bold uppercase text-gray-600">
+                Budget Total
+              </span>
+            </div>
+            <div className={`
+              text-xl 
+              font-black 
+              ${colors.budgetText}
+            `}>
+              {formatCurrency(realCost)}
+            </div>
+          </div>
+        </div>
+
+        {/* BOUTONS D'ACTION - VERSION CONDENSÉE */}
+        <div className="flex justify-between items-center gap-2">
+          {/* Boutons principaux */}
+          <div className="flex gap-1">
+            <button
+              onClick={() => setSelectedProject(project)}
+              className="p-2.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Voir détails"
+            >
+              <Eye className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => onEditProject(project)}
+              className="p-2.5 text-gray-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              title="Modifier"
+            >
+              <Edit className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Actions contextuelles */}
+          <div className="flex gap-1">
+            {project.status === 'active' && (
+              <>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Marquer "${project.name}" comme terminé ?`)) return;
+                    try {
+                      await onCompleteProject(project.id);
+                      alert('Projet complété !');
+                    } catch (e) {
+                      alert('Erreur : ' + e.message);
+                    }
+                  }}
+                  className="p-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                  title="Marquer comme terminé"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Désactiver "${project.name}" ?`)) return;
+                    try {
+                      await onDeactivateProject(project.id);
+                      alert('Projet désactivé !');
+                    } catch (e) {
+                      alert('Erreur : ' + e.message);
+                    }
+                  }}
+                  className="p-2.5 text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                  title="Désactiver"
+                >
+                  <AlertCircle className="w-5 h-5" />
+                </button>
+              </>
+            )}
+
+            {project.status === 'paused' && (
+              <button
+                onClick={async () => {
+                  if (!confirm(`Réactiver "${project.name}" ?`)) return;
+                  try {
+                    await onReactivateProject(project.id);
+                    alert('Projet réactivé !');
+                  } catch (e) {
+                    alert('Erreur : ' + e.message);
+                  }
+                }}
+                className="p-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+                title="Réactiver"
+              >
+                <CheckCircle className="w-5 h-5" />
+              </button>
+            )}
+
+            <button
+              onClick={() => onDeleteProject(project.id)}
+              className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Supprimer"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* BANDE DÉCORATIVE BAS */}
+      <div className={`
+        h-2 
+        bg-gradient-to-r 
+        ${colors.gradient}
+      `} />
+    </div>
+  );
+})}
+
               </div>
            )}
         </div>
