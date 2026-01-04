@@ -8,6 +8,7 @@ import { projectsService } from '../../../services/projectsService';
 import { transactionsService } from '../../../services/transactionsService';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
+import api from '../../../services/api';
 
 export function LivestockModal({ 
   isOpen, 
@@ -709,45 +710,139 @@ const handleEncaisser = async (rev, index) => {
   }
 };
 
-  // ============================================================================
-// ANNULER PAIEMENT DÉPENSE - MODÈLE CARRIERE
+// ============================================================================
+// ANNULER PAIEMENT DÉPENSE - VERSION FINALE CORRIGÉE
 // ============================================================================
 const handleCancelPaymentExpense = async (exp, index) => {
   try {
+    // 1. Validation
+    if (!project?.id) {
+      alert('❌ Projet non enregistré');
+      return;
+    }
+
     if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) {
       return;
     }
+
+    // 2. Trouver le dbLineId
+    let dbLineId = exp.dbLineId;
     
-    // Mise à jour optimiste
+    if (!dbLineId) {
+      console.log('⚠️ dbLineId absent, recherche manuelle...');
+      
+      const expenseLine = project?.expenseLines?.find(line => {
+        const descMatch = line.description?.trim() === exp.description?.trim();
+        const lineAmount = parseFloat(
+          line.projectedAmount || 
+          line.projected_amount || 
+          line.projectedamount || 
+          0
+        );
+        const expAmount = parseFloat(exp.amount || 0);
+        const amountMatch = Math.abs(lineAmount - expAmount) < 0.01;
+        return descMatch && amountMatch;
+      });
+
+      if (!expenseLine) {
+        console.error('❌ Ligne expense DB introuvable');
+        alert('❌ Impossible de trouver la ligne de dépense dans la base de données');
+        return;
+      }
+      
+      dbLineId = expenseLine.id;
+      console.log('✅ Ligne trouvée, ID:', dbLineId);
+    }
+
+    // 3. Sauvegarder l'état précédent pour rollback
+    const previousExpenses = [...expenses];
+    
+    // 4. Mise à jour optimiste
     const updated = expenses.map((e, i) =>
       i === index 
-        ? { ...e, isPaid: false, realDate: null }
+        ? { ...e, isPaid: false, actualAmount: 0, realDate: null }
         : e
     );
     setExpenses(updated);
     
-    await saveProjectState(updated, revenues);
-    
-    alert("✅ Paiement annulé!");
+    try {
+      // 5. Appel API backend
+      const result = await api.patch(
+        `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
+        {}
+      );
+      
+      console.log('✅ Paiement annulé:', result);
+      
+      // 6. Notifier le parent pour rafraîchir
+      if (onProjectUpdated) {
+        onProjectUpdated();
+      }
+      
+      alert("✅ Paiement annulé avec succès!");
+      
+    } catch (saveError) {
+      // 7. ROLLBACK en cas d'erreur
+      console.error('❌ Erreur:', saveError);
+      setExpenses(previousExpenses);
+      throw saveError;
+    }
     
   } catch (error) {
     console.error("❌ Erreur handleCancelPaymentExpense:", error);
-    alert("Erreur lors de l'annulation: " + error.message);
+    alert(`❌ Erreur: ${error.message}`);
   }
 };
 
+
 // ============================================================================
-// ANNULER ENCAISSEMENT REVENU - MODÈLE CARRIERE
+// ANNULER ENCAISSEMENT REVENU - VERSION FINALE CORRIGÉE (OPTION 1)
 // ============================================================================
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
-    if (!project?.id) return alert("Projet non enregistré");
+    // 1. Validation
+    if (!project?.id) {
+      alert("❌ Projet non enregistré");
+      return;
+    }
     
     if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) {
       return;
     }
     
-    // Mise à jour de l'état local
+    // 2. Trouver le dbLineId
+    let dbLineId = rev.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('⚠️ dbLineId absent, recherche manuelle...');
+      
+      const revenueLine = project?.revenueLines?.find(line => {
+        const descMatch = line.description?.trim() === rev.description?.trim();
+        const lineAmount = parseFloat(
+          line.projectedAmount || 
+          line.projected_amount || 
+          line.projectedamount || 
+          0
+        );
+        const revAmount = parseFloat(rev.amount || 0);
+        const amountMatch = Math.abs(lineAmount - revAmount) < 0.01;
+        return descMatch && amountMatch;
+      });
+
+      if (!revenueLine) {
+        console.error('❌ Ligne revenue DB introuvable');
+        alert('❌ Impossible de trouver la ligne de revenu dans la base de données');
+        return;
+      }
+      
+      dbLineId = revenueLine.id;
+      console.log('✅ Ligne trouvée, ID:', dbLineId);
+    }
+    
+    // 3. Sauvegarder l'état précédent pour rollback
+    const previousRevenues = [...revenues];
+    
+    // 4. Mise à jour optimiste
     const updated = revenues.map((r, i) =>
       i === index
         ? { ...r, isPaid: false }
@@ -755,17 +850,35 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     );
     setRevenues(updated);
     
-    await saveProjectState(expenses, updated);
-    
-    if (onProjectUpdated) onProjectUpdated();
-    
-    alert("✅ Encaissement annulé!");
+    try {
+      // 5. Appel API backend
+      const result = await api.patch(
+        `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`,
+        {}
+      );
+      
+      console.log('✅ Encaissement annulé:', result);
+      
+      // 6. Notifier le parent pour rafraîchir
+      if (onProjectUpdated) {
+        onProjectUpdated();
+      }
+      
+      alert("✅ Encaissement annulé avec succès!");
+      
+    } catch (saveError) {
+      // 7. ROLLBACK en cas d'erreur
+      console.error('❌ Erreur:', saveError);
+      setRevenues(previousRevenues);
+      throw saveError;
+    }
     
   } catch (err) {
     console.error("❌ Erreur handleCancelPaymentRevenue:", err);
-    alert("Erreur annulation: " + (err.message || err));
+    alert("❌ Erreur annulation: " + (err.message || err));
   }
 };
+
 
 // SAUVEGARDER L'ÉTAT DU PROJET - CORRECTION FINALE
 const saveProjectState = async (currentExpenses, currentRevenues) => {

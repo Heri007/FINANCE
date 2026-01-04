@@ -1741,7 +1741,7 @@ exports.cancelRevenueLineReceipt = async (req, res) => {
 exports.cancelExpensePayment = async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id, lineId } = req.params;  // Au lieu de projectId
+    const { id: projectId, lineId } = req.params; // Renommer id en projectId
     
     await client.query('BEGIN');
     
