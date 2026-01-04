@@ -6,13 +6,22 @@ import { fr } from 'date-fns/locale';
 import operatorService from './services/operatorService';
 import { CopyButton } from './components/common/CopyButton';
 import { api } from './services/api'; // adapte le chemin
+import GanttTimelineModal from './components/operator/GanttTimelineModal';
 
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) + ' Ar';
 };
 
-export function OperatorDashboard({ onClose, projects = [], transactions = [], accounts = [] }) {
+export function OperatorDashboard({ 
+  onClose, 
+  projects = [], 
+  transactions = [], 
+  accounts = [],
+  onProjectUpdated, // ✅ Ajouter pour rafraîchir les projets
+  refreshProjects   // ✅ Ajouter pour rafraîchir les projets
+}) {
+
   const [sops, setSops] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -363,6 +372,27 @@ const calculateInvestedAmount = (project) => {
               <p className="text-purple-100 mt-1">Execution • SOPs • Tâches • Projets Actifs</p>
             </div>
             <div className="flex items-center gap-3">
+
+                {/* Bouton Gantt Timeline */}
+        <li>
+          <button
+  type="button"
+  onClick={() => {
+    console.log("🎯 CLIC sur bouton Gantt Timeline");
+    setShowGanttTimeline(true); // ✅ Ouvrir le modal
+  }}
+  className={[
+    "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all shadow-md",
+    showGanttTimeline
+      ? "bg-green-600 text-white shadow-lg"
+      : "bg-green-600 text-white hover:bg-green-800"
+  ].join(" ")}
+>
+  <Calendar size={18} />
+  Gantt Timeline
+</button>
+
+        </li>
               
               <CopyButton getText={generateCopyText} />
               <button
@@ -371,7 +401,6 @@ const calculateInvestedAmount = (project) => {
               >
                 <X size={24} />
               </button>
-              
             </div>
           </div>
         </div>
@@ -873,14 +902,30 @@ const calculateInvestedAmount = (project) => {
         />
       )}
 
+  {/* ✅ GANTT TIMELINE MODAL CORRIGÉ */}
       {showGanttTimeline && (
-  <GanttTimelineModal
-    isOpen={showGanttTimeline}
-    onClose={() => setShowGanttTimeline(false)}
-    projects={projects}
-    onUpdateProject={handleUpdateProject}
-    onRefresh={null}
-  />
+        <GanttTimelineModal
+          isOpen={showGanttTimeline}
+          onClose={() => {
+            console.log("🔴 Fermeture Gantt Timeline");
+            setShowGanttTimeline(false);
+          }}
+          projects={projects}
+          onUpdateProject={async (id, updates) => {
+            console.log("📝 Mise à jour projet:", id, updates);
+            try {
+              await projectsService.update(id, updates);
+              if (onProjectUpdated) onProjectUpdated();
+            } catch (error) {
+              console.error("❌ Erreur:", error);
+              alert("Erreur: " + error.message);
+            }
+          }}
+          onRefresh={async () => {
+            console.log("🔄 Rafraîchissement");
+            if (refreshProjects) await refreshProjects();
+          }}
+        />
 )}
     </div>
   );

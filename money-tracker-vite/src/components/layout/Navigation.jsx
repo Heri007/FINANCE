@@ -3,7 +3,7 @@
 import React from "react";
 import { Calendar } from "lucide-react";
 
-export function Navigation({ activeTab, onTabChange, onOpenGanttTimeline, isGanttOpen }) {
+export function Navigation({ activeTab, onTabChange }) {
   const tabs = [
     { id: "overview", label: "Vue d'ensemble" },
     { id: "transactions", label: "Transactions" },
@@ -32,29 +32,6 @@ export function Navigation({ activeTab, onTabChange, onOpenGanttTimeline, isGant
             </li>
           );
         })}
-
-        {/* Bouton Gantt Timeline */}
-        <li>
-          <button
-            type="button"
-            onClick={() => {
-              console.log('🖱️ CLIC sur bouton Gantt Timeline');
-              if (onOpenGanttTimeline) {
-                onOpenGanttTimeline();
-              }
-              console.log('✅ Gantt Timeline ouvert');
-            }}
-            className={[
-              "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all shadow-md",
-              isGanttOpen
-                ? "bg-purple-600 text-white shadow-lg"
-                : "bg-purple-500 text-white hover:bg-purple-600"
-            ].join(" ")}
-          >
-            <Calendar size={18} />
-            Gantt Timeline
-          </button>
-        </li>
       </ul>
     </nav>
   );

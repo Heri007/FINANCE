@@ -83,7 +83,6 @@ import transactionsService from './services/transactionsService';
 // ============================================================================
 import { Header } from "./components/layout/Header";
 import { Navigation } from "./components/layout/Navigation";
-import GanttTimelineModal from './components/operator/GanttTimelineModal';
 
 // ============================================================================
 // COMPOSANTS - COMPTES
@@ -216,7 +215,6 @@ export default function App() {
   // Navigation principale
   const [activeTab, setActiveTab] = useState("overview");
   const [activeView, setActiveView] = useState("dashboard");
-  const [showGanttTimeline, setShowGanttTimeline] = useState(false);
   
   // Modals de création/édition
   const [showAdd, setShowAdd] = useState(false);
@@ -787,8 +785,7 @@ const handleProjectUpdated = async (projectId) => {
       <Navigation
           activeTab={activeTab}
           onTabChange={setActiveTab}
-          onOpenGanttTimeline={() => setShowGanttTimeline(true)}
-          isGanttOpen={showGanttTimeline}
+
         />
       
         <main className="px-8 py-8">
@@ -1109,29 +1106,6 @@ const handleProjectUpdated = async (projectId) => {
   transactions={transactions}
   totalBalance={totalBalance}
 />
-
-{/* ✅ CORRECTION : Ajouter toutes les props nécessaires */}
-{showGanttTimeline && (
-  <GanttTimelineModal 
-    isOpen={showGanttTimeline}
-    onClose={() => {
-      console.log('🔴 Fermeture Gantt Timeline');
-      setShowGanttTimeline(false);
-    }}
-    projects={projects}                           // ✅ AJOUTER
-    onUpdateProject={async (id, updates) => {     // ✅ AJOUTER
-      console.log('Mise à jour projet:', id, updates);
-      try {
-        await projectsService.update(id, updates);
-        await refreshProjects();
-      } catch (error) {
-        console.error('Erreur mise à jour projet:', error);
-        alert(`Erreur: ${error.message}`);
-      }
-    }}
-    onRefresh={refreshProjects}                   // ✅ AJOUTER
-  />
-)}
 
 <ProjectPlannerHub
   isOpen={showProjectPlanner}
