@@ -63,6 +63,8 @@ export function LivestockModal({
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [isPaymentInProgress, setIsPaymentInProgress] = useState(false);
+
   // ===== TYPES D'ANIMAUX AVEC PARAMÈTRES PAR DÉFAUT =====
   const animalPresets = {
     'Poulets de chair': {
@@ -154,122 +156,180 @@ export function LivestockModal({
   const annualROI = annualCost > 0 ? ((annualProfit / annualCost) * 100).toFixed(1) : 0;
 
   // ===== CHARGEMENT PROJET EXISTANT =====
-  useEffect(() => {
-    const loadProjectData = async () => {
-      if (project) {
-        setProjectName(project.name || '');
-        setDescription(project.description || '');
-        setStatus(project.status || 'active');
+useEffect(() => {
+  const loadProjectData = async () => {
+    if (project) {
+      setProjectName(project.name || '');
+      setDescription(project.description || '');
+      setStatus(project.status || 'active');
+      
+      const start = project.startDate || project.start_date;
+      const end = project.endDate || project.end_date;
+      setStartDate(start ? new Date(start) : new Date());
+      setEndDate(end ? new Date(end) : null);
+
+      // Charger metadata
+      if (project.metadata) {
+        const meta = typeof project.metadata === 'string' 
+          ? JSON.parse(project.metadata) 
+          : project.metadata;
         
-        const start = project.startDate || project.start_date;
-        const end = project.endDate || project.end_date;
-        setStartDate(start ? new Date(start) : new Date());
-        setEndDate(end ? new Date(end) : null);
-
-        // Charger metadata
-        if (project.metadata) {
-          const meta = typeof project.metadata === 'string' 
-            ? JSON.parse(project.metadata) 
-            : project.metadata;
-          
-          setAnimalType(meta.animalType || '');
-          setBreed(meta.breed || '');
-          setCycleCount(meta.cycleCount || 0);
-          setCycleDuration(meta.cycleDuration || 0);
-          setHeadsPerCycle(meta.headsPerCycle || 0);
-          setCurrentCycleNumber(meta.currentCycleNumber || 1);
-          setPoussinPrice(meta.poussinPrice || 0);
-          setFeedCostPerCycle(meta.feedCostPerCycle || 0);
-          setTargetWeight(meta.targetWeight || 0);
-          setSellingPricePerKg(meta.sellingPricePerKg || 0);
-          setSellingPricePerUnit(meta.sellingPricePerUnit || 0);
-          setMortalityRate(meta.mortalityRate || 4);
-          setFarmLocation(meta.farmLocation || '');
-          setCurrentHeadCount(meta.currentHeadCount || 0);
-          setSoldCount(meta.soldCount || 0);
-          setDeathCount(meta.deathCount || 0);
-        }
-
-        // Fonction helper pour parser les listes
-        const parseList = (data) => {
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          try { return JSON.parse(data); } catch { return []; }
-        };
-
-        let currentExpenses = parseList(project.expenses).map(e => ({
-          ...e,
-          id: e.id || uuidv4(),
-          date: e.date ? new Date(e.date) : new Date(),
-          amount: parseFloat(e.amount) || 0
-        }));
-
-        let currentRevenues = parseList(project.revenues).map(r => ({
-          ...r,
-          id: r.id || uuidv4(),
-          date: r.date ? new Date(r.date) : new Date(),
-          amount: parseFloat(r.amount) || 0
-        }));
-
-        // ✅ RÉCUPÉRER LES TRANSACTIONS RÉELLES LIÉES AU PROJET
-        if (project.id) {
-          try {
-            const allTx = await transactionsService.getAll();
-            const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
-            console.log(`📥 Transactions récupérées pour Livestock ${project.name}:`, projectTx.length);
-
-            // Fusionner les transactions réelles avec les lignes budgétaires
-            const mergeTransactions = (lines, type) => {
-              const newLines = [...lines];
-              
-              projectTx.filter(t => t.type === type).forEach(tx => {
-                const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-                
-                const existingIdx = newLines.findIndex(l => 
-                  String(l.id) === String(tx.project_line_id) ||
-                  (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid)
-                );
-
-                if (existingIdx >= 0) {
-                  newLines[existingIdx] = {
-                    ...newLines[existingIdx],
-                    isPaid: true,
-                    account: accName,
-                    date: new Date(tx.transaction_date || tx.date)
-                  };
-                } else {
-                  newLines.push({
-                    id: tx.project_line_id || uuidv4(),
-                    description: tx.description,
-                    amount: parseFloat(tx.amount),
-                    category: tx.category,
-                    date: new Date(tx.transaction_date || tx.date),
-                    account: accName,
-                    isPaid: true,
-                    isRecurring: false
-                  });
-                }
-              });
-
-              return newLines;
-            };
-
-            currentExpenses = mergeTransactions(currentExpenses, 'expense');
-            currentRevenues = mergeTransactions(currentRevenues, 'income');
-          } catch (err) {
-            console.error("Erreur synchronisation transactions:", err);
-          }
-        }
-
-        setExpenses(currentExpenses);
-        setRevenues(currentRevenues);
-      } else {
-        resetForm();
+        setAnimalType(meta.animalType || '');
+        setBreed(meta.breed || '');
+        setCycleCount(meta.cycleCount || 0);
+        setCycleDuration(meta.cycleDuration || 0);
+        setHeadsPerCycle(meta.headsPerCycle || 0);
+        setCurrentCycleNumber(meta.currentCycleNumber || 1);
+        setPoussinPrice(meta.poussinPrice || 0);
+        setFeedCostPerCycle(meta.feedCostPerCycle || 0);
+        setTargetWeight(meta.targetWeight || 0);
+        setSellingPricePerKg(meta.sellingPricePerKg || 0);
+        setSellingPricePerUnit(meta.sellingPricePerUnit || 0);
+        setMortalityRate(meta.mortalityRate || 4);
+        setFarmLocation(meta.farmLocation || '');
+        setCurrentHeadCount(meta.currentHeadCount || 0);
+        setSoldCount(meta.soldCount || 0);
+        setDeathCount(meta.deathCount || 0);
       }
-    };
 
-    loadProjectData();
-  }, [project, isOpen, accounts]);
+      // Fonction helper pour parser les listes
+      const parseList = (data) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        try { return JSON.parse(data); } catch { return []; }
+      };
+
+      // ✅ CORRECTION: Préserver dbLineId depuis les lignes normalisées
+      let currentExpenses = parseList(project.expenses).map(e => ({
+        ...e,
+        id: e.id || uuidv4(),
+        dbLineId: e.dbLineId || null,  // ✅ Préserver dbLineId
+        date: e.date ? new Date(e.date) : new Date(),
+        amount: parseFloat(e.amount || 0)
+      }));
+
+      let currentRevenues = parseList(project.revenues).map(r => ({
+        ...r,
+        id: r.id || uuidv4(),
+        dbLineId: r.dbLineId || null,  // ✅ Préserver dbLineId
+        date: r.date ? new Date(r.date) : new Date(),
+        amount: parseFloat(r.amount || 0)
+      }));
+
+      // ✅ CORRECTION COMPLÈTE: Synchroniser avec expenseLines/revenueLines
+      if (project.id) {
+        try {
+          // ✅ Récupérer les lignes normalisées depuis le projet
+          const expenseLines = project.expenseLines || [];
+          const revenueLines = project.revenueLines || [];
+          
+          console.log(`📊 Lignes normalisées chargées pour ${project.name}:`, 
+            `${expenseLines.length} expenses, ${revenueLines.length} revenues`);
+
+          // ✅ APPROCHE 1: Synchroniser expenses avec expenseLines
+          currentExpenses = currentExpenses.map(exp => {
+            // Chercher la ligne normalisée correspondante via dbLineId
+            const normalizedLine = expenseLines.find(line => 
+              line.id && exp.dbLineId && String(line.id) === String(exp.dbLineId)
+            );
+            
+            if (normalizedLine) {
+              console.log(`✅ Expense synchronisée: "${exp.description}" - isPaid: ${normalizedLine.isPaid}`);
+              return {
+                ...exp,
+                dbLineId: normalizedLine.id.toString(),
+                isPaid: normalizedLine.isPaid,
+                actualAmount: normalizedLine.actualAmount,
+                transactionDate: normalizedLine.transactionDate,
+                account: exp.account || (normalizedLine.isPaid ? 'Coffre' : '')
+              };
+            }
+            
+            // Si pas de dbLineId, essayer de matcher par description + montant
+            const fallbackMatch = expenseLines.find(line => 
+              line.description === exp.description && 
+              Math.abs(line.projectedAmount - exp.amount) < 0.01
+            );
+            
+            if (fallbackMatch) {
+              console.log(`🔄 Expense matchée par fallback: "${exp.description}" → dbLineId: ${fallbackMatch.id}`);
+              return {
+                ...exp,
+                dbLineId: fallbackMatch.id.toString(),
+                isPaid: fallbackMatch.isPaid,
+                actualAmount: fallbackMatch.actualAmount,
+                transactionDate: fallbackMatch.transactionDate,
+                account: exp.account || (fallbackMatch.isPaid ? 'Coffre' : '')
+              };
+            }
+            
+            // Sinon, conserver tel quel (nouvelle ligne non encore enregistrée)
+            return exp;
+          });
+
+          // ✅ APPROCHE 2: Synchroniser revenues avec revenueLines
+          currentRevenues = currentRevenues.map(rev => {
+            // Chercher la ligne normalisée correspondante via dbLineId
+            const normalizedLine = revenueLines.find(line => 
+              line.id && rev.dbLineId && String(line.id) === String(rev.dbLineId)
+            );
+            
+            if (normalizedLine) {
+              console.log(`✅ Revenue synchronisé: "${rev.description}" - isReceived: ${normalizedLine.isReceived}`);
+              return {
+                ...rev,
+                dbLineId: normalizedLine.id.toString(),
+                isPaid: normalizedLine.isReceived, // ✅ isReceived en base → isPaid en frontend
+                actualAmount: normalizedLine.actualAmount,
+                transactionDate: normalizedLine.transactionDate,
+                account: rev.account || (normalizedLine.isReceived ? 'Coffre' : '')
+              };
+            }
+            
+            // Si pas de dbLineId, essayer de matcher par description + montant
+            const fallbackMatch = revenueLines.find(line => 
+              line.description === rev.description && 
+              Math.abs(line.projectedAmount - rev.amount) < 0.01
+            );
+            
+            if (fallbackMatch) {
+              console.log(`🔄 Revenue matché par fallback: "${rev.description}" → dbLineId: ${fallbackMatch.id}`);
+              return {
+                ...rev,
+                dbLineId: fallbackMatch.id.toString(),
+                isPaid: fallbackMatch.isReceived,
+                actualAmount: fallbackMatch.actualAmount,
+                transactionDate: fallbackMatch.transactionDate,
+                account: rev.account || (fallbackMatch.isReceived ? 'Coffre' : '')
+              };
+            }
+            
+            // Sinon, conserver tel quel
+            return rev;
+          });
+
+          console.log(`📦 Synchronisation terminée: ${currentExpenses.filter(e => e.isPaid).length}/${currentExpenses.length} expenses payées, ${currentRevenues.filter(r => r.isPaid).length}/${currentRevenues.length} revenues encaissés`);
+
+        } catch (err) {
+          console.error("❌ Erreur synchronisation lignes normalisées:", err);
+        }
+      }
+
+      setExpenses(currentExpenses);
+      setRevenues(currentRevenues);
+    } else {
+      resetForm();
+    }
+  };
+
+  // NE PAS recharger si un paiement est en cours
+  if (isPaymentInProgress) {
+    console.log("⏸️ Rechargement bloqué: paiement en cours");
+    return;
+  }
+
+  loadProjectData();
+}, [project, isOpen, accounts, isPaymentInProgress]);
 
   const resetForm = () => {
     setProjectName('');
@@ -511,183 +571,229 @@ export function LivestockModal({
     }
   };
 
-  // ===== PAYER DÉPENSE =====
+ // ============================================================================
+// PAYER DÉPENSE - MODÈLE CARRIERE ADAPTÉ POUR LIVESTOCK
+// ============================================================================
 const handlePayerDepense = async (exp, index) => {
   try {
-    if (!exp.account) return alert('Choisis un compte');
-
+    if (!exp.account) return alert("Choisis un compte...");
+    
     const accountObj = accounts.find(a => a.name === exp.account);
-    if (!accountObj) return alert('Compte introuvable');
-
-    if (!project?.id) return alert('Erreur: Projet introuvable.');
-
+    if (!accountObj) return alert("Compte introuvable");
+    
+    if (!project?.id || !exp.dbLineId) {
+      alert("Erreur: Sauvegardez d'abord le projet.");
+      return;
+    }
+    
     const alreadyPaid = window.confirm(
       `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et débite le compte.`
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement?\n\n` +
+      `- OUI (OK) : Je marque juste la ligne comme payée.\n` +
+      `- NON (Annuler) : Je crée une transaction et débite le compte.`
     );
-
-    const payload = alreadyPaid
-      ? {
-          paid_externally: true,
+    
+    setIsPaymentInProgress(true);
+    
+    try {
+      // ✅ Utiliser projectsService qui gère automatiquement le CSRF
+      const result = await projectsService.markExpenseLinePaid(
+        project.id,
+        exp.dbLineId,
+        {
+          paidexternally: alreadyPaid,
+          create_transaction: !alreadyPaid,
           amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
+          paiddate: new Date().toISOString().split('T')[0],
+          accountid: parseInt(accountObj.id, 10)
         }
-      : {
-          create_transaction: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-        };
-
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-      payload
-    );
-
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: true };
-    setExpenses(updated);
-
-    await saveProjectState(updated, revenues);
-
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message || 'Dépense marquée comme payée !');
+      );
+      
+      console.log('✅ Paiement effectué:', result);
+      
+      // Mettre à jour l'état local
+      const updated = expenses.map((e, i) => 
+        i === index ? {...e, isPaid: true, account: accountObj.name, realDate: new Date()} : e
+      );
+      setExpenses(updated);
+      console.log(`✅ État local mis à jour: ${updated.filter(e => e.isPaid).length} payées sur ${updated.length}`);
+      
+      // Attendre et rafraîchir
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (onProjectUpdated) onProjectUpdated();
+      
+      alert('✅ Dépense marquée comme payée!');
+      
+    } catch (error) {
+      console.error('❌ Erreur paiement:', error);
+      alert(error?.message || 'Erreur paiement');
+    } finally {
+      setIsPaymentInProgress(false);
+    }
+    
   } catch (error) {
-    console.error('Erreur handlePayerDepense:', error);
+    console.error('❌ Erreur handlePayerDepense:', error);
     alert(error?.message || 'Erreur paiement');
+    setIsPaymentInProgress(false);
   }
 };
 
-
-  // ===== ENCAISSER REVENU =====
- const handleEncaisser = async (rev, index) => {
+// ============================================================================
+// ENCAISSER REVENU - MODÈLE CARRIERE ADAPTÉ POUR LIVESTOCK
+// ============================================================================
+const handleEncaisser = async (rev, index) => {
   try {
-    if (!rev.account) return alert('Choisis un compte');
-
+    if (!rev.account) return alert("Choisis un compte");
+    
     const accountObj = accounts.find(a => a.name === rev.account);
-    if (!accountObj) return alert('Compte introuvable');
-
-    if (!project?.id) return alert('Erreur: Projet introuvable.');
-
-    const alreadyReceived = window.confirm(
-      `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
-      `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+    if (!accountObj) return alert("Compte introuvable");
+    
+    if (!window.confirm(`Encaisser ${formatCurrency(rev.amount)} sur ${rev.account} ?`)) {
+      return;
+    }
+    
+    if (!project || !project.id) {
+      alert("Erreur: Projet introuvable.");
+      return;
+    }
+    
+    // 1. Bloquer le rechargement automatique
+    setIsPaymentInProgress(true);
+    
+    console.log("💰 Création transaction:", rev.description, formatCurrency(rev.amount));
+    
+    // 2. Créer la transaction
+    await createTransaction({
+      accountId: parseInt(accountObj.id, 10),
+      type: 'income',
+      amount: parseFloat(rev.amount),
+      category: 'Projet - Revenu',
+      description: `${project.name} - ${rev.description}`,
+      date: new Date().toISOString().split('T')[0],
+      isPlanned: false,
+      isPosted: true,
+      projectId: project.id,
+      projectLineId: rev.id
+    });
+    
+    // 3. Mettre à jour l'état local
+    const updated = revenues.map((r, i) => 
+      i === index 
+        ? { ...r, isPaid: true, account: accountObj.name }
+        : r
     );
-
-    const payload = alreadyReceived
-      ? {
-          received_externally: true,
-          amount: parseFloat(rev.amount),
-          received_date: rev.realDate || new Date().toISOString().split('T')[0],
-        }
-      : {
-          create_transaction: true,
-          amount: parseFloat(rev.amount),
-          received_date: rev.realDate || new Date().toISOString().split('T')[0],
-        };
-
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
-      payload
-    );
-
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: true };
     setRevenues(updated);
-
+    
+    console.log("✅ État local mis à jour:", updated.filter(r => r.isPaid).length, "encaissés sur", updated.length);
+    
+    // 4. Sauvegarder dans la BDD
     await saveProjectState(expenses, updated);
-
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message || 'Revenu marqué comme reçu !');
+    
+    // 5. Attendre que la BDD soit bien à jour
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // 6. Rafraîchir la liste des projets
+    if (onProjectUpdated) {
+      console.log("🔄 Rafraîchissement de la liste des projets");
+      onProjectUpdated();
+    }
+    
+    alert("✅ Revenu encaissé!");
+    
   } catch (error) {
-    console.error('Erreur handleEncaisser:', error);
-    alert(error?.message || 'Erreur encaissement');
+    console.error("❌ Erreur handleEncaisser:", error);
+    alert(error?.message || "Erreur encaissement");
+  } finally {
+    // 7. Débloquer le rechargement
+    setIsPaymentInProgress(false);
   }
 };
 
-
-  // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
-  const handleCancelPaymentExpense = async (exp, index) => {
+  // ============================================================================
+// ANNULER PAIEMENT DÉPENSE - MODÈLE CARRIERE
+// ============================================================================
+const handleCancelPaymentExpense = async (exp, index) => {
   try {
-    if (!project?.id) return alert('Projet non enregistré');
-
-    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
-
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
-      {} // pas de payload spécifique
+    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) {
+      return;
+    }
+    
+    // Mise à jour optimiste
+    const updated = expenses.map((e, i) =>
+      i === index 
+        ? { ...e, isPaid: false, realDate: null }
+        : e
     );
-
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: false };
     setExpenses(updated);
-
-    await saveProjectState(expenses, updated);
-
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message);
-  } catch (err) {
-    console.error('Erreur handleCancelPaymentExpense:', err);
-    alert('Erreur annulation: ' + (err.message || err));
+    
+    await saveProjectState(updated, revenues);
+    
+    alert("✅ Paiement annulé!");
+    
+  } catch (error) {
+    console.error("❌ Erreur handleCancelPaymentExpense:", error);
+    alert("Erreur lors de l'annulation: " + error.message);
   }
 };
 
-
+// ============================================================================
+// ANNULER ENCAISSEMENT REVENU - MODÈLE CARRIERE
+// ============================================================================
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
-    if (!project?.id) return alert('Projet non enregistré');
-
-    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
-
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-      {} // aucun payload nécessaire
+    if (!project?.id) return alert("Projet non enregistré");
+    
+    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) {
+      return;
+    }
+    
+    // Mise à jour de l'état local
+    const updated = revenues.map((r, i) =>
+      i === index
+        ? { ...r, isPaid: false }
+        : r
     );
-
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: false };
     setRevenues(updated);
-
+    
     await saveProjectState(expenses, updated);
-
+    
     if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message);
+    
+    alert("✅ Encaissement annulé!");
+    
   } catch (err) {
-    console.error('Erreur handleCancelPaymentRevenue:', err);
-    alert('Erreur annulation: ' + (err.message || err));
+    console.error("❌ Erreur handleCancelPaymentRevenue:", err);
+    alert("Erreur annulation: " + (err.message || err));
   }
 };
 
-  // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
-  const saveProjectState = async (currentExpenses, currentRevenues) => {
+// SAUVEGARDER L'ÉTAT DU PROJET - CORRECTION FINALE
+const saveProjectState = async (currentExpenses, currentRevenues) => {
   if (!project?.id) {
-    console.warn('⚠️ saveProjectState: Projet non enregistré');
+    console.warn('saveProjectState: Projet non enregistré');
     return;
   }
-  
-  // ✅ MAPPER plannedDate AVANT stringify
-  const expensesWithDate = currentExpenses.map(exp => ({
-    ...exp,
-    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
-  }));
-  
-  const revenuesWithDate = currentRevenues.map(rev => ({
-    ...rev,
-    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
-  }));
 
-  console.log('💾 saveProjectState démarré:', {
+  // ✅ MAPPER plannedDate ET préserver dbLineId MAIS RETIRER isPaid/actualAmount
+  const expensesWithDate = currentExpenses.map(exp => {
+    const { isPaid, actualAmount, transactionDate, realDate, ...cleanExp } = exp;
+    return {
+      ...cleanExp,
+      dbLineId: exp.dbLineId || null,
+      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T') : null
+    };
+  });
+
+  const revenuesWithDate = currentRevenues.map(rev => {
+    const { isPaid, isReceived, actualAmount, transactionDate, ...cleanRev } = rev;
+    return {
+      ...cleanRev,
+      dbLineId: rev.dbLineId || null,
+      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T') : null
+    };
+  });
+
+  console.log('💾 saveProjectState démarré', {
     projectId: project.id,
     expensesCount: currentExpenses.length,
     revenuesCount: currentRevenues.length,
@@ -710,14 +816,31 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     totalRevenues: newTotalRevenues,
     netProfit: newNetProfit,
     roi: parseFloat(newRoi),
-    expenses: JSON.stringify(expensesWithDate),  // ✅ AVEC plannedDate
-    revenues: JSON.stringify(revenuesWithDate),  // ✅ AVEC plannedDate
-    metadata: JSON.stringify({ lieu, substances, perimetre, numeroPermis, typePermis, lp1List })
+    expenses: JSON.stringify(expensesWithDate), // ✅ SANS isPaid
+    revenues: JSON.stringify(revenuesWithDate), // ✅ SANS isReceived
+    metadata: JSON.stringify({
+      animalType,
+      breed,
+      cycleCount,
+      cycleDuration,
+      headsPerCycle,
+      currentCycleNumber,
+      poussinPrice,
+      feedCostPerCycle,
+      targetWeight,
+      sellingPricePerKg,
+      sellingPricePerUnit,
+      mortalityRate,
+      farmLocation,
+      currentHeadCount,
+      soldCount,
+      deathCount
+    })
   };
 
   console.log('📤 Payload envoyé:', {
     ...payload,
-    expenses: `${expensesWithDate.length} lignes`,
+    expenses: `${expensesWithDate.length} lignes (${currentExpenses.filter(e => e.isPaid).length} payées en local)`,
     revenues: `${revenuesWithDate.length} lignes`
   });
 
@@ -730,6 +853,7 @@ const handleCancelPaymentRevenue = async (rev, index) => {
   }
 };
 
+
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -740,74 +864,82 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     return accounts.reduce((sum, acc) => sum + parseFloat(acc.balance || 0), 0);
   }, [accounts]);
 
-  // ===== SAUVEGARDE FINALE =====
-  const handleSave = async () => {
-    if (!projectName.trim()) {
-      alert("Le nom du projet est obligatoire");
-      return;
+ // ✅ SAUVEGARDE FINALE CORRIGÉE - SANS isPaid/actualAmount
+const handleSave = async () => {
+  if (!projectName.trim()) {
+    alert("Le nom du projet est obligatoire");
+    return;
+  }
+
+  setLoading(true);
+
+  // ✅ NETTOYER: Retirer isPaid, actualAmount, transactionDate
+  const expensesWithDate = expenses.map(exp => {
+    const { isPaid, actualAmount, transactionDate, realDate, ...cleanExp } = exp;
+    return {
+      ...cleanExp,
+      dbLineId: exp.dbLineId || null,
+      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
+    };
+  });
+
+  const revenuesWithDate = revenues.map(rev => {
+    const { isPaid, isReceived, actualAmount, transactionDate, ...cleanRev } = rev;
+    return {
+      ...cleanRev,
+      dbLineId: rev.dbLineId || null,
+      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T') : null
+    };
+  });
+
+  try {
+    const payload = {
+      name: projectName.trim(),
+      description: description.trim(),
+      type: "LIVESTOCK",
+      status,
+      startDate: startDate.toISOString(),
+      endDate: endDate ? endDate.toISOString() : null,
+      totalCost: parseFloat(totalExpenses) || 0,
+      totalRevenues: parseFloat(totalRevenues) || 0,
+      netProfit: parseFloat(netProfit) || 0,
+      roi: parseFloat(roi) || 0,
+      expenses: JSON.stringify(expensesWithDate), // ✅ SANS isPaid
+      revenues: JSON.stringify(revenuesWithDate), // ✅ SANS isReceived
+      metadata: JSON.stringify({
+        animalType,
+        breed,
+        cycleCount,
+        cycleDuration,
+        headsPerCycle,
+        currentCycleNumber,
+        poussinPrice,
+        feedCostPerCycle,
+        targetWeight,
+        sellingPricePerKg,
+        sellingPricePerUnit,
+        mortalityRate,
+        farmLocation,
+        currentHeadCount,
+        soldCount,
+        deathCount
+      })
+    };
+
+    if (project?.id) {
+      await projectsService.updateProject(project.id, payload);
+    } else {
+      await projectsService.createProject(payload);
     }
 
-    setLoading(true);
-
-    const expensesWithDate = expenses.map(exp => ({
-  ...exp,
-  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
-}));
-
-const revenuesWithDate = revenues.map(rev => ({
-  ...rev,
-  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
-}));
-
-
-    try {
-      const payload = {
-        name: projectName.trim(),
-        description: description.trim(),
-        type: 'LIVESTOCK',
-        status,
-        startDate: startDate.toISOString(),
-        endDate: endDate ? endDate.toISOString() : null,
-        totalCost: parseFloat(totalExpenses) || 0,
-        totalRevenues: parseFloat(totalRevenues) || 0,
-        netProfit: parseFloat(netProfit) || 0,
-        roi: parseFloat(roi) || 0,
-        expenses: JSON.stringify(expensesWithDate),
-        revenues: JSON.stringify(revenuesWithDate),
-        metadata: JSON.stringify({
-          animalType,
-          breed,
-          cycleCount,
-          cycleDuration,
-          headsPerCycle,
-          currentCycleNumber,
-          poussinPrice,
-          feedCostPerCycle,
-          targetWeight,
-          sellingPricePerKg,
-          sellingPricePerUnit,
-          mortalityRate,
-          farmLocation,
-          currentHeadCount,
-          soldCount,
-          deathCount
-        })
-      };
-
-      if (project?.id) {
-        await projectsService.updateProject(project.id, payload);
-      } else {
-        await projectsService.createProject(payload);
-      }
-
-      if (onProjectSaved) onProjectSaved();
-      onClose();
-    } catch (e) {
-      alert("Erreur sauvegarde: " + e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (onProjectSaved) onProjectSaved();
+    onClose();
+  } catch (e) {
+    alert("Erreur sauvegarde: " + e.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!isOpen) return null;
 

@@ -49,9 +49,9 @@ export function ProjectDetailsModal({
 
   // =======================================================================
   // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
-  // =======================================================================
- const normalizeData = useMemo(() => {
-  console.log('🔄 Normalisation projet', project.name);
+  // ======================================================================
+const normalizeData = useMemo(() => {
+  console.log("🔄 Normalisation projet:", project.name);
   
   // Fonction pour parser et nettoyer n'importe quelle liste
   const cleanList = (jsonOrArray, type) => {
@@ -63,7 +63,7 @@ export function ProjectDetailsModal({
       try {
         list = JSON.parse(jsonOrArray);
       } catch (e) {
-        console.warn(`Erreur parsing ${type}:`, e);
+        console.warn(`❌ Erreur parsing ${type}:`, e);
         list = [];
       }
     }
@@ -72,91 +72,102 @@ export function ProjectDetailsModal({
       const isNormalizedLine = item.id && Number.isInteger(item.id);
       
       return {
-        id: isNormalizedLine ? item.id : (item.id || Math.random().toString(36)),
-        description: item.description || item.category || 'Sans description',
-        category: item.category || 'Autre',
+        id: isNormalizedLine ? item.id : (item.id || `temp-${Math.random().toString(36)}`),
+        description: item.description || item.category || "Sans description",
+        category: item.category || "Autre",
         amount: parseFloat(
           item.amount || 
           item.projectedAmount || item.projectedamount || 
           item.actualAmount || item.actualamount || 
-          item.montant ||
+          item.montant || 
           0
         ),
-        isPaid: !!(
-          item.isPaid || item.ispaid || 
-          item.isReceived || item.isreceived
-        ),
+        isPaid: !!(item.isPaid || item.ispaid || item.isReceived || item.isreceived), // ✅ PRÉSERVER
         date: item.date || item.transactionDate || item.transactiondate || new Date(),
-        account: item.account || 'Coffre',
+        plannedDate: item.plannedDate || null, // ✅ AJOUTER
+        realDate: item.realDate || null,       // ✅ AJOUTER
+        account: item.account || "Coffre",     // ✅ PRÉSERVER
         phase: item.phase,
+        isRecurring: !!item.isRecurring
       };
     });
   };
 
-  // ✅ CORRECTION: FUSIONNER au lieu de prioriser
-  let expensesFromLines = [];
-  let expensesFromJSON = [];
-  
-  if (project.expenseLines && project.expenseLines.length > 0) {
-    expensesFromLines = cleanList(project.expenseLines, 'expenseLines');
-    console.log('📋 expenseLines DB:', expensesFromLines.length);
-  }
-  
+  // ✅ CORRECTION: Prioriser le JSON (qui contient isPaid à jour) sur les lignes DB
+  let expenses = [];
+  let revenues = [];
+
+  // 1. D'ABORD charger depuis JSON (contient isPaid mis à jour)
   if (project.expenses) {
-    expensesFromJSON = cleanList(project.expenses, 'expenses');
-    console.log('📋 expenses JSON:', expensesFromJSON.length);
+    expenses = cleanList(project.expenses, 'expenses');
+    console.log("📦 expenses depuis JSON:", expenses.length, "| Payées:", expenses.filter(e => e.isPaid).length);
   }
-  
-  // ✅ Fusionner en évitant les doublons
-  const expenses = [...expensesFromLines];
-  
-  expensesFromJSON.forEach(jsonExp => {
-    const exists = expenses.some(dbExp => {
-      const descMatch = (dbExp.description || '').trim().toLowerCase() === 
-                       (jsonExp.description || '').trim().toLowerCase();
-      const amountMatch = Math.abs(dbExp.amount - jsonExp.amount) < 0.01;
-      
-      return descMatch && amountMatch;
-    });
+
+  // 2. ENSUITE fusionner avec expenseLines SI elles existent (mais JSON a priorité pour isPaid)
+  if (project.expenseLines && project.expenseLines.length > 0) {
+    const linesFromDB = cleanList(project.expenseLines, 'expenseLines');
+    console.log("📊 expenseLines depuis DB:", linesFromDB.length);
     
-    if (!exists) {
-      console.log('➕ Ajout expense JSON manquant:', jsonExp.description);
-      expenses.push(jsonExp);
-    }
-  });
-  
-  // ✅ Même logique pour revenues
-  let revenuesFromLines = [];
-  let revenuesFromJSON = [];
-  
-  if (project.revenueLines && project.revenueLines.length > 0) {
-    revenuesFromLines = cleanList(project.revenueLines, 'revenueLines');
+    // Fusionner: Mettre à jour les montants réels depuis DB, mais garder isPaid du JSON
+    linesFromDB.forEach(dbLine => {
+      const jsonIndex = expenses.findIndex(jsonExp => {
+        const descMatch = jsonExp.description?.trim().toLowerCase() === dbLine.description?.trim().toLowerCase();
+        const amountMatch = Math.abs(jsonExp.amount - dbLine.amount) < 0.01;
+        return descMatch && amountMatch;
+      });
+      
+      if (jsonIndex >= 0) {
+        // Mettre à jour avec les données DB mais GARDER isPaid du JSON
+        expenses[jsonIndex] = {
+          ...expenses[jsonIndex],
+          id: dbLine.id, // Utiliser l'ID DB
+          actualAmount: dbLine.amount,
+          // isPaid reste celui du JSON! ✅
+        };
+      } else {
+        // Ligne dans DB mais pas dans JSON (rare)
+        console.log("➕ Ajout ligne DB absente du JSON:", dbLine.description);
+        expenses.push(dbLine);
+      }
+    });
   }
-  
+
+  // Même logique pour revenues
   if (project.revenues) {
-    revenuesFromJSON = cleanList(project.revenues, 'revenues');
+    revenues = cleanList(project.revenues, 'revenues');
+    console.log("📦 revenues depuis JSON:", revenues.length, "| Reçus:", revenues.filter(r => r.isPaid).length);
   }
-  
-  const revenues = [...revenuesFromLines];
-  
-  revenuesFromJSON.forEach(jsonRev => {
-    const exists = revenues.some(dbRev => {
-      const descMatch = (dbRev.description || '').trim().toLowerCase() === 
-                       (jsonRev.description || '').trim().toLowerCase();
-      const amountMatch = Math.abs(dbRev.amount - jsonRev.amount) < 0.01;
-      
-      return descMatch && amountMatch;
-    });
+
+  if (project.revenueLines && project.revenueLines.length > 0) {
+    const linesFromDB = cleanList(project.revenueLines, 'revenueLines');
+    console.log("📊 revenueLines depuis DB:", linesFromDB.length);
     
-    if (!exists) {
-      console.log('➕ Ajout revenue JSON manquant:', jsonRev.description);
-      revenues.push(jsonRev);
-    }
-  });
-  
-  console.log('✅ Fusionné:', {
-    expenses: expenses.length,
-    revenues: revenues.length
+    linesFromDB.forEach(dbLine => {
+      const jsonIndex = revenues.findIndex(jsonRev => {
+        const descMatch = jsonRev.description?.trim().toLowerCase() === dbLine.description?.trim().toLowerCase();
+        const amountMatch = Math.abs(jsonRev.amount - dbLine.amount) < 0.01;
+        return descMatch && amountMatch;
+      });
+      
+      if (jsonIndex >= 0) {
+        revenues[jsonIndex] = {
+          ...revenues[jsonIndex],
+          id: dbLine.id,
+          actualAmount: dbLine.amount,
+          // isPaid reste celui du JSON! ✅
+        };
+      } else {
+        console.log("➕ Ajout ligne DB absente du JSON:", dbLine.description);
+        revenues.push(dbLine);
+      }
+    });
+  }
+
+  console.log("✅ Fusionné:", { 
+    expenses: expenses.length, 
+    expensesPaid: expenses.filter(e => e.isPaid).length,
+    revenues: revenues.length,
+    revenuesPaid: revenues.filter(r => r.isPaid).length
   });
 
   return { expenses, revenues };
