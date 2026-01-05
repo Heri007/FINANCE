@@ -38,6 +38,8 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
     'Loisirs',
     'Santé',
     'Éducation',
+    'Stan/Ethan',
+    'Moto',
     'Autres',
   ];
   const incomeCategories = [

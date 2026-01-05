@@ -105,6 +105,7 @@ const EXPENSE_CATEGORIES = [
   'Éducation',
   'Autres',
   'Voiture',
+  'Stan/Ethan',
   'Carburant',
   'Stock',
   'Bois',

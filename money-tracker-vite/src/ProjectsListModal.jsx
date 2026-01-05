@@ -33,17 +33,16 @@ const getProjectColorScheme = (project) => {
       budgetText: 'text-pink-800',
     },
     MINING: {
-      // ⛏️ Mines - Ambre/Orange (terre, minéraux)
-      gradient: 'from-amber-500 to-orange-500',
-      badge: 'bg-amber-100 text-amber-700 border-amber-200',
-      card: 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200',
-      hover: 'hover:shadow-amber-200',
-      icon: '⛏️',
-      iconBg: 'bg-amber-100',
-      iconColor: 'text-amber-600',
-      budgetBg: 'bg-amber-100',
-      budgetText: 'text-amber-800',
-    },
+  gradient: 'from-amber-500 to-orange-500', // ✅ Corrigé
+  badge: 'bg-amber-100 text-amber-700 border-amber-200',
+  card: 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200',
+  hover: 'hover:shadow-amber-200',
+  icon: '⛏️',
+  iconBg: 'bg-amber-100',
+  iconColor: 'text-amber-600',
+  budgetBg: 'bg-amber-100',
+  budgetText: 'text-amber-800',
+},
     TRADE: {
       // 📦 Commerce - Bleu (confiance, échanges)
       gradient: 'from-blue-500 to-cyan-500',
@@ -71,7 +70,7 @@ const getProjectColorScheme = (project) => {
     INVESTMENT: {
       // 💰 Investissement - Violet/Purple (richesse, premium)
       gradient: 'from-purple-500 to-indigo-500',
-      badge: 'bg-purple-100 text-purple-700 border-purple-200',
+      badge: 'bg-purple-50 text-purple-700 border-purple-200',
       card: 'bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200',
       hover: 'hover:shadow-purple-200',
       icon: '💰',
@@ -80,6 +79,18 @@ const getProjectColorScheme = (project) => {
       budgetBg: 'bg-purple-100',
       budgetText: 'text-purple-800',
     },
+    EXPORT: {
+  gradient: 'from-indigo-500 to-blue-600',
+  badge: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  card: 'bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-200',
+  hover: 'hover:shadow-indigo-200',
+  icon: '🚢',
+  iconBg: 'bg-indigo-100',
+  iconColor: 'text-indigo-600',
+  budgetBg: 'bg-indigo-100',
+  budgetText: 'text-indigo-800',
+},
+
     DEFAULT: {
       // ⚡ Défaut - Gris (neutre)
       gradient: 'from-gray-500 to-slate-500',
@@ -267,7 +278,7 @@ export function ProjectsListModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col h-[90vh]">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl flex flex-col h-[95vh]">
         {/* HEADER */}
         <div className="p-6 border-b flex justify-between items-start bg-gray-50 rounded-t-2xl">
           <div>
@@ -387,7 +398,7 @@ export function ProjectsListModal({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {filteredProjects.map((project) => {
                 const realCost = calculateTotalCost(project);
                 const isRecurrent = project.type === 'recurrent';
@@ -398,16 +409,17 @@ export function ProjectsListModal({
                     key={project.id}
                     className={`
         ${colors.card}
-        rounded-2xl 
-        border-2 
-        shadow-lg 
-        ${colors.hover}
-        hover:scale-102
-        transition-all 
-        duration-300
-        group 
-        relative 
-        overflow-hidden
+    rounded-2xl 
+    border-2 
+    shadow-lg 
+    ${colors.hover}
+    hover:scale-102
+    hover:shadow-2xl      // ✅ AJOUTER
+    transition-all 
+    duration-300
+    group 
+    relative 
+    overflow-hidden
       `}
                   >
                     {/* BADGE STATUT + ICÔNE TYPE */}
@@ -415,12 +427,15 @@ export function ProjectsListModal({
                       {/* Icône type de projet */}
                       <div
                         className={`
-          ${colors.iconBg}
-          px-3 py-2 
-          rounded-bl-xl 
-          rounded-tr-xl
-          text-2xl
-        `}
+         ${colors.iconBg}
+      px-3 py-2 
+      rounded-bl-xl 
+      rounded-tr-xl
+      text-2xl
+      transform               // ✅ AJOUTER
+      transition-transform    // ✅ AJOUTER
+      group-hover:scale-110   // ✅ AJOUTER
+    `}
                       >
                         {colors.icon}
                       </div>

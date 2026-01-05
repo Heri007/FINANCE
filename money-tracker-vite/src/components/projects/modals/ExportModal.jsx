@@ -873,274 +873,281 @@ export function ExportModal({
 
   // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
   const handleCancelPaymentExpense = async (exp, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
+  try {
+    if (!project?.id) return alert('Projet non enregistré');
 
-      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`))
+    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`))
+      return;
+
+    // ✅ NOUVELLE VÉRIFICATION: La ligne existe-t-elle vraiment?
+    let dbLineId = exp.dbLineId;
+
+    if (!dbLineId) {
+      console.log('🔍 Recherche dbLineId pour:', {
+        description: exp.description,
+        amount: exp.amount,
+        expenseLines: project?.expenseLines?.length || 0,
+      });
+
+      // Recharger le projet pour avoir les expenseLines à jour
+      const freshProject = await projectsService.getById(project.id);
+
+      let expenseLines = freshProject?.expenseLines || freshProject?.expenselines || [];
+
+      if (typeof expenseLines === 'string') {
+        try {
+          expenseLines = JSON.parse(expenseLines);
+        } catch (e) {
+          expenseLines = [];
+        }
+      }
+
+      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
+        console.error('❌ Aucune ligne expense trouvée dans le projet');
+        alert(
+          `Impossible de trouver les lignes de dépenses.\n\n` +
+            `Le projet doit être rechargé.`
+        );
+        // Forcer le refresh
+        await refreshProjects();
+        if (onProjectUpdated) {
+          await onProjectUpdated(project.id);
+        }
         return;
-
-      // ✅ NOUVELLE VÉRIFICATION: La ligne existe-t-elle vraiment?
-      let dbLineId = exp.dbLineId;
-
-      if (!dbLineId) {
-        console.log('🔍 Recherche dbLineId pour:', {
-          description: exp.description,
-          amount: exp.amount,
-          expenseLines: project?.expenseLines?.length || 0,
-        });
-
-        // Recharger le projet pour avoir les expenseLines à jour
-        const freshProject = await projectsService.getById(project.id);
-
-        let expenseLines = freshProject?.expenseLines || freshProject?.expenselines || [];
-
-        if (typeof expenseLines === 'string') {
-          try {
-            expenseLines = JSON.parse(expenseLines);
-          } catch (e) {
-            expenseLines = [];
-          }
-        }
-
-        if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
-          console.error('❌ Aucune ligne expense trouvée dans le projet');
-          alert(
-            `Impossible de trouver les lignes de dépenses.\n\n` +
-              `Le projet doit être rechargé.`
-          );
-          // Forcer le refresh
-          await refreshProjects();
-          if (onProjectUpdated) {
-            await onProjectUpdated(project.id);
-          }
-          return;
-        }
-
-        const expenseAmount = parseFloat(exp.amount || 0);
-
-        // Recherche améliorée
-        const expenseLine = expenseLines.find((line) => {
-          // Stratégie 1: Match par UUID
-          if (line.uuid === exp.id || line.uuid === exp.id) {
-            console.log('✅ Match par UUID:', line.uuid);
-            return true;
-          }
-
-          // Stratégie 2: Match par ID
-          if (line.id === exp.dbLineId) {
-            console.log('✅ Match par ID:', line.id);
-            return true;
-          }
-
-          // Stratégie 3: Match par description+montant+isPaid
-          const lineDesc = (line.description || '').trim().toLowerCase();
-          const expDesc = (exp.description || '').trim().toLowerCase();
-
-          if (lineDesc !== expDesc) return false;
-
-          const lineAmount = parseFloat(
-            line.projectedamount ||
-              line.projected_amount ||
-              line.projectedAmount ||
-              line.actualamount ||
-              line.actual_amount ||
-              line.actualAmount ||
-              line.amount ||
-              0
-          );
-
-          const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
-          const isPaidMatch = line.ispaid === true || line.isPaid === true;
-
-          if (amountMatch && isPaidMatch) {
-            console.log('✅ Match par description+montant+isPaid:', {
-              description: lineDesc,
-              amount: lineAmount,
-              isPaid: isPaidMatch,
-            });
-            return true;
-          }
-
-          return false;
-        });
-
-        if (!expenseLine) {
-          console.error('❌ Ligne expense DB introuvable pour annulation');
-          console.error('Critères de recherche:', {
-            description: exp.description,
-            amount: expenseAmount,
-            uuid: exp.id,
-            dbLineId: exp.dbLineId,
-          });
-
-          alert(
-            `⚠️ Impossible de trouver la ligne de dépense en base.\n\n` +
-              `Description: ${exp.description}\n` +
-              `Montant: ${formatCurrency(exp.amount)}\n\n` +
-              `La ligne a peut-être été supprimée.\n` +
-              `Le projet va être rechargé.`
-          );
-
-          // Forcer le refresh pour resynchroniser
-          await refreshProjects();
-          if (onProjectUpdated) {
-            await onProjectUpdated(project.id);
-          }
-          return;
-        }
-
-        dbLineId = expenseLine.id;
-        console.log('✅ dbLineId trouvé:', dbLineId);
       }
 
-      // ✅ Appel backend avec dbLineId validé
-      console.log('📤 Appel API cancel-payment avec dbLineId:', dbLineId);
+      const expenseAmount = parseFloat(exp.amount || 0);
 
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
-        {} // Pas de payload nécessaire
-      );
-
-      console.log('✅ Réponse serveur:', result);
-
-      // Mettre à jour l'état local
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: false };
-      setExpenses(updated);
-
-      // ❌ NE PAS appeler saveProjectState() ici
-
-      // ✅ Recalcul automatique
-      console.log('🔄 Recalcul automatique des totaux...');
-      try {
-        await api.post(`/projects/${project.id}/recalculate`, {});
-        console.log('✅ Totaux recalculés avec succès');
-      } catch (recalcError) {
-        console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
-      }
-
-      // Rafraîchir
-      console.log('🔄 Rafraîchissement après annulation...');
-      await refreshProjects();
-
-      if (onProjectUpdated) {
-        await onProjectUpdated(project.id);
-      }
-
-      alert(result.message || 'Paiement annulé avec succès!');
-    } catch (err) {
-      console.error('❌ Erreur handleCancelPaymentExpense:', err);
-      alert(`Erreur annulation: ${err.message || err}`);
-    }
-  };
-
-  const handleCancelPaymentRevenue = async (rev, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
-      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`))
-        return;
-
-      // ✅ Même logique que handleCancelPaymentExpense
-      let dbLineId = rev.dbLineId;
-
-      if (!dbLineId) {
-        console.log('🔍 Recherche dbLineId pour revenu:', {
-          description: rev.description,
-          amount: rev.amount,
-        });
-
-        // Recharger le projet
-        const freshProject = await projectsService.getById(project.id);
-
-        let revenueLines =
-          freshProject?.revenueLines || freshProject?.revenue_lines || [];
-        if (typeof revenueLines === 'string') {
-          try {
-            revenueLines = JSON.parse(revenueLines);
-          } catch (e) {
-            revenueLines = [];
-          }
+      // Recherche améliorée
+      const expenseLine = expenseLines.find((line) => {
+        // Stratégie 1: Match par UUID
+        if (line.uuid === exp.id || line.uuid === exp.id) {
+          console.log('✅ Match par UUID:', line.uuid);
+          return true;
         }
 
-        if (!Array.isArray(revenueLines) || revenueLines.length === 0) {
-          console.error('❌ Aucune ligne revenue trouvée');
-          alert('Impossible de trouver les lignes de revenus.');
-          await refreshProjects();
-          return;
+        // Stratégie 2: Match par ID
+        if (line.id === exp.dbLineId) {
+          console.log('✅ Match par ID:', line.id);
+          return true;
         }
 
-        const revenueAmount = parseFloat(rev.amount) || 0;
+        // Stratégie 3: Match par description+montant+isPaid
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (exp.description || '').trim().toLowerCase();
 
-        const revenueLine = revenueLines.find((line) => {
-          // Match par UUID
-          if (line.uuid && rev.id && line.uuid === rev.id) return true;
+        if (lineDesc !== expDesc) return false;
 
-          // Match par ID
-          if (line.id && rev.dbLineId && line.id === rev.dbLineId) return true;
-
-          // Match par description + montant
-          const lineDesc = (line.description || '').trim().toLowerCase();
-          const revDesc = (rev.description || '').trim().toLowerCase();
-          if (lineDesc !== revDesc) return false;
-
-          const lineAmount = parseFloat(
+        const lineAmount = parseFloat(
+          line.projectedamount ||
             line.projected_amount ||
-              line.projectedamount ||
-              line.projectedAmount ||
-              line.amount ||
-              0
-          );
+            line.projectedAmount ||
+            line.actualamount ||
+            line.actual_amount ||
+            line.actualAmount ||
+            line.amount ||
+            0
+        );
 
-          const isReceivedMatch = line.is_received === true || line.isReceived === true;
+        const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
+        const isPaidMatch = line.ispaid === true || line.isPaid === true;
 
-          return Math.abs(lineAmount - revenueAmount) < 0.01 && isReceivedMatch;
-        });
-
-        if (!revenueLine) {
-          console.error('❌ Ligne revenue DB introuvable pour annulation');
-          alert(
-            `Impossible de trouver la ligne de revenu en base.
-
-` +
-              `Description: ${rev.description}
-` +
-              `Montant: ${formatCurrency(rev.amount)}`
-          );
-          return;
+        if (amountMatch && isPaidMatch) {
+          console.log('✅ Match par description+montant+isPaid:', {
+            description: lineDesc,
+            amount: lineAmount,
+            isPaid: isPaidMatch,
+          });
+          return true;
         }
 
-        dbLineId = revenueLine.id;
-        console.log('✅ dbLineId trouvé:', dbLineId);
+        return false;
+      });
+
+      if (!expenseLine) {
+        console.error('❌ Ligne expense DB introuvable pour annulation');
+        console.error('Critères de recherche:', {
+          description: exp.description,
+          amount: expenseAmount,
+          uuid: exp.id,
+          dbLineId: exp.dbLineId,
+        });
+
+        alert(
+          `⚠️ Impossible de trouver la ligne de dépense en base.\n\n` +
+            `Description: ${exp.description}\n` +
+            `Montant: ${formatCurrency(exp.amount)}\n\n` +
+            `La ligne a peut-être été supprimée.\n` +
+            `Le projet va être rechargé.`
+        );
+
+        // Forcer le refresh pour resynchroniser
+        await refreshProjects();
+        if (onProjectUpdated) {
+          await onProjectUpdated(project.id);
+        }
+        return;
       }
 
-      const result = await api.patch(
-        `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`, // ✅ OK
-        {}
-      );
-
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: false };
-      setRevenues(updated);
-
-      // ✅ AJOUT: Recalcul automatique après annulation
-      console.log('🔄 Recalcul automatique des totaux...');
-      try {
-        await api.post(`/projects/${project.id}/recalculate`, {});
-        console.log('✅ Totaux recalculés avec succès');
-      } catch (recalcError) {
-        console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
-      }
-
-      // Rafraîchir
-      console.log('🔄 Rafraîchissement après annulation...');
-      await refreshProjects();
-
-      alert(result.message || 'Encaissement annulé avec succès!');
-    } catch (err) {
-      console.error('❌ Erreur handleCancelPaymentRevenue:', err);
-      alert(err?.message || 'Erreur annulation encaissement');
+      dbLineId = expenseLine.id;
+      console.log('✅ dbLineId trouvé:', dbLineId);
     }
-  };
+
+    // ✅ Appel backend avec dbLineId validé
+    console.log('📤 Appel API cancel-payment avec dbLineId:', dbLineId);
+
+    const result = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
+      {} // Pas de payload nécessaire
+    );
+
+    console.log('✅ Réponse serveur:', result);
+
+    // ✅✅ MISE À JOUR DES DEUX ÉTATS : expenses ET project
+    const updatedExpenses = expenses.map((e, i) => 
+      i === index 
+        ? { ...e, isPaid: false, actualAmount: 0, transactionDate: null } 
+        : e
+    );
+    setExpenses(updatedExpenses);
+
+    // ✅ Recalcul automatique
+    console.log('🔄 Recalcul automatique des totaux...');
+    try {
+      await api.post(`/projects/${project.id}/recalculate`, {});
+      console.log('✅ Totaux recalculés avec succès');
+    } catch (recalcError) {
+      console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
+    }
+
+    // Rafraîchir
+    console.log('🔄 Rafraîchissement après annulation...');
+    await refreshProjects();
+
+    if (onProjectUpdated) {
+      await onProjectUpdated(project.id);
+    }
+
+    alert(result.message || 'Paiement annulé avec succès!');
+  } catch (err) {
+    console.error('❌ Erreur handleCancelPaymentExpense:', err);
+    alert(`Erreur annulation: ${err.message || err}`);
+  }
+};
+
+const handleCancelPaymentRevenue = async (rev, index) => {
+  try {
+    if (!project?.id) return alert('Projet non enregistré');
+    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`))
+      return;
+
+    // ✅ Même logique que handleCancelPaymentExpense
+    let dbLineId = rev.dbLineId;
+
+    if (!dbLineId) {
+      console.log('🔍 Recherche dbLineId pour revenu:', {
+        description: rev.description,
+        amount: rev.amount,
+      });
+
+      // Recharger le projet
+      const freshProject = await projectsService.getById(project.id);
+
+      let revenueLines =
+        freshProject?.revenueLines || freshProject?.revenue_lines || [];
+      if (typeof revenueLines === 'string') {
+        try {
+          revenueLines = JSON.parse(revenueLines);
+        } catch (e) {
+          revenueLines = [];
+        }
+      }
+
+      if (!Array.isArray(revenueLines) || revenueLines.length === 0) {
+        console.error('❌ Aucune ligne revenue trouvée');
+        alert('Impossible de trouver les lignes de revenus.');
+        await refreshProjects();
+        return;
+      }
+
+      const revenueAmount = parseFloat(rev.amount) || 0;
+
+      const revenueLine = revenueLines.find((line) => {
+        // Match par UUID
+        if (line.uuid && rev.id && line.uuid === rev.id) return true;
+
+        // Match par ID
+        if (line.id && rev.dbLineId && line.id === rev.dbLineId) return true;
+
+        // Match par description + montant
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const revDesc = (rev.description || '').trim().toLowerCase();
+        if (lineDesc !== revDesc) return false;
+
+        const lineAmount = parseFloat(
+          line.projected_amount ||
+            line.projectedamount ||
+            line.projectedAmount ||
+            line.amount ||
+            0
+        );
+
+        const isReceivedMatch = line.is_received === true || line.isReceived === true;
+
+        return Math.abs(lineAmount - revenueAmount) < 0.01 && isReceivedMatch;
+      });
+
+      if (!revenueLine) {
+        console.error('❌ Ligne revenue DB introuvable pour annulation');
+        alert(
+          `Impossible de trouver la ligne de revenu en base.\n\n` +
+            `Description: ${rev.description}\n` +
+            `Montant: ${formatCurrency(rev.amount)}`
+        );
+        return;
+      }
+
+      dbLineId = revenueLine.id;
+      console.log('✅ dbLineId trouvé:', dbLineId);
+    }
+
+    const result = await api.patch(
+      `/projects/${project.id}/revenue-lines/${dbLineId}/cancel-receipt`,
+      {}
+    );
+
+    // ✅✅ MISE À JOUR DES DEUX ÉTATS : revenues ET project
+    const updatedRevenues = revenues.map((r, i) => 
+      i === index 
+        ? { ...r, isPaid: false, actualAmount: 0, transactionDate: null } 
+        : r
+    );
+    setRevenues(updatedRevenues);
+
+    // ✅ Recalcul automatique après annulation
+    console.log('🔄 Recalcul automatique des totaux...');
+    try {
+      await api.post(`/projects/${project.id}/recalculate`, {});
+      console.log('✅ Totaux recalculés avec succès');
+    } catch (recalcError) {
+      console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
+    }
+
+    // Rafraîchir
+    console.log('🔄 Rafraîchissement après annulation...');
+    await refreshProjects();
+
+    if (onProjectUpdated) {
+      await onProjectUpdated(project.id);
+    }
+
+    alert(result.message || 'Encaissement annulé avec succès!');
+  } catch (err) {
+    console.error('❌ Erreur handleCancelPaymentRevenue:', err);
+    alert(err?.message || 'Erreur annulation encaissement');
+  }
+};
+
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {

@@ -749,29 +749,45 @@ exports.updateProject = async (req, res) => {
         
         updatedExpenses.push(item);
       } else {
-        // ✅ Nouvelle ligne sans dbLineId : INSERT
-        const insertResult = await client.query(
-          `INSERT INTO project_expense_lines 
-           (project_id, description, category, projected_amount, actual_amount, is_paid, transaction_date)
-           VALUES ($1, $2, $3, $4, 0, false, $5)
-           RETURNING id`,
-          [
-            id,
-            item.description || '',
-            item.category || 'Autre',
-            parseFloat(item.amount || 0),
-            item.transactionDate || item.plannedDate || null
-          ]
-        );
-        
-        const newDbLineId = insertResult.rows.id;
-        console.log(`✅ Ligne expense créée: ${newDbLineId} - ${item.description}`);
-        
-        updatedExpenses.push({
-          ...item,
-          dbLineId: newDbLineId.toString()
-        });
-      }
+  // Nouvelle ligne sans dbLineId (INSERT)
+  const insertResult = await client.query(`
+    INSERT INTO project_expense_lines (
+      project_id, description, category, projected_amount, 
+      actual_amount, is_paid, transaction_date
+    )
+    VALUES ($1, $2, $3, $4, 0, false, $5)
+    RETURNING *
+  `, [
+    id,  // Assurez-vous que "id" est bien le projectId
+    item.description,
+    item.category || 'Autre',
+    parseFloat(item.amount || 0),
+    item.transactionDate || item.plannedDate || null
+  ]);
+
+  // ✅ CORRECTION: Vérifier que insertResult.rows[0] existe
+  if (!insertResult.rows || insertResult.rows.length === 0) {
+    console.error('❌ INSERT expense line failed - No rows returned');
+    throw new Error(`Impossible de créer la ligne: ${item.description}`);
+  }
+
+  const newLine = insertResult.rows[0];
+  const newDbLineId = newLine.id;
+  
+  console.log('✅ Ligne expense créée:', newDbLineId, '-', item.description);
+  
+  // ✅ CORRECTION: Vérifier que newDbLineId existe avant toString()
+  if (!newDbLineId) {
+    console.error('❌ newDbLineId undefined pour:', item.description);
+    throw new Error(`ID de ligne manquant pour: ${item.description}`);
+  }
+  
+  updatedExpenses.push({ 
+    ...item, 
+    dbLineId: newDbLineId.toString() 
+  });
+}
+
     }
     
     // ============================================================================
@@ -1121,37 +1137,43 @@ exports.getUnpaidExpenses = async (req, res) => {
 // POST /api/projects/:projectId/expense-lines - Créer une nouvelle ligne de dépense
 exports.createExpenseLine = async (req, res) => {
   try {
-    const { projectId } = req.params;
-    const { 
-      description, 
-      category, 
-      projectedamount, 
-      actualamount, 
-      transactiondate, 
-      ispaid 
-    } = req.body;
+    // ✅ CORRECTION: Utiliser req.params.id au lieu de req.params.projectId
+    const projectId = parseInt(req.params.id, 10);
+    
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ error: 'ID projet invalide' });
+    }
 
-    console.log('📝 Création expense line:', { projectId, description, projectedamount });
+    const { description, category, projectedamount, actualamount, transactiondate, ispaid } = req.body;
 
-    // ✅ Utiliser project_id, projected_amount, etc. (snake_case)
+    console.log('📝 Création expense line:', {
+      projectId,  // ✅ Maintenant défini
+      description,
+      projectedamount
+    });
+
     const result = await pool.query(
-      `INSERT INTO project_expense_lines 
-       (project_id, description, category, projected_amount, actual_amount, transaction_date, is_paid, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING *`,
+      `INSERT INTO project_expense_lines (
+        project_id, description, category, projected_amount, 
+        actual_amount, transaction_date, is_paid, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+      RETURNING *`,
       [
-        projectId,  // sera mis dans project_id
-        description, 
-        category || 'Non catégorisé', 
-        projectedamount,  // sera mis dans projected_amount
-        actualamount || 0, 
-        transactiondate || new Date(), 
+        projectId,  // ✅ Toujours un integer valide
+        description,
+        category || 'Administratif',
+        projectedamount,
+        actualamount || 0,
+        transactiondate || new Date(),
         ispaid || false
       ]
     );
 
-    console.log('✅ Expense line créée:', result.rows[0]);
-    res.status(201).json(result.rows[0]);
+    const createdLine = result.rows[0];
+    console.log('✅ Expense line créée:', createdLine.id, '-', createdLine.description);
+    
+    res.status(201).json(createdLine);  // ✅ Retourne l'objet complet
+    
   } catch (error) {
     console.error('❌ Erreur création expense line:', error);
     res.status(500).json({ error: error.message });
@@ -1161,36 +1183,43 @@ exports.createExpenseLine = async (req, res) => {
 // Créer une ligne de revenu
 exports.createRevenueLine = async (req, res) => {
   try {
-    const { projectId } = req.params;
-    const { 
-      description, 
-      category, 
-      projectedamount, 
-      actualamount, 
-      transactiondate, 
-      isreceived 
-    } = req.body;
+    // ✅ CORRECTION: Même fix
+    const projectId = parseInt(req.params.id, 10);
+    
+    if (!projectId || isNaN(projectId)) {
+      return res.status(400).json({ error: 'ID projet invalide' });
+    }
 
-    console.log('📝 Création revenue line:', { projectId, description, projectedamount });
+    const { description, category, projectedamount, actualamount, transactiondate, isreceived } = req.body;
+
+    console.log('📝 Création revenue line:', {
+      projectId,
+      description,
+      projectedamount
+    });
 
     const result = await pool.query(
-      `INSERT INTO project_revenue_lines 
-       (projectid, description, category, projectedamount, actualamount, transactiondate, isreceived, createdat)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-       RETURNING *`,
+      `INSERT INTO project_revenue_lines (
+        project_id, description, category, projected_amount, 
+        actual_amount, transaction_date, is_received, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+      RETURNING *`,
       [
-        projectId, 
-        description, 
-        category || 'Non catégorisé', 
-        projectedamount, 
-        actualamount || 0, 
-        transactiondate || new Date(), 
+        projectId,
+        description,
+        category || 'Non catégorisé',
+        projectedamount,
+        actualamount || 0,
+        transactiondate || new Date(),
         isreceived || false
       ]
     );
 
-    console.log('✅ Revenue line créée:', result.rows[0]);
-    res.status(201).json(result.rows[0]);
+    const createdLine = result.rows[0];
+    console.log('✅ Revenue line créée:', createdLine.id, '-', createdLine.description);
+    
+    res.status(201).json(createdLine);
+    
   } catch (error) {
     console.error('❌ Erreur création revenue line:', error);
     res.status(500).json({ error: error.message });
