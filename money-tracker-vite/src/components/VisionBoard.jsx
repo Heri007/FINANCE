@@ -127,8 +127,8 @@ export default function VisionBoard() {
 
       {/* Contenu */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-slate-200 p-6">
-        {activeTab === 'vision' && (
-          mode === 'list' ? (
+        {activeTab === 'vision' &&
+          (mode === 'list' ? (
             <VisionList
               onSelect={(v) => {
                 console.log('✅ VisionList onSelect', v);
@@ -176,8 +176,7 @@ export default function VisionBoard() {
                 }}
               />
             </>
-          )
-        )}
+          ))}
 
         {activeTab === 'objectives' && (
           <ObjectivesTextEditor

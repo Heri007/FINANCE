@@ -21,10 +21,20 @@ export const transactionsService = {
       category: transaction.category,
       description: transaction.description,
       transactiondate: transaction.transactiondate || transaction.date,
-      is_planned: transaction.is_planned !== undefined ? transaction.is_planned : (transaction.isPlanned || false),
-      is_posted: transaction.is_posted !== undefined ? transaction.is_posted : (transaction.isPosted || false),
+      is_planned:
+        transaction.is_planned !== undefined
+          ? transaction.is_planned
+          : transaction.isPlanned || false,
+      is_posted:
+        transaction.is_posted !== undefined
+          ? transaction.is_posted
+          : transaction.isPosted || false,
       project_id: transaction.project_id || transaction.projectId || null,
-      project_line_id: transaction.project_line_id || transaction.projectLineId || transaction.projectLine || null,
+      project_line_id:
+        transaction.project_line_id ||
+        transaction.projectLineId ||
+        transaction.projectLine ||
+        null,
       remarks: transaction.remarks,
     };
 
@@ -45,15 +55,20 @@ export const transactionsService = {
       category: updates.category,
       description: updates.description,
       transactiondate: updates.transactiondate || updates.date,
-      is_planned: updates.is_planned !== undefined ? updates.is_planned : updates.isPlanned,
+      is_planned:
+        updates.is_planned !== undefined ? updates.is_planned : updates.isPlanned,
       is_posted: updates.is_posted !== undefined ? updates.is_posted : updates.isPosted,
       project_id: updates.project_id || updates.projectId,
-      project_line_id: updates.project_line_id || updates.projectLineId || updates.projectLine || undefined,
+      project_line_id:
+        updates.project_line_id ||
+        updates.projectLineId ||
+        updates.projectLine ||
+        undefined,
       remarks: updates.remarks,
     };
 
     // Nettoyage des undefined
-    Object.keys(payload).forEach(key => {
+    Object.keys(payload).forEach((key) => {
       if (payload[key] === undefined) delete payload[key];
     });
 
@@ -66,13 +81,14 @@ export const transactionsService = {
   updateTransaction: (id, updates) => transactionsService.update(id, updates),
 
   delete: (id) => apiRequest(`api/transactions/${id}`, { method: 'DELETE' }),
-  
+
   deleteTransaction: (id) => transactionsService.delete(id),
 
-  importTransactions: (transactions) => apiRequest('api/transactions/import', {
-    method: 'POST',
-    body: JSON.stringify({ transactions }),
-  }),
+  importTransactions: (transactions) =>
+    apiRequest('api/transactions/import', {
+      method: 'POST',
+      body: JSON.stringify({ transactions }),
+    }),
 };
 
 export default transactionsService;

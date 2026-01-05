@@ -21,7 +21,7 @@ export function VisionTextEditor({ vision, onChange }) {
       const payload = {
         content: content.trim(),
         mission: mission.trim(),
-        values: values.filter(v => v.trim()),
+        values: values.filter((v) => v.trim()),
       };
 
       const method = vision?.id ? 'PUT' : 'POST';

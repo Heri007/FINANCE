@@ -3,9 +3,28 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import {
-  User, Mail, Phone, Facebook, Linkedin, MapPin, Calendar,
-  Briefcase, DollarSign, Award, Edit, Trash2, Plus, Search,
-  Filter, Upload, Download, Eye, Clock, CheckCircle, X, Users
+  User,
+  Mail,
+  Phone,
+  Facebook,
+  Linkedin,
+  MapPin,
+  Calendar,
+  Briefcase,
+  DollarSign,
+  Award,
+  Edit,
+  Trash2,
+  Plus,
+  Search,
+  Filter,
+  Upload,
+  Download,
+  Eye,
+  Clock,
+  CheckCircle,
+  X,
+  Users,
 } from 'lucide-react';
 import { EmployeeEditModal } from './components/hr/EmployeeEditModal';
 import { API_BASE, api } from './services/api';
@@ -16,29 +35,40 @@ const HumanResourcesPage = ({ projects = [] }) => {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  
+
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
-  
+
   const [formValues, setFormValues] = useState({
-    firstName: '', lastName: '', position: '', department: '', email: '',
-    phone: '', facebook: '', linkedin: '', location: '', salary: '',
+    firstName: '',
+    lastName: '',
+    position: '',
+    department: '',
+    email: '',
+    phone: '',
+    facebook: '',
+    linkedin: '',
+    location: '',
+    salary: '',
     startDate: new Date().toISOString().split('T')[0],
-    contractType: 'CDI', skills: [],
-    emergencyContact: { name: '', phone: '', relationship: '' }
+    contractType: 'CDI',
+    skills: [],
+    emergencyContact: { name: '', phone: '', relationship: '' },
   });
 
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
 
-  useEffect(() => { loadEmployees(); }, []);
+  useEffect(() => {
+    loadEmployees();
+  }, []);
 
   const loadEmployees = async () => {
     try {
       const response = await api.get('/employees');
-      const formattedEmployees = response.map(emp => ({
+      const formattedEmployees = response.map((emp) => ({
         id: emp.id,
         firstName: emp.first_name || emp.firstName || 'Prénom',
         lastName: emp.last_name || emp.lastName || 'Nom',
@@ -51,18 +81,26 @@ const HumanResourcesPage = ({ projects = [] }) => {
         linkedin: emp.linkedin || '',
         location: emp.location || '',
         salary: parseFloat(emp.salary) || 0,
-        startDate: emp.start_date || emp.startDate || new Date().toISOString().split('T')[0],
+        startDate:
+          emp.start_date || emp.startDate || new Date().toISOString().split('T')[0],
         contractType: emp.contract_type || emp.contractType || 'CDI',
         status: emp.status || 'active',
-        skills: typeof emp.skills === 'string' ? JSON.parse(emp.skills || '[]') : (emp.skills || []),
-        projects: typeof emp.projects === 'string' ? JSON.parse(emp.projects || '[]') : (emp.projects || []),
-        emergencyContact: typeof emp.emergency_contact === 'string' 
-          ? JSON.parse(emp.emergency_contact || '{}') 
-          : (emp.emergencyContact || emp.emergency_contact || {}),
+        skills:
+          typeof emp.skills === 'string'
+            ? JSON.parse(emp.skills || '[]')
+            : emp.skills || [],
+        projects:
+          typeof emp.projects === 'string'
+            ? JSON.parse(emp.projects || '[]')
+            : emp.projects || [],
+        emergencyContact:
+          typeof emp.emergency_contact === 'string'
+            ? JSON.parse(emp.emergency_contact || '{}')
+            : emp.emergencyContact || emp.emergency_contact || {},
         createdAt: emp.created_at || emp.createdAt,
-        updatedAt: emp.updated_at || emp.updatedAt
+        updatedAt: emp.updated_at || emp.updatedAt,
       }));
-      
+
       setEmployees(formattedEmployees);
     } catch (error) {
       console.error('❌ Erreur chargement employés:', error);
@@ -73,18 +111,21 @@ const HumanResourcesPage = ({ projects = [] }) => {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormValues(prev => ({ ...prev, [name]: value }));
+    setFormValues((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSkillsChange = (skillsString) => {
-    const skillsArray = skillsString.split(',').map(s => s.trim()).filter(Boolean);
-    setFormValues(prev => ({ ...prev, skills: skillsArray }));
+    const skillsArray = skillsString
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    setFormValues((prev) => ({ ...prev, skills: skillsArray }));
   };
 
   const handleEmergencyContactChange = (field, value) => {
-    setFormValues(prev => ({
+    setFormValues((prev) => ({
       ...prev,
-      emergencyContact: { ...prev.emergencyContact, [field]: value }
+      emergencyContact: { ...prev.emergencyContact, [field]: value },
     }));
   };
 
@@ -93,116 +134,129 @@ const HumanResourcesPage = ({ projects = [] }) => {
     if (file) {
       setPhotoFile(file);
       const reader = new FileReader();
-      reader.onloadend = () => { setPhotoPreview(reader.result); };
+      reader.onloadend = () => {
+        setPhotoPreview(reader.result);
+      };
       reader.readAsDataURL(file);
     }
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  try {
-    const formData = new FormData();
-    formData.append('firstName', formValues.firstName);
-    formData.append('lastName', formValues.lastName);
-    formData.append('position', formValues.position);
-    formData.append('department', formValues.department);
-    formData.append('email', formValues.email);
-    formData.append('phone', formValues.phone || '');
-    formData.append('facebook', formValues.facebook || '');
-    formData.append('linkedin', formValues.linkedin || '');
-    formData.append('location', formValues.location || '');
-    formData.append('salary', formValues.salary || 0);
-    formData.append('startDate', formValues.startDate);
-    formData.append('contractType', formValues.contractType);
-    formData.append('skills', JSON.stringify(formValues.skills));
-    formData.append('emergencyContact', JSON.stringify(formValues.emergencyContact));
-    
-    if (photoFile) {
-      formData.append('photo', photoFile);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      const formData = new FormData();
+      formData.append('firstName', formValues.firstName);
+      formData.append('lastName', formValues.lastName);
+      formData.append('position', formValues.position);
+      formData.append('department', formValues.department);
+      formData.append('email', formValues.email);
+      formData.append('phone', formValues.phone || '');
+      formData.append('facebook', formValues.facebook || '');
+      formData.append('linkedin', formValues.linkedin || '');
+      formData.append('location', formValues.location || '');
+      formData.append('salary', formValues.salary || 0);
+      formData.append('startDate', formValues.startDate);
+      formData.append('contractType', formValues.contractType);
+      formData.append('skills', JSON.stringify(formValues.skills));
+      formData.append('emergencyContact', JSON.stringify(formValues.emergencyContact));
+
+      if (photoFile) {
+        formData.append('photo', photoFile);
+      }
+
+      // 🔐 Récupérer le token CSRF
+      const csrfToken = await fetchCsrfToken();
+
+      const response = await fetch(`${API_BASE}/api/employees`, {
+        method: 'POST',
+        credentials: 'include', // ✅ envoie les cookies (CSRF)
+        headers: {
+          ...getAuthHeader(), // ✅ Authorization: Bearer
+          'X-CSRF-Token': csrfToken, // ✅ protection CSRF
+          // NE PAS définir 'Content-Type' → laissé à FormData
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Erreur lors de la création');
+      }
+
+      const newEmployee = await response.json();
+      setEmployees((prev) => [...prev, newEmployee]);
+
+      setFormValues({
+        firstName: '',
+        lastName: '',
+        position: '',
+        department: '',
+        email: '',
+        phone: '',
+        facebook: '',
+        linkedin: '',
+        location: '',
+        salary: 0,
+        startDate: new Date().toISOString().split('T')[0],
+        contractType: 'CDI',
+        skills: [],
+        emergencyContact: { name: '', phone: '', relationship: '' },
+      });
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      setShowAddModal(false);
+
+      toast.success('Employé ajouté avec succès');
+    } catch (err) {
+      console.error('Erreur ajout employé:', err);
+      toast.error(err.message || "Erreur lors de l'ajout");
     }
-
-    // 🔐 Récupérer le token CSRF
-    const csrfToken = await fetchCsrfToken();
-
-    const response = await fetch(`${API_BASE}/api/employees`, {
-      method: 'POST',
-      credentials: 'include',           // ✅ envoie les cookies (CSRF)
-      headers: {
-        ...getAuthHeader(),             // ✅ Authorization: Bearer
-        'X-CSRF-Token': csrfToken,      // ✅ protection CSRF
-        // NE PAS définir 'Content-Type' → laissé à FormData
-      },
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || 'Erreur lors de la création');
-    }
-
-    const newEmployee = await response.json();
-    setEmployees(prev => [...prev, newEmployee]);
-    
-    setFormValues({
-      firstName: '', lastName: '', position: '', department: '', email: '',
-      phone: '', facebook: '', linkedin: '', location: '', salary: 0,
-      startDate: new Date().toISOString().split('T')[0],
-      contractType: 'CDI', skills: [],
-      emergencyContact: { name: '', phone: '', relationship: '' },
-    });
-    setPhotoFile(null);
-    setPhotoPreview(null);
-    setShowAddModal(false);
-    
-    toast.success('Employé ajouté avec succès');
-  } catch (err) {
-    console.error('Erreur ajout employé:', err);
-    toast.error(err.message || 'Erreur lors de l\'ajout');
-  }
-};
+  };
 
   const handleDeleteEmployee = async (id) => {
-  if (!window.confirm('⚠️ Voulez-vous vraiment supprimer cet employé ?')) return;
-  
-  try {
-    await api.delete(`/employees/${id}`); // ✅ Utilise api.delete
-    
-    setEmployees(prev => prev.filter(e => e.id !== id));
-    toast.success('✅ Employé supprimé');
-  } catch (err) {
-    console.error('Erreur suppression:', err);
-    toast.error(`❌ ${err.message || 'Erreur lors de la suppression'}`);
-  }
-};
+    if (!window.confirm('⚠️ Voulez-vous vraiment supprimer cet employé ?')) return;
+
+    try {
+      await api.delete(`/employees/${id}`); // ✅ Utilise api.delete
+
+      setEmployees((prev) => prev.filter((e) => e.id !== id));
+      toast.success('✅ Employé supprimé');
+    } catch (err) {
+      console.error('Erreur suppression:', err);
+      toast.error(`❌ ${err.message || 'Erreur lors de la suppression'}`);
+    }
+  };
 
   const filteredEmployees = useMemo(() => {
-    return employees.filter(emp => {
+    return employees.filter((emp) => {
       const firstName = emp.firstName || '';
       const lastName = emp.lastName || '';
       const position = emp.position || '';
       const department = emp.department || '';
-      
-      const matchesSearch = !searchTerm || 
+
+      const matchesSearch =
+        !searchTerm ||
         firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         position.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesDepartment = !selectedDepartment || 
-        selectedDepartment === 'all' || 
+
+      const matchesDepartment =
+        !selectedDepartment ||
+        selectedDepartment === 'all' ||
         department === selectedDepartment;
-      
+
       const matchesStatus = !selectedStatus || emp.status === selectedStatus;
-      
+
       return matchesSearch && matchesDepartment && matchesStatus;
     });
   }, [employees, searchTerm, selectedDepartment, selectedStatus]);
 
   const stats = {
     total: employees.length,
-    active: employees.filter(e => e.status === 'active').length,
-    onLeave: employees.filter(e => e.status === 'leave').length,
-    totalSalary: employees.reduce((sum, e) => sum + (e.salary || 0), 0)
+    active: employees.filter((e) => e.status === 'active').length,
+    onLeave: employees.filter((e) => e.status === 'leave').length,
+    totalSalary: employees.reduce((sum, e) => sum + (e.salary || 0), 0),
   };
 
   return (
@@ -292,8 +346,8 @@ const HumanResourcesPage = ({ projects = [] }) => {
             <button
               onClick={() => setViewMode('grid')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
-                viewMode === 'grid' 
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' 
+                viewMode === 'grid'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -302,8 +356,8 @@ const HumanResourcesPage = ({ projects = [] }) => {
             <button
               onClick={() => setViewMode('list')}
               className={`px-4 py-2.5 rounded-lg font-bold text-sm transition-all ${
-                viewMode === 'list' 
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' 
+                viewMode === 'list'
+                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -369,11 +423,20 @@ const HumanResourcesPage = ({ projects = [] }) => {
           onClose={() => {
             setShowAddModal(false);
             setFormValues({
-              firstName: '', lastName: '', position: '', department: '', email: '',
-              phone: '', facebook: '', linkedin: '', location: '', salary: '',
+              firstName: '',
+              lastName: '',
+              position: '',
+              department: '',
+              email: '',
+              phone: '',
+              facebook: '',
+              linkedin: '',
+              location: '',
+              salary: '',
               startDate: new Date().toISOString().split('T')[0],
-              contractType: 'CDI', skills: [],
-              emergencyContact: { name: '', phone: '', relationship: '' }
+              contractType: 'CDI',
+              skills: [],
+              emergencyContact: { name: '', phone: '', relationship: '' },
             });
             setPhotoFile(null);
             setPhotoPreview(null);
@@ -390,54 +453,62 @@ const HumanResourcesPage = ({ projects = [] }) => {
       )}
 
       <EmployeeEditModal
-  employee={editingEmployee}
-  open={isEditOpen}
-  onClose={() => {
-    setIsEditOpen(false);
-    setEditingEmployee(null);
-  }}
-  onSave={async (updated) => {
-    try {
-      console.log('📤 Sending update for employee ID:', updated.id);
+        employee={editingEmployee}
+        open={isEditOpen}
+        onClose={() => {
+          setIsEditOpen(false);
+          setEditingEmployee(null);
+        }}
+        onSave={async (updated) => {
+          try {
+            console.log('📤 Sending update for employee ID:', updated.id);
 
-      const response = await api.put(`/employees/${updated.id}`, updated);
-      
-      const formattedEmployee = {
-        id: response.id,
-        firstName: response.first_name || response.firstName,
-        lastName: response.last_name || response.lastName,
-        photo: response.photo,
-        position: response.position,
-        department: response.department,
-        email: response.email,
-        phone: response.phone,
-        facebook: response.facebook,
-        linkedin: response.linkedin,
-        location: response.location,
-        salary: response.salary,
-        startDate: response.start_date || response.startDate,
-        contractType: response.contract_type || response.contractType,
-        status: response.status,
-        skills: typeof response.skills === 'string' ? JSON.parse(response.skills) : response.skills || [],
-        projects: typeof response.projects === 'string' ? JSON.parse(response.projects) : response.projects || [],
-        emergencyContact: typeof response.emergency_contact === 'string' 
-          ? JSON.parse(response.emergency_contact) 
-          : response.emergencyContact || {},
-      };
-      
-      setEmployees(prev => prev.map(e => e.id === updated.id ? formattedEmployee : e));
-      
-      setIsEditOpen(false);
-      setEditingEmployee(null);
-      toast.success('✅ Employé mis à jour');
-    } catch (error) {
-      console.error('Erreur mise à jour employé:', error);
-      toast.error('❌ Erreur lors de la mise à jour');
-    }
-  }}
-  projects={projects}
-/>
+            const response = await api.put(`/employees/${updated.id}`, updated);
 
+            const formattedEmployee = {
+              id: response.id,
+              firstName: response.first_name || response.firstName,
+              lastName: response.last_name || response.lastName,
+              photo: response.photo,
+              position: response.position,
+              department: response.department,
+              email: response.email,
+              phone: response.phone,
+              facebook: response.facebook,
+              linkedin: response.linkedin,
+              location: response.location,
+              salary: response.salary,
+              startDate: response.start_date || response.startDate,
+              contractType: response.contract_type || response.contractType,
+              status: response.status,
+              skills:
+                typeof response.skills === 'string'
+                  ? JSON.parse(response.skills)
+                  : response.skills || [],
+              projects:
+                typeof response.projects === 'string'
+                  ? JSON.parse(response.projects)
+                  : response.projects || [],
+              emergencyContact:
+                typeof response.emergency_contact === 'string'
+                  ? JSON.parse(response.emergency_contact)
+                  : response.emergencyContact || {},
+            };
+
+            setEmployees((prev) =>
+              prev.map((e) => (e.id === updated.id ? formattedEmployee : e))
+            );
+
+            setIsEditOpen(false);
+            setEditingEmployee(null);
+            toast.success('✅ Employé mis à jour');
+          } catch (error) {
+            console.error('Erreur mise à jour employé:', error);
+            toast.error('❌ Erreur lors de la mise à jour');
+          }
+        }}
+        projects={projects}
+      />
     </div>
   );
 };
@@ -445,11 +516,11 @@ const HumanResourcesPage = ({ projects = [] }) => {
 /* ==================== COMPOSANTS STYLISÉS ==================== */
 
 const StatCard = ({ icon, label, value, gradient }) => (
-  <div className={`bg-gradient-to-br ${gradient} rounded-lg shadow-md border-2 border-white/30 p-4`}>
+  <div
+    className={`bg-gradient-to-br ${gradient} rounded-lg shadow-md border-2 border-white/30 p-4`}
+  >
     <div className="flex items-center gap-3 mb-2">
-      <div className="bg-white/20 p-1.5 rounded">
-        {icon}
-      </div>
+      <div className="bg-white/20 p-1.5 rounded">{icon}</div>
       <p className="text-sm font-bold text-white uppercase tracking-wider leading-tight">
         {label}
       </p>
@@ -461,19 +532,27 @@ const StatCard = ({ icon, label, value, gradient }) => (
 const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-slate-100 text-slate-800';
-      case 'leave': return 'bg-orange-100 text-orange-800';
-      default: return 'bg-green-100 text-green-800';
+      case 'active':
+        return 'bg-green-100 text-green-800';
+      case 'inactive':
+        return 'bg-slate-100 text-slate-800';
+      case 'leave':
+        return 'bg-orange-100 text-orange-800';
+      default:
+        return 'bg-green-100 text-green-800';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'active': return '✓ Actif';
-      case 'inactive': return '⏸ Inactif';
-      case 'leave': return '🏖 En congé';
-      default: return status;
+      case 'active':
+        return '✓ Actif';
+      case 'inactive':
+        return '⏸ Inactif';
+      case 'leave':
+        return '🏖 En congé';
+      default:
+        return status;
     }
   };
 
@@ -481,8 +560,12 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
     <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-md border-2 border-slate-200 hover:border-blue-600 hover:shadow-lg transition-all overflow-hidden">
       {/* Photo header */}
       <div className="relative h-40 bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-        <img 
-          src={employee.photo ? `http://localhost:5002${employee.photo}` : '/default-avatar.png'} 
+        <img
+          src={
+            employee.photo
+              ? `http://localhost:5002${employee.photo}`
+              : '/default-avatar.png'
+          }
           alt={`${employee.firstName} ${employee.lastName}`}
           className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
           onError={(e) => {
@@ -492,7 +575,9 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
             }
           }}
         />
-        <div className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(employee.status)}`}>
+        <div
+          className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold ${getStatusColor(employee.status)}`}
+        >
           {getStatusLabel(employee.status)}
         </div>
       </div>
@@ -518,9 +603,10 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
           <div className="flex items-center gap-2 text-slate-600">
             <Calendar className="w-4 h-4" strokeWidth={2.5} />
             <span className="font-semibold">
-              Depuis {new Date(employee.startDate).toLocaleDateString('fr-FR', { 
-                month: 'short', 
-                year: 'numeric' 
+              Depuis{' '}
+              {new Date(employee.startDate).toLocaleDateString('fr-FR', {
+                month: 'short',
+                year: 'numeric',
               })}
             </span>
           </div>
@@ -529,7 +615,10 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
         {employee.skills && employee.skills.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {employee.skills.slice(0, 3).map((skill, idx) => (
-              <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold">
+              <span
+                key={idx}
+                className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold"
+              >
                 {skill}
               </span>
             ))}
@@ -565,8 +654,8 @@ const EmployeeCard = ({ employee, onView, onEdit, onDelete }) => {
           </button>
         </div>
 
-        <button 
-          onClick={() => onView(employee)} 
+        <button
+          onClick={() => onView(employee)}
           className="w-full flex items-center justify-center gap-2 h-9 rounded-lg bg-slate-100 text-slate-700 font-bold text-sm hover:bg-slate-200 transition-all"
         >
           <Eye className="w-4 h-4" strokeWidth={2.5} />
@@ -605,7 +694,7 @@ const EmployeeTable = ({ employees, onView, onEdit, onDelete }) => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-slate-200">
-          {employees.map(employee => (
+          {employees.map((employee) => (
             <tr key={employee.id} className="hover:bg-blue-50 transition-colors">
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="flex items-center gap-3">
@@ -624,12 +713,16 @@ const EmployeeTable = ({ employees, onView, onEdit, onDelete }) => {
                     <div className="text-sm font-bold text-slate-900">
                       {employee.firstName} {employee.lastName}
                     </div>
-                    <div className="text-xs text-slate-500 font-semibold">{employee.location}</div>
+                    <div className="text-xs text-slate-500 font-semibold">
+                      {employee.location}
+                    </div>
                   </div>
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-bold text-slate-900">{employee.position}</div>
+                <div className="text-sm font-bold text-slate-900">
+                  {employee.position}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className="px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full bg-blue-100 text-blue-800">
@@ -638,16 +731,25 @@ const EmployeeTable = ({ employees, onView, onEdit, onDelete }) => {
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <div className="text-sm font-bold text-slate-900">{employee.phone}</div>
-                <div className="text-xs text-slate-500 font-semibold">{employee.email}</div>
+                <div className="text-xs text-slate-500 font-semibold">
+                  {employee.email}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <span className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${
-                  employee.status === 'active' ? 'bg-green-100 text-green-800' :
-                  employee.status === 'leave' ? 'bg-orange-100 text-orange-800' :
-                  'bg-slate-100 text-slate-800'
-                }`}>
-                  {employee.status === 'active' ? '✓ Actif' : 
-                   employee.status === 'leave' ? '🏖 Congé' : '⏸ Inactif'}
+                <span
+                  className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full ${
+                    employee.status === 'active'
+                      ? 'bg-green-100 text-green-800'
+                      : employee.status === 'leave'
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-slate-100 text-slate-800'
+                  }`}
+                >
+                  {employee.status === 'active'
+                    ? '✓ Actif'
+                    : employee.status === 'leave'
+                      ? '🏖 Congé'
+                      : '⏸ Inactif'}
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -686,8 +788,14 @@ const EmployeeTable = ({ employees, onView, onEdit, onDelete }) => {
 /* ==================== EMPLOYEE DETAILS MODAL ==================== */
 const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* En-tête avec photo - Style premium */}
         <div className="relative h-48 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-t-2xl">
           <button
@@ -721,12 +829,20 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
             </h2>
             <p className="text-lg text-blue-600 font-bold mb-3">{employee.position}</p>
             <div className="flex items-center gap-4">
-              <span className={`px-3 py-1.5 rounded-full text-sm font-bold ${
-                employee.status === 'active' ? 'bg-green-100 text-green-800' :
-                employee.status === 'leave' ? 'bg-orange-100 text-orange-800' :
-                'bg-slate-100 text-slate-800'
-              }`}>
-                {employee.status === 'active' ? '✓ Actif' : employee.status === 'leave' ? '🏖 En congé' : '⏸ Inactif'}
+              <span
+                className={`px-3 py-1.5 rounded-full text-sm font-bold ${
+                  employee.status === 'active'
+                    ? 'bg-green-100 text-green-800'
+                    : employee.status === 'leave'
+                      ? 'bg-orange-100 text-orange-800'
+                      : 'bg-slate-100 text-slate-800'
+                }`}
+              >
+                {employee.status === 'active'
+                  ? '✓ Actif'
+                  : employee.status === 'leave'
+                    ? '🏖 En congé'
+                    : '⏸ Inactif'}
               </span>
               <span className="px-3 py-1.5 bg-blue-100 text-blue-800 rounded-full text-sm font-bold">
                 {employee.contractType}
@@ -740,11 +856,13 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               <h3 className="text-lg font-black text-slate-800 mb-3 border-b-2 border-slate-200 pb-2">
                 Informations générales
               </h3>
-              
+
               <div className="flex items-start gap-3">
                 <Briefcase className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase">Département</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase">
+                    Département
+                  </p>
                   <p className="text-slate-900 font-bold">{employee.department}</p>
                 </div>
               </div>
@@ -752,7 +870,9 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               <div className="flex items-start gap-3">
                 <MapPin className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase">Localisation</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase">
+                    Localisation
+                  </p>
                   <p className="text-slate-900 font-bold">{employee.location}</p>
                 </div>
               </div>
@@ -760,12 +880,14 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               <div className="flex items-start gap-3">
                 <Calendar className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase">Date d'embauche</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase">
+                    Date d'embauche
+                  </p>
                   <p className="text-slate-900 font-bold">
-                    {new Date(employee.startDate).toLocaleDateString('fr-FR', { 
-                      day: 'numeric', 
-                      month: 'long', 
-                      year: 'numeric' 
+                    {new Date(employee.startDate).toLocaleDateString('fr-FR', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
                     })}
                   </p>
                 </div>
@@ -774,7 +896,9 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               <div className="flex items-start gap-3">
                 <DollarSign className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase">Salaire mensuel</p>
+                  <p className="text-xs text-slate-500 font-bold uppercase">
+                    Salaire mensuel
+                  </p>
                   <p className="text-slate-900 font-bold">
                     {employee.salary.toLocaleString('fr-FR')} Ar
                   </p>
@@ -787,12 +911,15 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               <h3 className="text-lg font-black text-slate-800 mb-3 border-b-2 border-slate-200 pb-2">
                 Contact
               </h3>
-              
+
               <div className="flex items-start gap-3">
                 <Mail className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
                   <p className="text-xs text-slate-500 font-bold uppercase">Email</p>
-                  <a href={`mailto:${employee.email}`} className="text-blue-600 hover:underline font-bold">
+                  <a
+                    href={`mailto:${employee.email}`}
+                    className="text-blue-600 hover:underline font-bold"
+                  >
                     {employee.email}
                   </a>
                 </div>
@@ -802,7 +929,10 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
                 <Phone className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                 <div>
                   <p className="text-xs text-slate-500 font-bold uppercase">Téléphone</p>
-                  <a href={`tel:${employee.phone}`} className="text-blue-600 hover:underline font-bold">
+                  <a
+                    href={`tel:${employee.phone}`}
+                    className="text-blue-600 hover:underline font-bold"
+                  >
                     {employee.phone}
                   </a>
                 </div>
@@ -813,7 +943,12 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
                   <Facebook className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                   <div>
                     <p className="text-xs text-slate-500 font-bold uppercase">Facebook</p>
-                    <a href={employee.facebook} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-bold">
+                    <a
+                      href={employee.facebook}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline font-bold"
+                    >
                       Voir le profil
                     </a>
                   </div>
@@ -825,7 +960,12 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
                   <Linkedin className="w-5 h-5 text-blue-600 mt-0.5" strokeWidth={2.5} />
                   <div>
                     <p className="text-xs text-slate-500 font-bold uppercase">LinkedIn</p>
-                    <a href={employee.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-bold">
+                    <a
+                      href={employee.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline font-bold"
+                    >
                       Voir le profil
                     </a>
                   </div>
@@ -835,13 +975,18 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               {/* Contact d'urgence */}
               {employee.emergencyContact && employee.emergencyContact.name && (
                 <div className="mt-6 p-4 bg-red-50 rounded-xl border-2 border-red-200">
-                  <h4 className="text-sm font-black text-red-800 mb-2 uppercase">Contact d'urgence</h4>
+                  <h4 className="text-sm font-black text-red-800 mb-2 uppercase">
+                    Contact d'urgence
+                  </h4>
                   <div className="space-y-1">
                     <p className="text-sm font-bold text-red-900">
-                      <strong>{employee.emergencyContact.name}</strong> 
-                      {employee.emergencyContact.relationship && ` (${employee.emergencyContact.relationship})`}
+                      <strong>{employee.emergencyContact.name}</strong>
+                      {employee.emergencyContact.relationship &&
+                        ` (${employee.emergencyContact.relationship})`}
                     </p>
-                    <p className="text-sm text-red-700 font-semibold">{employee.emergencyContact.phone}</p>
+                    <p className="text-sm text-red-700 font-semibold">
+                      {employee.emergencyContact.phone}
+                    </p>
                   </div>
                 </div>
               )}
@@ -856,7 +1001,10 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               </h3>
               <div className="flex flex-wrap gap-2">
                 {employee.skills.map((skill, idx) => (
-                  <span key={idx} className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold">
+                  <span
+                    key={idx}
+                    className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-bold"
+                  >
                     {skill}
                   </span>
                 ))}
@@ -872,7 +1020,10 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
               </h3>
               <div className="space-y-2">
                 {employee.projects.map((project, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border-2 border-purple-200">
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 p-3 bg-purple-50 rounded-lg border-2 border-purple-200"
+                  >
                     <Award className="w-4 h-4 text-purple-600" strokeWidth={2.5} />
                     <span className="text-sm font-bold text-purple-800">{project}</span>
                   </div>
@@ -902,20 +1053,26 @@ const EmployeeDetailsModal = ({ employee, onClose, onEdit }) => {
 };
 
 /* ==================== ADD EMPLOYEE MODAL ==================== */
-const AddEmployeeModal = ({ 
-  onClose, 
-  onSave, 
-  formValues, 
-  photoPreview, 
-  handleInputChange, 
-  handleSkillsChange, 
-  handleEmergencyContactChange, 
-  handlePhotoChange, 
-  handleSubmit 
+const AddEmployeeModal = ({
+  onClose,
+  onSave,
+  formValues,
+  photoPreview,
+  handleInputChange,
+  handleSkillsChange,
+  handleEmergencyContactChange,
+  handlePhotoChange,
+  handleSubmit,
 }) => {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* En-tête */}
         <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 border-b-2 border-blue-700 px-6 py-4 rounded-t-2xl z-10">
           <div className="flex items-center justify-between">
@@ -1121,7 +1278,9 @@ const AddEmployeeModal = ({
 
           {/* Contact d'urgence */}
           <div className="bg-red-50 rounded-xl p-4 border-2 border-red-200">
-            <h3 className="text-sm font-black text-red-800 mb-3 uppercase">Contact d'urgence</h3>
+            <h3 className="text-sm font-black text-red-800 mb-3 uppercase">
+              Contact d'urgence
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input
                 type="text"
@@ -1141,7 +1300,9 @@ const AddEmployeeModal = ({
                 type="text"
                 placeholder="Relation"
                 value={formValues.emergencyContact.relationship}
-                onChange={(e) => handleEmergencyContactChange('relationship', e.target.value)}
+                onChange={(e) =>
+                  handleEmergencyContactChange('relationship', e.target.value)
+                }
                 className="px-4 py-2.5 border-2 border-red-200 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all font-semibold"
               />
             </div>

@@ -13,17 +13,19 @@ export const projectsService = {
 
   getById: (id) => apiRequest(`api/projects/${id}`),
 
-  create: (project) => apiRequest('api/projects', {
-    method: 'POST',
-    body: JSON.stringify(project),
-  }),
+  create: (project) =>
+    apiRequest('api/projects', {
+      method: 'POST',
+      body: JSON.stringify(project),
+    }),
 
   createProject: (project) => projectsService.create(project),
 
-  update: (id, project) => apiRequest(`api/projects/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(project),
-  }),
+  update: (id, project) =>
+    apiRequest(`api/projects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(project),
+    }),
 
   updateProject: (id, project) => projectsService.update(id, project),
 
@@ -37,27 +39,33 @@ export const projectsService = {
   markExpenseLinePaid: async (projectId, lineId, data) => {
     return apiRequest(`api/projects/${projectId}/expense-lines/${lineId}/mark-paid`, {
       method: 'PATCH',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   },
 
   markRevenueLineReceived: async (projectId, lineId, data) => {
     return apiRequest(`api/projects/${projectId}/revenue-lines/${lineId}/mark-received`, {
       method: 'PATCH',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
     });
   },
 
   cancelExpenseLinePayment: async (projectId, lineId) => {
-    return apiRequest(`api/projects/${projectId}/expense-lines/${lineId}/cancel-payment`, {
-      method: 'PATCH'
-    });
+    return apiRequest(
+      `api/projects/${projectId}/expense-lines/${lineId}/cancel-payment`,
+      {
+        method: 'PATCH',
+      }
+    );
   },
 
   cancelRevenueLineReceipt: async (projectId, lineId) => {
-    return apiRequest(`api/projects/${projectId}/revenue-lines/${lineId}/cancel-receipt`, {
-      method: 'PATCH'
-    });
+    return apiRequest(
+      `api/projects/${projectId}/revenue-lines/${lineId}/cancel-receipt`,
+      {
+        method: 'PATCH',
+      }
+    );
   },
 
   // Migration localStorage (optionnel, peut être gardé)

@@ -1,11 +1,47 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Filter, Search, Download, Plus, Edit2, Trash2, CheckCircle, AlertCircle, Clock, DollarSign, Users, Package, TrendingUp } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, differenceInDays, parseISO, isWithinInterval, isSameDay, addDays } from 'date-fns';
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  Filter,
+  Search,
+  Download,
+  Plus,
+  Edit2,
+  Trash2,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  DollarSign,
+  Users,
+  Package,
+  TrendingUp,
+} from 'lucide-react';
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  addMonths,
+  subMonths,
+  differenceInDays,
+  parseISO,
+  isWithinInterval,
+  isSameDay,
+  addDays,
+} from 'date-fns';
 import { fr } from 'date-fns/locale';
 import TreasuryTimeline from '../TreasuryTimeline';
 import { useFinance } from '../../contexts/FinanceContext';
 
-const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefresh }) => {
+const GanttTimelineModal = ({
+  isOpen,
+  onClose,
+  projects,
+  onUpdateProject,
+  onRefresh,
+}) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [viewMode, setViewMode] = useState('month');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -17,26 +53,30 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   const { accounts, receivables, transactions, plannedTransactions } = useFinance();
   const [isTimelineExpanded, setIsTimelineExpanded] = useState(false);
 
-
-
   console.log('🎨 GanttTimelineModal - Projets reçus:', projects);
 
   // Normaliser les données des projets
   const normalizedProjects = useMemo(() => {
     console.log('🔍 Projets bruts reçus:', projects);
-  
-    return projects.map(p => {
+
+    return projects.map((p) => {
       const start_date = p.start_date || p.startdate || p.startDate || null;
       const end_date = p.end_date || p.enddate || p.endDate || null;
-      const total_amount = parseFloat(p.total_amount || p.totalrevenues || p.totalRevenues || p.total_revenues || 0);
-      const total_cost = parseFloat(p.total_cost || p.totalcost || p.totalCost || p.total_expenses || 0);
+      const total_amount = parseFloat(
+        p.total_amount || p.totalrevenues || p.totalRevenues || p.total_revenues || 0
+      );
+      const total_cost = parseFloat(
+        p.total_cost || p.totalcost || p.totalCost || p.total_expenses || 0
+      );
       const name = p.name || p.projectName || p.project_name || 'Projet sans nom';
-      const client_name = p.client_name || p.clientname || p.clientName || p.client || 'N/A';
-      const product_name = p.product_name || p.productname || p.productName || p.product || 'N/A';
+      const client_name =
+        p.client_name || p.clientname || p.clientName || p.client || 'N/A';
+      const product_name =
+        p.product_name || p.productname || p.productName || p.product || 'N/A';
       const progress = parseFloat(p.progress || 0);
       const color = p.color || '#3B82F6';
       const status = p.status || 'active';
-      
+
       const normalized = {
         ...p,
         name,
@@ -50,13 +90,13 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
         color,
         status,
       };
-      
+
       console.log(`✅ Projet normalisé: "${normalized.name}"`, {
         id: normalized.id,
         start_date: normalized.start_date,
         end_date: normalized.end_date,
       });
-      
+
       return normalized;
     });
   }, [projects]);
@@ -64,34 +104,34 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   console.log('📊 Total projets normalisés:', normalizedProjects.length);
 
   // Au lieu de passer timelineStart/timelineEnd bruts
-//const focusStart = new Date();
-//focusStart.setDate(focusStart.getDate() - 45); // 45 jours avant
-//const focusEnd = new Date();
-//focusEnd.setDate(focusEnd.getDate() + 45); // 45 jours après
+  //const focusStart = new Date();
+  //focusStart.setDate(focusStart.getDate() - 45); // 45 jours avant
+  //const focusEnd = new Date();
+  //focusEnd.setDate(focusEnd.getDate() + 45); // 45 jours après
 
   // 5️⃣ 🆕 Calculer les dates de timeline
   const timelineStart = useMemo(() => {
     if (normalizedProjects.length === 0) return startOfMonth(new Date());
-    
+
     const dates = normalizedProjects
-      .map(p => new Date(p.start_date || p.startDate))
-      .filter(d => !isNaN(d.getTime()));
-    
+      .map((p) => new Date(p.start_date || p.startDate))
+      .filter((d) => !isNaN(d.getTime()));
+
     if (dates.length === 0) return startOfMonth(new Date());
-    
+
     const earliest = new Date(Math.min(...dates));
     return startOfMonth(earliest);
   }, [normalizedProjects]);
 
   const timelineEnd = useMemo(() => {
     if (normalizedProjects.length === 0) return endOfMonth(addMonths(new Date(), 3));
-    
+
     const dates = normalizedProjects
-      .map(p => new Date(p.end_date || p.endDate))
-      .filter(d => !isNaN(d.getTime()));
-    
+      .map((p) => new Date(p.end_date || p.endDate))
+      .filter((d) => !isNaN(d.getTime()));
+
     if (dates.length === 0) return endOfMonth(addMonths(new Date(), 3));
-    
+
     const latest = new Date(Math.max(...dates));
     return endOfMonth(addMonths(latest, 1));
   }, [normalizedProjects]);
@@ -105,14 +145,19 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
       delayed: 0,
       totalRevenue: 0,
       totalCost: 0,
-      avgProgress: 0
+      avgProgress: 0,
     };
 
-    normalizedProjects.forEach(project => {
+    normalizedProjects.forEach((project) => {
       if (project.status === 'completed') stats.completed++;
-      else if (project.status === 'active' || project.status === 'in_progress') stats.active++;
-      
-      if (project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed') {
+      else if (project.status === 'active' || project.status === 'in_progress')
+        stats.active++;
+
+      if (
+        project.end_date &&
+        new Date(project.end_date) < new Date() &&
+        project.status !== 'completed'
+      ) {
         stats.delayed++;
       }
 
@@ -121,21 +166,30 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
       stats.avgProgress += parseFloat(project.progress || 0);
     });
 
-    stats.avgProgress = normalizedProjects.length > 0 ? stats.avgProgress / normalizedProjects.length : 0;
+    stats.avgProgress =
+      normalizedProjects.length > 0 ? stats.avgProgress / normalizedProjects.length : 0;
     stats.profit = stats.totalRevenue - stats.totalCost;
-    stats.profitMargin = stats.totalRevenue > 0 ? (stats.profit / stats.totalRevenue) * 100 : 0;
+    stats.profitMargin =
+      stats.totalRevenue > 0 ? (stats.profit / stats.totalRevenue) * 100 : 0;
 
     return stats;
   }, [normalizedProjects]);
 
   // Filtrer et rechercher les projets
   const filteredProjects = useMemo(() => {
-    return normalizedProjects.filter(project => {
+    return normalizedProjects.filter((project) => {
       if (filterStatus !== 'all') {
-        if (filterStatus === 'active' && !['active', 'in_progress'].includes(project.status)) return false;
+        if (
+          filterStatus === 'active' &&
+          !['active', 'in_progress'].includes(project.status)
+        )
+          return false;
         if (filterStatus === 'completed' && project.status !== 'completed') return false;
         if (filterStatus === 'delayed') {
-          const isDelayed = project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed';
+          const isDelayed =
+            project.end_date &&
+            new Date(project.end_date) < new Date() &&
+            project.status !== 'completed';
           if (!isDelayed) return false;
         }
       }
@@ -157,7 +211,7 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   // Générer les jours de la vue actuelle
   const timelineDays = useMemo(() => {
     let start, end;
-    
+
     switch (viewMode) {
       case 'month':
         start = startOfMonth(currentMonth);
@@ -222,11 +276,15 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
 
   // Navigation dans le temps
   const handlePrevious = () => {
-    setCurrentMonth(prev => subMonths(prev, viewMode === 'year' ? 12 : viewMode === 'quarter' ? 3 : 1));
+    setCurrentMonth((prev) =>
+      subMonths(prev, viewMode === 'year' ? 12 : viewMode === 'quarter' ? 3 : 1)
+    );
   };
 
   const handleNext = () => {
-    setCurrentMonth(prev => addMonths(prev, viewMode === 'year' ? 12 : viewMode === 'quarter' ? 3 : 1));
+    setCurrentMonth((prev) =>
+      addMonths(prev, viewMode === 'year' ? 12 : viewMode === 'quarter' ? 3 : 1)
+    );
   };
 
   const handleToday = () => {
@@ -262,7 +320,7 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
     if (onUpdateProject) {
       await onUpdateProject(draggedProject.id, {
         start_date: format(newStart, 'yyyy-MM-dd'),
-        end_date: format(newEnd, 'yyyy-MM-dd')
+        end_date: format(newEnd, 'yyyy-MM-dd'),
       });
     }
 
@@ -273,18 +331,30 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   // Export CSV
   const handleExport = () => {
     const csvContent = [
-      ['Projet', 'Client', 'Début', 'Fin', 'Statut', 'Progression', 'Revenus (Ar)', 'Coûts (Ar)', 'Profit (Ar)'].join(','),
-      ...filteredProjects.map(p => [
-        p.name,
-        p.client_name || '',
-        p.start_date || '',
-        p.end_date || '',
-        p.status || '',
-        `${p.progress || 0}%`,
-        p.total_amount || 0,
-        p.total_cost || 0,
-        (parseFloat(p.total_amount || 0) - parseFloat(p.total_cost || 0))
-      ].join(','))
+      [
+        'Projet',
+        'Client',
+        'Début',
+        'Fin',
+        'Statut',
+        'Progression',
+        'Revenus (Ar)',
+        'Coûts (Ar)',
+        'Profit (Ar)',
+      ].join(','),
+      ...filteredProjects.map((p) =>
+        [
+          p.name,
+          p.client_name || '',
+          p.start_date || '',
+          p.end_date || '',
+          p.status || '',
+          `${p.progress || 0}%`,
+          p.total_amount || 0,
+          p.total_cost || 0,
+          parseFloat(p.total_amount || 0) - parseFloat(p.total_cost || 0),
+        ].join(',')
+      ),
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -297,115 +367,116 @@ const GanttTimelineModal = ({ isOpen, onClose, projects, onUpdateProject, onRefr
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('fr-FR', {
-      maximumFractionDigits: 0
-    }).format(amount || 0) + ' Ar';
+    return (
+      new Intl.NumberFormat('fr-FR', {
+        maximumFractionDigits: 0,
+      }).format(amount || 0) + ' Ar'
+    );
   };
 
   // ✅ Solde réel Coffre actuel
-const coffreAccount = accounts?.find((a) => a.name === 'Coffre');
-const currentCoffreBalance = Number(coffreAccount?.balance || 0);
+  const coffreAccount = accounts?.find((a) => a.name === 'Coffre');
+  const currentCoffreBalance = Number(coffreAccount?.balance || 0);
 
-console.log('💰 DEBUG GanttTimelineModal Coffre:', {
-  coffreAccount,
-  currentCoffreBalance,
-});
+  console.log('💰 DEBUG GanttTimelineModal Coffre:', {
+    coffreAccount,
+    currentCoffreBalance,
+  });
 
-// ✅ Fenêtre de prévision: de aujourd'hui à +45 jours
-const focusStart = new Date();          // aujourd'hui
-focusStart.setHours(0, 0, 0, 0);        // normaliser à minuit
+  // ✅ Fenêtre de prévision: de aujourd'hui à +45 jours
+  const focusStart = new Date(); // aujourd'hui
+  focusStart.setHours(0, 0, 0, 0); // normaliser à minuit
 
-const focusEnd = new Date();
-focusEnd.setDate(focusEnd.getDate() + 90);
+  const focusEnd = new Date();
+  focusEnd.setDate(focusEnd.getDate() + 90);
 
-focusEnd.setHours(23, 59, 59, 999);
+  focusEnd.setHours(23, 59, 59, 999);
 
-const today = new Date();
+  const today = new Date();
 
   if (!isOpen) return null;
 
-return (
-  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-2xl w-full h-[95vh] flex flex-col overflow-hidden border border-slate-200">
-
-      {/* Header moderne */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">
-            Gantt Timeline – Gestion de projets
-          </h2>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {filteredProjects.length} projet{filteredProjects.length > 1 ? 's' : ''} •{' '}
-            {format(currentMonth, 'MMMM yyyy', { locale: fr })}
-          </p>
+  return (
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full h-[95vh] flex flex-col overflow-hidden border border-slate-200">
+        {/* Header moderne */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">
+              Gantt Timeline – Gestion de projets
+            </h2>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {filteredProjects.length} projet{filteredProjects.length > 1 ? 's' : ''} •{' '}
+              {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+          >
+            <X size={22} />
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+
+        {/* Stats compactes */}
+        <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-200">
+          {/* Total / Actifs / Complétés / Retard / Revenus / Marge */}
+          {/* tu peux reprendre exactement les 6 cartes que tu as déjà, en passant juste aux classes slate/emerald/rose */}
+        </div>
+
+        {/* Timeline Coffre en hover */}
+        <div
+          className="px-2 pt-2 pb-2 border-b border-slate-200 bg-slate-600 transition-all duration-300"
+          onMouseEnter={() => setIsTimelineExpanded(true)}
+          onMouseLeave={() => setIsTimelineExpanded(false)}
         >
-          <X size={22} />
-        </button>
-      </div>
-
-      {/* Stats compactes */}
-      <div className="grid grid-cols-6 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-200">
-        {/* Total / Actifs / Complétés / Retard / Revenus / Marge */}
-        {/* tu peux reprendre exactement les 6 cartes que tu as déjà, en passant juste aux classes slate/emerald/rose */}
-      </div>
-
-      {/* Timeline Coffre en hover */}
-<div
-  className="px-2 pt-2 pb-2 border-b border-slate-200 bg-slate-600 transition-all duration-300"
-  onMouseEnter={() => setIsTimelineExpanded(true)}
-  onMouseLeave={() => setIsTimelineExpanded(false)}
->
-  <div
-    className={`
+          <div
+            className={`
       rounded-2xl overflow-hidden bg-slate-600
       transition-all duration-300
       ${isTimelineExpanded ? 'h-[680px]' : 'h-[140px]'}
     `}
-  >
-    <TreasuryTimeline
-      projects={normalizedProjects}
-      currentCashBalance={currentCoffreBalance}
-      startDate={today}
-      endDate={timelineEnd}
-      transactions={transactions}
-      plannedTransactions={plannedTransactions}
-    />
-  </div>
-</div>
-
-      {/* Barre de contrôles modernisée */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white gap-4">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrevious}
-            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
           >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            onClick={handleToday}
-            className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
-          >
-            Aujourd’hui
-          </button>
-          <button
-            onClick={handleNext}
-            className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-          >
-            <ChevronRight size={16} />
-          </button>
+            <TreasuryTimeline
+              projects={normalizedProjects}
+              currentCashBalance={currentCoffreBalance}
+              startDate={today}
+              endDate={timelineEnd}
+              transactions={transactions}
+              plannedTransactions={plannedTransactions}
+            />
+          </div>
+        </div>
 
-          <span className="ml-3 text-sm font-semibold text-slate-700">
-            {format(currentMonth, 'MMMM yyyy', { locale: fr })}
-          </span>
+        {/* Barre de contrôles modernisée */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrevious}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={handleToday}
+              className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
+            >
+              Aujourd’hui
+            </button>
+            <button
+              onClick={handleNext}
+              className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            >
+              <ChevronRight size={16} />
+            </button>
 
-          {/* Calendrier */}
+            <span className="ml-3 text-sm font-semibold text-slate-700">
+              {format(currentMonth, 'MMMM yyyy', { locale: fr })}
+            </span>
+
+            {/* Calendrier */}
             <div className="relative ml-4">
-              <button 
+              <button
                 onClick={() => setShowCalendar(!showCalendar)}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors"
               >
@@ -416,7 +487,7 @@ return (
               {showCalendar && (
                 <div className="absolute top-full mt-2 left-0 bg-white border border-gray-300 rounded-lg shadow-xl z-50 p-4 w-80">
                   <div className="flex items-center justify-between mb-3">
-                    <button 
+                    <button
                       onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
                       className="p-1 hover:bg-gray-100 rounded"
                     >
@@ -425,7 +496,7 @@ return (
                     <span className="font-semibold text-sm">
                       {format(currentMonth, 'MMMM yyyy', { locale: fr })}
                     </span>
-                    <button 
+                    <button
                       onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
                       className="p-1 hover:bg-gray-100 rounded"
                     >
@@ -441,19 +512,21 @@ return (
                     ))}
                     {eachDayOfInterval({
                       start: startOfMonth(currentMonth),
-                      end: endOfMonth(currentMonth)
+                      end: endOfMonth(currentMonth),
                     }).map((day, i) => {
                       const isToday = isSameDay(day, new Date());
                       const isSelected = isSameDay(day, currentMonth);
-                      
+
                       return (
                         <button
                           key={i}
                           onClick={() => handleDateSelect(day)}
                           className={`p-2 text-xs rounded hover:bg-blue-100 transition-colors ${
-                            isToday ? 'bg-blue-500 text-white font-bold' : 
-                            isSelected ? 'bg-blue-200 text-blue-800' : 
-                            'text-gray-700'
+                            isToday
+                              ? 'bg-blue-500 text-white font-bold'
+                              : isSelected
+                                ? 'bg-blue-200 text-blue-800'
+                                : 'text-gray-700'
                           }`}
                         >
                           {format(day, 'd')}
@@ -462,7 +535,7 @@ return (
                     })}
                   </div>
 
-                  <button 
+                  <button
                     onClick={() => {
                       handleToday();
                       setShowCalendar(false);
@@ -476,353 +549,436 @@ return (
             </div>
           </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
-          >
-            <option value="month">Mois</option>
-            <option value="quarter">Trimestre</option>
-            <option value="year">Année</option>
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
-          >
-            <option value="all">Tous les statuts</option>
-            <option value="active">Actifs</option>
-            <option value="completed">Complétés</option>
-            <option value="delayed">En retard</option>
-          </select>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-2 text-slate-400" size={16} />
-            <input
-              type="text"
-              placeholder="Rechercher..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm w-52"
-            />
-          </div>
-
-          <button
-            onClick={handleExport}
-            className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5"
-          >
-            <Download size={16} />
-            Export
-          </button>
-        </div>
-      </div>
-
-      {/* ICI tu gardes ton bloc Gantt Chart - STRUCTURE CORRIGÉE TEL QUEL */}
-      {/* Gantt Chart - STRUCTURE CORRIGÉE */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-         <div className="flex flex-1 min-h-0">
-          {/* Colonne projets - FIXE */}
-        <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-gray-300 bg-gray-50">
-        <div className="sticky top-0 bg-gray-100 border-b border-gray-300 p-4 font-semibold z-20" style={{ height: '60px' }}>
-        Projets ({filteredProjects.length})
-        </div>
-
-        {filteredProjects.length === 0 ? (
-        <div className="p-8 text-center text-gray-500">
-          <Package size={48} className="mx-auto mb-4 text-gray-300" />
-          <p className="text-lg font-semibold">Aucun projet trouvé</p>
-          <p className="text-sm">Modifiez vos filtres</p>
-        </div>
-      ) : (
-        filteredProjects.map((project, projectIndex) => {
-          const isDelayed = project.end_date && new Date(project.end_date) < new Date() && project.status !== 'completed';
-
-          return (
-            <div
-              key={`project-col-${project.id}`}
-              className={`border-b border-gray-200 p-4 hover:bg-gray-100 transition-colors ${
-                projectIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-              }`}
-              style={{ height: '175px' }}
+          <div className="flex items-center gap-2">
+            <select
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
             >
-              <div className="flex items-start justify-between h-full">
-                <div className="flex-1 min-w-0">
-                  {/* Nom du projet */}
-                  <h3 className="font-semibold text-gray-800 text-sm mb-1 truncate" title={project.name}>
-                    {project.name}
-                  </h3>
-                  
-                  {/* Client */}
-                  <p className="text-xs text-gray-500 mb-2 truncate" title={project.client_name}>//
-                   {project.client_name}
-                  </p>
+              <option value="month">Mois</option>
+              <option value="quarter">Trimestre</option>
+              <option value="year">Année</option>
+            </select>
 
-                  {/* Badges de statut */}
-                  <div className="flex items-center gap-2 text-xs flex-wrap mb-2">
-                    {/* Badge de statut */}
-                    {(() => {
-                      const statusConfig = {
-                        active: { label: '✅ Actif', color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
-                        completed: { label: '🎉 Terminé', color: 'bg-green-100 text-green-700 border-green-300' },
-                        in_progress: { label: '🔄 En cours', color: 'bg-blue-100 text-blue-700 border-blue-300' },
-                        paused: { label: '⏸️ En pause', color: 'bg-orange-100 text-orange-700 border-orange-300' },
-                        draft: { label: '📝 Brouillon', color: 'bg-gray-100 text-gray-700 border-gray-300' },
-                        cancelled: { label: '❌ Annulé', color: 'bg-red-100 text-red-700 border-red-300' },
-                      };
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm text-slate-700 bg-white"
+            >
+              <option value="all">Tous les statuts</option>
+              <option value="active">Actifs</option>
+              <option value="completed">Complétés</option>
+              <option value="delayed">En retard</option>
+            </select>
 
-                      const config = statusConfig[project.status] || { 
-                        label: project.status || 'Inconnu', 
-                        color: 'bg-purple-100 text-purple-700 border-purple-300' 
-                      };
+            <div className="relative">
+              <Search className="absolute left-3 top-2 text-slate-400" size={16} />
+              <input
+                type="text"
+                placeholder="Rechercher..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm w-52"
+              />
+            </div>
+
+            <button
+              onClick={handleExport}
+              className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 flex items-center gap-1.5"
+            >
+              <Download size={16} />
+              Export
+            </button>
+          </div>
+        </div>
+
+        {/* ICI tu gardes ton bloc Gantt Chart - STRUCTURE CORRIGÉE TEL QUEL */}
+        {/* Gantt Chart - STRUCTURE CORRIGÉE */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex flex-1 min-h-0">
+            {/* Colonne projets - FIXE */}
+            <div className="w-80 flex-shrink-0 overflow-y-auto border-r border-gray-300 bg-gray-50">
+              <div
+                className="sticky top-0 bg-gray-100 border-b border-gray-300 p-4 font-semibold z-20"
+                style={{ height: '60px' }}
+              >
+                Projets ({filteredProjects.length})
+              </div>
+
+              {filteredProjects.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <Package size={48} className="mx-auto mb-4 text-gray-300" />
+                  <p className="text-lg font-semibold">Aucun projet trouvé</p>
+                  <p className="text-sm">Modifiez vos filtres</p>
+                </div>
+              ) : (
+                filteredProjects.map((project, projectIndex) => {
+                  const isDelayed =
+                    project.end_date &&
+                    new Date(project.end_date) < new Date() &&
+                    project.status !== 'completed';
+
+                  return (
+                    <div
+                      key={`project-col-${project.id}`}
+                      className={`border-b border-gray-200 p-4 hover:bg-gray-100 transition-colors ${
+                        projectIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                      }`}
+                      style={{ height: '175px' }}
+                    >
+                      <div className="flex items-start justify-between h-full">
+                        <div className="flex-1 min-w-0">
+                          {/* Nom du projet */}
+                          <h3
+                            className="font-semibold text-gray-800 text-sm mb-1 truncate"
+                            title={project.name}
+                          >
+                            {project.name}
+                          </h3>
+
+                          {/* Client */}
+                          <p
+                            className="text-xs text-gray-500 mb-2 truncate"
+                            title={project.client_name}
+                          >
+                            //
+                            {project.client_name}
+                          </p>
+
+                          {/* Badges de statut */}
+                          <div className="flex items-center gap-2 text-xs flex-wrap mb-2">
+                            {/* Badge de statut */}
+                            {(() => {
+                              const statusConfig = {
+                                active: {
+                                  label: '✅ Actif',
+                                  color:
+                                    'bg-emerald-100 text-emerald-700 border-emerald-300',
+                                },
+                                completed: {
+                                  label: '🎉 Terminé',
+                                  color: 'bg-green-100 text-green-700 border-green-300',
+                                },
+                                in_progress: {
+                                  label: '🔄 En cours',
+                                  color: 'bg-blue-100 text-blue-700 border-blue-300',
+                                },
+                                paused: {
+                                  label: '⏸️ En pause',
+                                  color:
+                                    'bg-orange-100 text-orange-700 border-orange-300',
+                                },
+                                draft: {
+                                  label: '📝 Brouillon',
+                                  color: 'bg-gray-100 text-gray-700 border-gray-300',
+                                },
+                                cancelled: {
+                                  label: '❌ Annulé',
+                                  color: 'bg-red-100 text-red-700 border-red-300',
+                                },
+                              };
+
+                              const config = statusConfig[project.status] || {
+                                label: project.status || 'Inconnu',
+                                color: 'bg-purple-100 text-purple-700 border-purple-300',
+                              };
+
+                              return (
+                                <span
+                                  className={`px-2 py-1 rounded border ${config.color} font-medium`}
+                                >
+                                  {config.label}
+                                </span>
+                              );
+                            })()}
+
+                            {/* Badge de retard */}
+                            {isDelayed && (
+                              <span className="px-2 py-1 rounded border bg-red-100 text-red-700 border-red-300 font-medium animate-pulse">
+                                ⚠️ Retard
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Informations financières */}
+                          <div className="mt-2 text-xs text-gray-600 space-y-0.5">
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Progression:</span>
+                              <span className="font-semibold">
+                                {project.progress || 0}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Revenus:</span>
+                              <span className="font-semibold text-green-600">
+                                {formatCurrency(project.total_amount)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-500">Coûts:</span>
+                              <span className="font-semibold text-red-600">
+                                {formatCurrency(project.total_cost)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between pt-0.5 border-t border-gray-200 mt-1">
+                              <span className="text-gray-500 font-medium">Profit:</span>
+                              <span
+                                className={`font-bold ${
+                                  parseFloat(project.total_amount || 0) -
+                                    parseFloat(project.total_cost || 0) >=
+                                  0
+                                    ? 'text-purple-600'
+                                    : 'text-red-600'
+                                }`}
+                              >
+                                {formatCurrency(
+                                  parseFloat(project.total_amount || 0) -
+                                    parseFloat(project.total_cost || 0)
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bouton d'édition */}
+                        <button
+                          onClick={() => setSelectedProject(project)}
+                          className="text-blue-500 hover:text-blue-700 ml-2 flex-shrink-0"
+                          title="Éditer le projet"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Timeline - SCROLLABLE */}
+            <div className="flex-1 overflow-x-auto overflow-y-auto">
+              <div className="min-w-max">
+                {/* Timeline Header */}
+                <div
+                  className="sticky top-0 bg-white z-10 border-b border-gray-300"
+                  style={{ height: '60px' }}
+                >
+                  <div className="flex items-center h-full">
+                    {timelineDays.map((day, index) => {
+                      const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                      const isToday = isSameDay(day, new Date());
+                      const isFirstOfMonth = day.getDate() === 1;
 
                       return (
-                        <span className={`px-2 py-1 rounded border ${config.color} font-medium`}>
-                          {config.label}
-                        </span>
+                        <div
+                          key={index}
+                          className={`flex-shrink-0 w-[40px] text-center p-2 border-r border-gray-200 text-xs ${
+                            isWeekend ? 'bg-gray-50' : 'bg-white'
+                          } ${isToday ? 'bg-blue-50 font-bold' : ''} ${
+                            isFirstOfMonth ? 'border-l-2 border-l-blue-400' : ''
+                          }`}
+                        >
+                          <div className={isToday ? 'text-blue-600' : 'text-gray-600'}>
+                            {format(day, 'd')}
+                          </div>
+                          {isFirstOfMonth && (
+                            <div className="text-[10px] text-blue-600 font-semibold">
+                              {format(day, 'MMM', { locale: fr })}
+                            </div>
+                          )}
+                        </div>
                       );
-                    })()}
-                    
-                    {/* Badge de retard */}
-                    {isDelayed && (
-                      <span className="px-2 py-1 rounded border bg-red-100 text-red-700 border-red-300 font-medium animate-pulse">
-                        ⚠️ Retard
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Informations financières */}
-                  <div className="mt-2 text-xs text-gray-600 space-y-0.5">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Progression:</span>
-                      <span className="font-semibold">{project.progress || 0}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Revenus:</span>
-                      <span className="font-semibold text-green-600">{formatCurrency(project.total_amount)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Coûts:</span>
-                      <span className="font-semibold text-red-600">{formatCurrency(project.total_cost)}</span>
-                    </div>
-                    <div className="flex justify-between pt-0.5 border-t border-gray-200 mt-1">
-                      <span className="text-gray-500 font-medium">Profit:</span>
-                      <span className={`font-bold ${
-                        (parseFloat(project.total_amount || 0) - parseFloat(project.total_cost || 0)) >= 0 
-                          ? 'text-purple-600' 
-                          : 'text-red-600'
-                      }`}>
-                        {formatCurrency(parseFloat(project.total_amount || 0) - parseFloat(project.total_cost || 0))}
-                      </span>
-                    </div>
+                    })}
                   </div>
                 </div>
-                
-                {/* Bouton d'édition */}
-                <button
-                  onClick={() => setSelectedProject(project)}
-                  className="text-blue-500 hover:text-blue-700 ml-2 flex-shrink-0"
-                  title="Éditer le projet"
-                >
-                  <Edit2 size={16} />
-                </button>
-              </div>
-            </div>
-          );
-        })
-      )}
-    </div>
 
-    {/* Timeline - SCROLLABLE */}
-    <div className="flex-1 overflow-x-auto overflow-y-auto">
-      <div className="min-w-max">
-        {/* Timeline Header */}
-        <div className="sticky top-0 bg-white z-10 border-b border-gray-300" style={{ height: '60px' }}>
-          <div className="flex items-center h-full">
-            {timelineDays.map((day, index) => {
-              const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-              const isToday = isSameDay(day, new Date());
-              const isFirstOfMonth = day.getDate() === 1;
+                {/* Project Rows */}
+                <div className="relative">
+                  {filteredProjects.map((project, projectIndex) => {
+                    const position = getProjectTimelinePosition(project);
+                    const progressOpacity = getProgressOpacity(project.progress);
 
-              return (
-                <div
-                  key={index}
-                  className={`flex-shrink-0 w-[40px] text-center p-2 border-r border-gray-200 text-xs ${
-                    isWeekend ? 'bg-gray-50' : 'bg-white'
-                  } ${isToday ? 'bg-blue-50 font-bold' : ''} ${
-                    isFirstOfMonth ? 'border-l-2 border-l-blue-400' : ''
-                  }`}
-                >
-                  <div className={isToday ? 'text-blue-600' : 'text-gray-600'}>
-                    {format(day, 'd')}
-                  </div>
-                  {isFirstOfMonth && (
-                    <div className="text-[10px] text-blue-600 font-semibold">
-                      {format(day, 'MMM', { locale: fr })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Project Rows */}
-        <div className="relative">
-          {filteredProjects.map((project, projectIndex) => {
-            const position = getProjectTimelinePosition(project);
-            const progressOpacity = getProgressOpacity(project.progress);
-
-            return (
-              <div
-                key={`timeline-${project.id}`}
-                className={`flex border-b border-gray-200 relative ${
-                  projectIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                }`}
-                style={{ height: '175px' }}
-              >
-                {/* Grid Lines */}
-                <div className="absolute inset-0 flex pointer-events-none">
-                  {timelineDays.map((day, index) => {
-                    const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                    const isToday = isSameDay(day, new Date());
-                    
                     return (
                       <div
-                        key={index}
-                        className={`flex-shrink-0 w-[40px] border-r border-gray-200 ${
-                          isWeekend ? 'bg-gray-50' : ''
-                        } ${isToday ? 'bg-blue-50' : ''}`}
-                      />
+                        key={`timeline-${project.id}`}
+                        className={`flex border-b border-gray-200 relative ${
+                          projectIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+                        }`}
+                        style={{ height: '175px' }}
+                      >
+                        {/* Grid Lines */}
+                        <div className="absolute inset-0 flex pointer-events-none">
+                          {timelineDays.map((day, index) => {
+                            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                            const isToday = isSameDay(day, new Date());
+
+                            return (
+                              <div
+                                key={index}
+                                className={`flex-shrink-0 w-[40px] border-r border-gray-200 ${
+                                  isWeekend ? 'bg-gray-50' : ''
+                                } ${isToday ? 'bg-blue-50' : ''}`}
+                              />
+                            );
+                          })}
+                        </div>
+
+                        {/* Drag & Drop Grid */}
+                        <div className="absolute inset-0 flex">
+                          {timelineDays.map((day, index) => (
+                            <div
+                              key={index}
+                              className="flex-shrink-0 w-[40px]"
+                              onDragOver={(e) => handleDragOver(e, day)}
+                              onDrop={(e) => handleDrop(e, day)}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Project Bar */}
+                        {position && (
+                          <div
+                            className="absolute top-1/2 -translate-y-1/2 h-12 cursor-move group z-10"
+                            style={{ left: position.left, width: position.width }}
+                            draggable
+                            onDragStart={() => handleDragStart(project)}
+                          >
+                            <div
+                              className={`h-full ${progressOpacity} rounded shadow-md flex items-center justify-between px-3 text-white text-xs font-semibold group-hover:shadow-lg transition-all`}
+                              style={{ backgroundColor: project.color || '#3B82F6' }}
+                            >
+                              <span className="truncate">{project.name}</span>
+                              <span className="ml-2 bg-white bg-opacity-30 px-2 py-0.5 rounded">
+                                {project.progress || 0}%
+                              </span>
+                              {/* Dans le rendu de chaque barre de projet */}
+                              <div className="relative">
+                                {/* Barre existante */}
+                                <div className={`h-8 rounded ${project.color} ...`}>
+                                  {/* Contenu existant */}
+                                </div>
+
+                                {/* Indicateurs de flux */}
+                                <div className="absolute top-0 right-0 flex gap-1">
+                                  {project.expected_revenue > 0 && (
+                                    <div
+                                      className="bg-green-500 text-white text-xs px-1 rounded"
+                                      title="Revenus prévus"
+                                    >
+                                      ↑ {(project.expected_revenue / 1000000).toFixed(1)}M
+                                    </div>
+                                  )}
+                                  {project.estimated_cost > 0 && (
+                                    <div
+                                      className="bg-red-500 text-white text-xs px-1 rounded"
+                                      title="Coûts prévus"
+                                    >
+                                      ↓ {(project.estimated_cost / 1000000).toFixed(1)}M
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Progress Fill */}
+                            <div
+                              className="absolute top-0 left-0 h-full bg-white bg-opacity-30 rounded-l"
+                              style={{ width: `${project.progress || 0}%` }}
+                            />
+
+                            {/* Tooltip - Position adaptative selon le rang */}
+                            <div
+                              className={`absolute ${
+                                projectIndex === 0 || projectIndex === 1
+                                  ? 'top-full mt-2'
+                                  : 'bottom-full mb-2'
+                              } left-0 hidden group-hover:block bg-gray-800 text-white p-3 rounded shadow-xl text-xs w-64 z-50 pointer-events-none`}
+                            >
+                              <div className="font-semibold mb-2">{project.name}</div>
+                              <div className="space-y-1">
+                                <div>Client: {project.client_name}</div>
+                                <div>
+                                  Début:{' '}
+                                  {project.start_date
+                                    ? format(parseISO(project.start_date), 'dd/MM/yyyy')
+                                    : 'N/A'}
+                                </div>
+                                <div>
+                                  Fin:{' '}
+                                  {project.end_date
+                                    ? format(parseISO(project.end_date), 'dd/MM/yyyy')
+                                    : 'N/A'}
+                                </div>
+                                <div>Progression: {project.progress || 0}%</div>
+                                <div>Revenus: {formatCurrency(project.total_amount)}</div>
+                                <div>Coûts: {formatCurrency(project.total_cost)}</div>
+                                <div className="font-semibold pt-1 border-t border-gray-600">
+                                  Profit:{' '}
+                                  {formatCurrency(
+                                    parseFloat(project.total_amount || 0) -
+                                      parseFloat(project.total_cost || 0)
+                                  )}
+                                </div>
+                                {project.product_name &&
+                                  project.product_name !== 'N/A' && (
+                                    <div className="pt-1 border-t border-gray-600">
+                                      Produit: {project.product_name}
+                                    </div>
+                                  )}
+                              </div>
+
+                              {/* Petite flèche indicatrice */}
+                              <div
+                                className={`absolute ${
+                                  projectIndex === 0 || projectIndex === 1
+                                    ? 'bottom-full'
+                                    : 'top-full'
+                                } left-4 w-0 h-0 border-l-4 border-r-4 border-transparent ${
+                                  projectIndex === 0 || projectIndex === 1
+                                    ? 'border-b-4 border-b-gray-800'
+                                    : 'border-t-4 border-t-gray-800'
+                                }`}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {/* Today Marker */}
+                        {timelineDays.some((day) => isSameDay(day, new Date())) && (
+                          <div
+                            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-15 pointer-events-none"
+                            style={{
+                              left: `${differenceInDays(new Date(), timelineDays[0]) * 40}px`,
+                            }}
+                          >
+                            <div className="absolute -top-1 -left-1 w-2 h-2 bg-red-500 rounded-full" />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-
-                {/* Drag & Drop Grid */}
-                <div className="absolute inset-0 flex">
-                  {timelineDays.map((day, index) => (
-                    <div
-                      key={index}
-                      className="flex-shrink-0 w-[40px]"
-                      onDragOver={(e) => handleDragOver(e, day)}
-                      onDrop={(e) => handleDrop(e, day)}
-                    />
-                  ))}
-                </div>
-
-                {/* Project Bar */}
-{position && (
-  <div
-    className="absolute top-1/2 -translate-y-1/2 h-12 cursor-move group z-10"
-    style={{ left: position.left, width: position.width }}
-    draggable
-    onDragStart={() => handleDragStart(project)}
-  >
-    <div
-      className={`h-full ${progressOpacity} rounded shadow-md flex items-center justify-between px-3 text-white text-xs font-semibold group-hover:shadow-lg transition-all`}
-      style={{ backgroundColor: project.color || '#3B82F6' }}
-    >
-      <span className="truncate">{project.name}</span>
-      <span className="ml-2 bg-white bg-opacity-30 px-2 py-0.5 rounded">
-        {project.progress || 0}%
-      </span>
-      {/* Dans le rendu de chaque barre de projet */}
-<div className="relative">
-  {/* Barre existante */}
-  <div className={`h-8 rounded ${project.color} ...`}>
-    {/* Contenu existant */}
-  </div>
-  
-  {/* Indicateurs de flux */}
-  <div className="absolute top-0 right-0 flex gap-1">
-    {project.expected_revenue > 0 && (
-      <div className="bg-green-500 text-white text-xs px-1 rounded" title="Revenus prévus">
-        ↑ {(project.expected_revenue / 1000000).toFixed(1)}M
-      </div>
-    )}
-    {project.estimated_cost > 0 && (
-      <div className="bg-red-500 text-white text-xs px-1 rounded" title="Coûts prévus">
-        ↓ {(project.estimated_cost / 1000000).toFixed(1)}M
-      </div>
-    )}
-  </div>
-</div>
-
-    </div>
-
-    {/* Progress Fill */}
-    <div
-      className="absolute top-0 left-0 h-full bg-white bg-opacity-30 rounded-l"
-      style={{ width: `${project.progress || 0}%` }}
-    />
-
-    {/* Tooltip - Position adaptative selon le rang */}
-    <div className={`absolute ${
-      projectIndex === 0 || projectIndex === 1 ? 'top-full mt-2' : 'bottom-full mb-2'
-    } left-0 hidden group-hover:block bg-gray-800 text-white p-3 rounded shadow-xl text-xs w-64 z-50 pointer-events-none`}>
-      <div className="font-semibold mb-2">{project.name}</div>
-      <div className="space-y-1">
-        <div>Client: {project.client_name}</div>
-        <div>Début: {project.start_date ? format(parseISO(project.start_date), 'dd/MM/yyyy') : 'N/A'}</div>
-        <div>Fin: {project.end_date ? format(parseISO(project.end_date), 'dd/MM/yyyy') : 'N/A'}</div>
-        <div>Progression: {project.progress || 0}%</div>
-        <div>Revenus: {formatCurrency(project.total_amount)}</div>
-        <div>Coûts: {formatCurrency(project.total_cost)}</div>
-        <div className="font-semibold pt-1 border-t border-gray-600">
-          Profit: {formatCurrency(parseFloat(project.total_amount || 0) - parseFloat(project.total_cost || 0))}
-        </div>
-        {project.product_name && project.product_name !== 'N/A' && (
-          <div className="pt-1 border-t border-gray-600">
-            Produit: {project.product_name}
+              </div>
+            </div>
           </div>
+        </div>
+
+        {/* Modal détails projet : tu gardes ton ProjectDetailsModal identique */}
+        {selectedProject && (
+          <ProjectDetailsModal
+            project={selectedProject}
+            onClose={() => setSelectedProject(null)}
+            onUpdate={async (updates) => {
+              if (onUpdateProject) {
+                await onUpdateProject(selectedProject.id, updates);
+              }
+              setSelectedProject(null);
+              if (onRefresh) onRefresh();
+            }}
+          />
         )}
       </div>
-      
-      {/* Petite flèche indicatrice */}
-      <div className={`absolute ${
-        projectIndex === 0 || projectIndex === 1 ? 'bottom-full' : 'top-full'
-      } left-4 w-0 h-0 border-l-4 border-r-4 border-transparent ${
-        projectIndex === 0 || projectIndex === 1 ? 'border-b-4 border-b-gray-800' : 'border-t-4 border-t-gray-800'
-      }`} />
     </div>
-  </div>
-)}
-                {/* Today Marker */}
-                {timelineDays.some(day => isSameDay(day, new Date())) && (
-                  <div
-                    className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-15 pointer-events-none"
-                    style={{ left: `${(differenceInDays(new Date(), timelineDays[0]) * 40)}px` }}
-                  >
-                    <div className="absolute -top-1 -left-1 w-2 h-2 bg-red-500 rounded-full" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  </div>
-        </div>
-
-      {/* Modal détails projet : tu gardes ton ProjectDetailsModal identique */}
-      {selectedProject && (
-        <ProjectDetailsModal
-          project={selectedProject}
-          onClose={() => setSelectedProject(null)}
-          onUpdate={async (updates) => {
-            if (onUpdateProject) {
-              await onUpdateProject(selectedProject.id, updates);
-            }
-            setSelectedProject(null);
-            if (onRefresh) onRefresh();
-          }}
-        />
-      )}
-    </div>
-  </div>
-);
+  );
 
   const colorPalette = [
     { name: 'Bleu', value: '#3B82F6' },
@@ -959,26 +1115,36 @@ return (
               </div>
               <div>
                 <span className="text-gray-600">Produit:</span>
-                <span className="ml-2 font-semibold">{project.product_name || 'N/A'}</span>
+                <span className="ml-2 font-semibold">
+                  {project.product_name || 'N/A'}
+                </span>
               </div>
               <div>
                 <span className="text-gray-600">Revenus:</span>
                 <span className="ml-2 font-semibold text-green-600">
-                  {new Intl.NumberFormat('fr-FR').format(parseFloat(project.total_amount || 0))} Ar
+                  {new Intl.NumberFormat('fr-FR').format(
+                    parseFloat(project.total_amount || 0)
+                  )}{' '}
+                  Ar
                 </span>
               </div>
               <div>
                 <span className="text-gray-600">Coûts:</span>
                 <span className="ml-2 font-semibold text-red-600">
-                  {new Intl.NumberFormat('fr-FR').format(parseFloat(project.total_cost || 0))} Ar
+                  {new Intl.NumberFormat('fr-FR').format(
+                    parseFloat(project.total_cost || 0)
+                  )}{' '}
+                  Ar
                 </span>
               </div>
               <div className="col-span-2">
                 <span className="text-gray-600">Profit:</span>
                 <span className="ml-2 font-semibold text-purple-600">
                   {new Intl.NumberFormat('fr-FR').format(
-                    parseFloat(project.total_amount || 0) - parseFloat(project.total_cost || 0)
-                  )} Ar
+                    parseFloat(project.total_amount || 0) -
+                      parseFloat(project.total_cost || 0)
+                  )}{' '}
+                  Ar
                 </span>
               </div>
             </div>

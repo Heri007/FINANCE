@@ -4,7 +4,7 @@ import { normalizeDate } from './parsers';
 /**
  * Génère une signature unique pour une transaction
  * ⚠️ ALIGNÉ avec backend: accountId|date|amount|type|description
- * 
+ *
  * @param {object} transaction - Transaction avec {accountId, date, amount, type, description, category}
  * @returns {string|null} Signature unique ou null si données manquantes
  */
@@ -18,8 +18,7 @@ export function buildTransactionSignature({
 }) {
   const cleanAccId = accountId ? String(accountId).trim() : null;
   const cleanDate = normalizeDate(date);
-  const cleanAmount =
-    amount != null ? Math.abs(parseFloat(amount)).toFixed(2) : null;
+  const cleanAmount = amount != null ? Math.abs(parseFloat(amount)).toFixed(2) : null;
   const cleanType = type ? String(type).trim().toLowerCase() : null;
 
   // Fonction de nettoyage de texte (identique au backend)
@@ -74,16 +73,16 @@ export function deduplicateTransactions(transactions) {
 
   transactions.forEach((transaction) => {
     const sig = transactionSignature(transaction);
-    
+
     if (sig && !seen.has(sig)) {
       seen.set(sig, transaction);
     }
   });
 
   const unique = Array.from(seen.values());
-  
+
   console.log(`✅ Dédoublonnage: ${transactions.length} → ${unique.length} transactions`);
-  
+
   return unique;
 }
 
@@ -99,7 +98,7 @@ export function transactionExists(transaction, existingTransactions) {
   }
 
   const signature = transactionSignature(transaction);
-  
+
   if (!signature) {
     return false;
   }

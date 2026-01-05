@@ -11,7 +11,7 @@ export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete 
   });
 
   const [editingId, setEditingId] = useState(null); // ✅ État pour savoir quel objectif est en édition
-  const [editData, setEditData] = useState(null);   // ✅ Données de l'objectif en édition
+  const [editData, setEditData] = useState(null); // ✅ Données de l'objectif en édition
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,7 +52,10 @@ export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete 
   return (
     <div className="space-y-6">
       {/* Formulaire d'ajout - Style ReceivablesScreen */}
-      <form onSubmit={handleSubmit} className="bg-slate-50 rounded-xl p-4 border-2 border-slate-200 space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-slate-50 rounded-xl p-4 border-2 border-slate-200 space-y-4"
+      >
         <input
           type="text"
           placeholder="Titre de l'objectif *"
@@ -125,7 +128,9 @@ export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete 
 
                   <textarea
                     value={editData.description}
-                    onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                    onChange={(e) =>
+                      setEditData({ ...editData, description: e.target.value })
+                    }
                     rows={2}
                     className="w-full rounded-lg border-2 border-slate-200 text-sm px-3 py-2 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all resize-none font-semibold"
                     placeholder="Description..."
@@ -135,13 +140,17 @@ export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete 
                     <input
                       type="date"
                       value={editData.deadline}
-                      onChange={(e) => setEditData({ ...editData, deadline: e.target.value })}
+                      onChange={(e) =>
+                        setEditData({ ...editData, deadline: e.target.value })
+                      }
                       className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
                     />
 
                     <select
                       value={editData.priority}
-                      onChange={(e) => setEditData({ ...editData, priority: e.target.value })}
+                      onChange={(e) =>
+                        setEditData({ ...editData, priority: e.target.value })
+                      }
                       className="h-10 rounded-lg border-2 border-slate-200 text-sm px-3 bg-white focus:border-purple-600 focus:ring-2 focus:ring-purple-600/20 transition-all font-semibold"
                     >
                       <option value="low">Basse</option>
@@ -171,20 +180,32 @@ export function ObjectivesTextEditor({ objectives, onCreate, onUpdate, onDelete 
                 <>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <p className={`font-bold text-base ${obj.completed ? 'line-through text-green-700' : 'text-slate-900'}`}>
+                      <p
+                        className={`font-bold text-base ${obj.completed ? 'line-through text-green-700' : 'text-slate-900'}`}
+                      >
                         {obj.title}
                       </p>
                       {obj.description && (
-                        <p className="text-sm text-slate-600 mt-1 font-semibold">{obj.description}</p>
+                        <p className="text-sm text-slate-600 mt-1 font-semibold">
+                          {obj.description}
+                        </p>
                       )}
                     </div>
                     {obj.priority && (
-                      <span className={`text-xs font-semibold px-2 py-1 rounded ${
-                        obj.priority === 'high' ? 'bg-red-100 text-red-700' :
-                        obj.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
-                      }`}>
-                        {obj.priority === 'high' ? 'Haute' : obj.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                      <span
+                        className={`text-xs font-semibold px-2 py-1 rounded ${
+                          obj.priority === 'high'
+                            ? 'bg-red-100 text-red-700'
+                            : obj.priority === 'medium'
+                              ? 'bg-yellow-100 text-yellow-700'
+                              : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {obj.priority === 'high'
+                          ? 'Haute'
+                          : obj.priority === 'medium'
+                            ? 'Moyenne'
+                            : 'Basse'}
                       </span>
                     )}
                   </div>

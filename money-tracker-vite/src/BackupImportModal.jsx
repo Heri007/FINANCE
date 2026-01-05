@@ -16,92 +16,91 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
   };
 
   const handleRestore = async () => {
-  if (!file) return;
+    if (!file) return;
 
-  if (
-    !window.confirm(
-      '⚠️ ATTENTION : Cette action va remplacer toutes vos données actuelles par celles du backup.\n\nContinuer ?'
-    )
-  ) {
-    return;
-  }
-
-  setStatus('restoring');
-  setLogs([]);
-  addLog('📂 Lecture du fichier de sauvegarde...');
-
-  const reader = new FileReader();
-
-  reader.onload = async (e) => {
-    try {
-      const backupData = JSON.parse(e.target.result);
-
-      // Validation
-      if (!backupData.version || parseFloat(backupData.version) < 2.0) {
-        throw new Error('Version de backup non supportée. Version 2.0 requise.');
-      }
-
-      const {
-        accounts,
-        transactions,
-        receivables = [],
-        projects = [],
-        notes,
-      } = backupData;
-
-      if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
-        throw new Error(
-          'Format invalide : accounts et transactions doivent être des tableaux'
-        );
-      }
-
-      addLog(
-        `✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} receivables, ${projects.length || 0} projets, ${notes?.length || 0} notes`
-      );
-
-      // ✅ APPEL UNIQUE À L'API DE RESTAURATION
-      addLog('🔄 Envoi de la restauration au serveur...');
-
-      const restorePayload = {
-        backup: backupData,
-        options: {
-          includeProjects: projects.length > 0,
-          dryRun: false,
-        },
-      };
-
-      const result = await api.post('/backup/restore-full', restorePayload);
-
-      addLog('✅ RESTAURATION RÉUSSIE !');
-      addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
-      addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
-      addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
-      addLog(`📊 Projets restaurés: ${result.summary.projects}`);
-
-      setStatus('success');
-      setTimeout(() => {
-        onRestoreSuccess();
-        onClose();
-      }, 3000);
-    } catch (error) {
-      console.error('❌ Erreur globale:', error);
-      addLog(`❌ ERREUR CRITIQUE: ${error.message}`);
-      addLog('Si le problème persiste, vérifiez:');
-      addLog('• La connexion au serveur');
-      addLog('• Le format du fichier backup');
-      addLog('• Les logs du serveur backend');
-      setStatus('error');
+    if (
+      !window.confirm(
+        '⚠️ ATTENTION : Cette action va remplacer toutes vos données actuelles par celles du backup.\n\nContinuer ?'
+      )
+    ) {
+      return;
     }
+
+    setStatus('restoring');
+    setLogs([]);
+    addLog('📂 Lecture du fichier de sauvegarde...');
+
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      try {
+        const backupData = JSON.parse(e.target.result);
+
+        // Validation
+        if (!backupData.version || parseFloat(backupData.version) < 2.0) {
+          throw new Error('Version de backup non supportée. Version 2.0 requise.');
+        }
+
+        const {
+          accounts,
+          transactions,
+          receivables = [],
+          projects = [],
+          notes,
+        } = backupData;
+
+        if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
+          throw new Error(
+            'Format invalide : accounts et transactions doivent être des tableaux'
+          );
+        }
+
+        addLog(
+          `✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} receivables, ${projects.length || 0} projets, ${notes?.length || 0} notes`
+        );
+
+        // ✅ APPEL UNIQUE À L'API DE RESTAURATION
+        addLog('🔄 Envoi de la restauration au serveur...');
+
+        const restorePayload = {
+          backup: backupData,
+          options: {
+            includeProjects: projects.length > 0,
+            dryRun: false,
+          },
+        };
+
+        const result = await api.post('/backup/restore-full', restorePayload);
+
+        addLog('✅ RESTAURATION RÉUSSIE !');
+        addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
+        addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
+        addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
+        addLog(`📊 Projets restaurés: ${result.summary.projects}`);
+
+        setStatus('success');
+        setTimeout(() => {
+          onRestoreSuccess();
+          onClose();
+        }, 3000);
+      } catch (error) {
+        console.error('❌ Erreur globale:', error);
+        addLog(`❌ ERREUR CRITIQUE: ${error.message}`);
+        addLog('Si le problème persiste, vérifiez:');
+        addLog('• La connexion au serveur');
+        addLog('• Le format du fichier backup');
+        addLog('• Les logs du serveur backend');
+        setStatus('error');
+      }
+    };
+
+    reader.onerror = () => {
+      addLog('❌ Erreur de lecture du fichier');
+      setStatus('error');
+    };
+
+    reader.readAsText(file);
   };
-
-  reader.onerror = () => {
-    addLog('❌ Erreur de lecture du fichier');
-    setStatus('error');
-  };
-
-  reader.readAsText(file);
-};
-
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -130,8 +129,8 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
                   Cette action est <strong>irréversible</strong>
                 </p>
                 <p className="text-xs text-amber-600">
-                  Toutes vos données actuelles (comptes, transactions, projets, receivables) seront
-                  remplacées par celles du backup.
+                  Toutes vos données actuelles (comptes, transactions, projets,
+                  receivables) seront remplacées par celles du backup.
                 </p>
               </div>
             </div>
@@ -177,7 +176,9 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
                 </span>
               )}
               {!file && (
-                <span className="text-xs text-gray-400 mt-2">Format .json • Version 2.0</span>
+                <span className="text-xs text-gray-400 mt-2">
+                  Format .json • Version 2.0
+                </span>
               )}
             </label>
           </div>
@@ -195,7 +196,9 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
                   </div>
                 ))}
                 {/* Auto-scroll */}
-                <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'end' })} />
+                <div
+                  ref={(el) => el?.scrollIntoView({ behavior: 'smooth', block: 'end' })}
+                />
               </div>
             </div>
           )}
@@ -209,23 +212,16 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
             status === 'restoring'
               ? 'bg-gray-400 cursor-wait'
               : status === 'success'
-              ? 'bg-green-500 hover:bg-green-600'
-              : status === 'error'
-              ? 'bg-red-500 hover:bg-red-600'
-              : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl active:scale-95'
+                ? 'bg-green-500 hover:bg-green-600'
+                : status === 'error'
+                  ? 'bg-red-500 hover:bg-red-600'
+                  : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg hover:shadow-xl active:scale-95'
           }`}
         >
           {status === 'restoring' && (
             <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-              ircle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-                fill="none"
-              /
+              ircle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+              strokeWidth="4" fill="none" /
               <path
                 className="opacity-75"
                 fill="currentColor"
@@ -236,10 +232,10 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
           {status === 'restoring'
             ? 'Restauration en cours...'
             : status === 'success'
-            ? '✅ Restauration Terminée avec Succès'
-            : status === 'error'
-            ? '❌ Échec de la Restauration'
-            : 'Lancer la Restauration'}
+              ? '✅ Restauration Terminée avec Succès'
+              : status === 'error'
+                ? '❌ Échec de la Restauration'
+                : 'Lancer la Restauration'}
         </button>
 
         {status === 'error' && (

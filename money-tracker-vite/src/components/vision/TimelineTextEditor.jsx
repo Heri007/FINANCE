@@ -26,7 +26,10 @@ export function TimelineTextEditor({ objectives, onCreateStep }) {
   return (
     <div className="space-y-6">
       {/* Formulaire */}
-      <form onSubmit={handleSubmit} className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-gray-50 rounded-xl p-4 border border-gray-200 space-y-3"
+      >
         <input
           type="text"
           placeholder="Étape ou jalon *"
@@ -74,26 +77,45 @@ export function TimelineTextEditor({ objectives, onCreateStep }) {
             <div key={obj.id} className="flex gap-4 items-start">
               {/* Timeline dot */}
               <div className="flex flex-col items-center">
-                <div className={`w-4 h-4 rounded-full border-2 border-white shadow-md ${obj.completed ? 'bg-green-500' : 'bg-purple-600'}`} />
+                <div
+                  className={`w-4 h-4 rounded-full border-2 border-white shadow-md ${obj.completed ? 'bg-green-500' : 'bg-purple-600'}`}
+                />
                 {idx < sortedObjectives.length - 1 && (
-                  <div className="w-0.5 h-full bg-gray-300 mt-1" style={{ minHeight: '60px' }} />
+                  <div
+                    className="w-0.5 h-full bg-gray-300 mt-1"
+                    style={{ minHeight: '60px' }}
+                  />
                 )}
               </div>
 
               {/* Card */}
-              <div className={`flex-1 rounded-xl border px-4 py-3 ${
-                obj.completed ? 'bg-green-50 border-green-300' : 'bg-white border-gray-200'
-              }`}>
+              <div
+                className={`flex-1 rounded-xl border px-4 py-3 ${
+                  obj.completed
+                    ? 'bg-green-50 border-green-300'
+                    : 'bg-white border-gray-200'
+                }`}
+              >
                 <div className="flex items-center justify-between">
-                  <p className={`font-medium text-sm ${obj.completed ? 'line-through text-green-700' : 'text-gray-900'}`}>
+                  <p
+                    className={`font-medium text-sm ${obj.completed ? 'line-through text-green-700' : 'text-gray-900'}`}
+                  >
                     {obj.title}
                   </p>
-                  <span className={`text-xs font-semibold px-2 py-1 rounded ${
-                    obj.priority === 'high' ? 'bg-red-100 text-red-700' :
-                    obj.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-blue-100 text-blue-700'
-                  }`}>
-                    {obj.priority === 'high' ? 'Haute' : obj.priority === 'medium' ? 'Moyenne' : 'Basse'}
+                  <span
+                    className={`text-xs font-semibold px-2 py-1 rounded ${
+                      obj.priority === 'high'
+                        ? 'bg-red-100 text-red-700'
+                        : obj.priority === 'medium'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-blue-100 text-blue-700'
+                    }`}
+                  >
+                    {obj.priority === 'high'
+                      ? 'Haute'
+                      : obj.priority === 'medium'
+                        ? 'Moyenne'
+                        : 'Basse'}
                   </span>
                 </div>
                 {obj.deadline && (

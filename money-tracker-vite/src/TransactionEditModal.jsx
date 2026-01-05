@@ -1,27 +1,69 @@
 // src/TransactionEditModal.jsx - VERSION COMPLÈTE AVEC CATÉGORIES ET PROJETS
 import React, { useState, useEffect } from 'react';
-import { X, Save, Trash2, Calendar, DollarSign, Tag, FileText, Wallet, CheckCircle, XCircle, Briefcase } from 'lucide-react';
+import {
+  X,
+  Save,
+  Trash2,
+  Calendar,
+  DollarSign,
+  Tag,
+  FileText,
+  Wallet,
+  CheckCircle,
+  XCircle,
+  Briefcase,
+} from 'lucide-react';
 import { useFinance } from './contexts/FinanceContext';
 
 const getCategoryIcon = (category) => {
   const iconMap = {
-    'Voiture': '🚗', 'Transport': '🚌', 'Automobile': '🚗',
-    'Alimentation': '🍽️', 'Restaurant': '🍽️', 'Nourriture': '🍽️',
-    'Logement': '🏠', 'Maison': '🏠', 'Loyer': '🏠',
-    'Salaire': '💰', 'Revenu': '💰', 'Cadeau': '🎁',
-    'Shopping': '🛒', 'Courses': '🛒', 'Loisirs': '🎮',
-    'Santé': '💊', 'Éducation': '📚', 'Vêtements': '👕',
-    'Autre': '📝', 'Autres': '📝', 'PLG FLPT': '⚓',
-    'Bois': '🔥', 'Transfert': '↔️', 'Carburant': '⛽',
-    'Frais': '📄', 'Stock': '📦', 'DOIT': '💵',
-    'Quotidienne': '🏪', 'Afterwork': '🍻', 'VINA': '🍷',
-    'Hébergement': '🛏️', 'Accessoires': '👜', 'Crédits Phone': '📱',
-    'Habillements': '👔', 'Soins personnels': '💅', 'HOME MJG': '🏡',
-    'Aide': '🤝', 'Goûters': '🍪', 'Dons': '💝',
-    'Recettes': '💵', 'Extra Solde': '💰', 'Transfer (Inward)': '↔️',
-    '@TAHIANA': '👤', 'Vente': '💸', 'Investissement': '📈'
+    Voiture: '🚗',
+    Transport: '🚌',
+    Automobile: '🚗',
+    Alimentation: '🍽️',
+    Restaurant: '🍽️',
+    Nourriture: '🍽️',
+    Logement: '🏠',
+    Maison: '🏠',
+    Loyer: '🏠',
+    Salaire: '💰',
+    Revenu: '💰',
+    Cadeau: '🎁',
+    Shopping: '🛒',
+    Courses: '🛒',
+    Loisirs: '🎮',
+    Santé: '💊',
+    Éducation: '📚',
+    Vêtements: '👕',
+    Autre: '📝',
+    Autres: '📝',
+    'PLG FLPT': '⚓',
+    Bois: '🔥',
+    Transfert: '↔️',
+    Carburant: '⛽',
+    Frais: '📄',
+    Stock: '📦',
+    DOIT: '💵',
+    Quotidienne: '🏪',
+    Afterwork: '🍻',
+    VINA: '🍷',
+    Hébergement: '🛏️',
+    Accessoires: '👜',
+    'Crédits Phone': '📱',
+    Habillements: '👔',
+    'Soins personnels': '💅',
+    'HOME MJG': '🏡',
+    Aide: '🤝',
+    Goûters: '🍪',
+    Dons: '💝',
+    Recettes: '💵',
+    'Extra Solde': '💰',
+    'Transfer (Inward)': '↔️',
+    '@TAHIANA': '👤',
+    Vente: '💸',
+    Investissement: '📈',
   };
-  
+
   const normalized = category?.toLowerCase() || '';
   for (const [key, icon] of Object.entries(iconMap)) {
     if (key.toLowerCase() === normalized || normalized.includes(key.toLowerCase())) {
@@ -32,32 +74,65 @@ const getCategoryIcon = (category) => {
 };
 
 const formatCurrency = (amount) => {
-  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) + ' Ar';
+  return (
+    new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) +
+    ' Ar'
+  );
 };
 
 // ✅ CATÉGORIES PAR TYPE
 const EXPENSE_CATEGORIES = [
-  "Transport", "Quotidienne", "Afterwork", "VINA", "Hébergement", "Accessoires",
-  "Crédits Phone", "Habillements", "Soins personnels", "HOME MJG", "Aide", "Frais",
-  "Goûters", "Automobile", "Dons", "DOIT", "Alimentation", "Logement", "Loisirs",
-  "Santé", "Éducation", "Autres", "Voiture", "Carburant", "Stock", "Bois"
+  'Transport',
+  'Quotidienne',
+  'Afterwork',
+  'VINA',
+  'Hébergement',
+  'Accessoires',
+  'Crédits Phone',
+  'Habillements',
+  'Soins personnels',
+  'HOME MJG',
+  'Aide',
+  'Frais',
+  'Goûters',
+  'Automobile',
+  'Dons',
+  'DOIT',
+  'Alimentation',
+  'Logement',
+  'Loisirs',
+  'Santé',
+  'Éducation',
+  'Autres',
+  'Voiture',
+  'Carburant',
+  'Stock',
+  'Bois',
 ];
 
 const INCOME_CATEGORIES = [
-  "Recettes", "Extra Solde", "Transfer (Inward)", "@TAHIANA", "Transfert",
-  "Salaire", "Vente", "Investissement", "Cadeau", "Autres"
+  'Recettes',
+  'Extra Solde',
+  'Transfer (Inward)',
+  '@TAHIANA',
+  'Transfert',
+  'Salaire',
+  'Vente',
+  'Investissement',
+  'Cadeau',
+  'Autres',
 ];
 
 const TransactionEditModal = ({ transaction, onClose, accounts }) => {
-  const { 
+  const {
     transactions,
     projects,
-    updateTransaction, 
+    updateTransaction,
     deleteTransaction,
     updateProject,
-    refreshAccounts, 
-    refreshTransactions, 
-    refreshProjects 
+    refreshAccounts,
+    refreshTransactions,
+    refreshProjects,
   } = useFinance();
 
   const [formData, setFormData] = useState({
@@ -79,7 +154,10 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
         amount: transaction.amount || '',
         category: transaction.category || '',
         description: transaction.description || '',
-        date: transaction.transactiondate?.split('T')[0] || transaction.date?.split('T')[0] || '',
+        date:
+          transaction.transactiondate?.split('T')[0] ||
+          transaction.date?.split('T')[0] ||
+          '',
         accountid: transaction.account_id || '',
         projectId: transaction.project_id || null,
         isPosted: transaction.is_posted === true || transaction.isposted === true,
@@ -105,7 +183,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
 
       console.log('📤 PAYLOAD ENVOYÉ:', payload);
       await updateTransaction(transaction.id, payload);
-      
+
       await refreshAccounts?.();
       await refreshTransactions?.();
       await refreshProjects?.();
@@ -129,37 +207,38 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
       console.log('🗑️ Transaction supprimée');
 
       // ✅ Nettoyer le JSON du projet si transaction liée
-    if (transaction.project_id) {
-      try {
-        const project = await projectsService.getById(transaction.project_id);
-        let expenses = JSON.parse(project.expenses || '[]');
-        
-        expenses = expenses.filter(exp => {
-          const match = exp.description === transaction.description &&
-                       Math.abs(parseFloat(exp.amount || 0) - parseFloat(transaction.amount)) < 0.01;
-          return !match;
-        });
-        
-        await projectsService.updateProject(transaction.project_id, {
-          expenses: JSON.stringify(expenses)
-        });
-      } catch (e) {
-        console.error('Erreur nettoyage projet:', e);
-      }
-    }
+      if (transaction.project_id) {
+        try {
+          const project = await projectsService.getById(transaction.project_id);
+          let expenses = JSON.parse(project.expenses || '[]');
 
+          expenses = expenses.filter((exp) => {
+            const match =
+              exp.description === transaction.description &&
+              Math.abs(parseFloat(exp.amount || 0) - parseFloat(transaction.amount)) <
+                0.01;
+            return !match;
+          });
+
+          await projectsService.updateProject(transaction.project_id, {
+            expenses: JSON.stringify(expenses),
+          });
+        } catch (e) {
+          console.error('Erreur nettoyage projet:', e);
+        }
+      }
 
       if (projectId) {
         try {
-          const proj = projects.find(p => String(p.id) === String(projectId));
-          
+          const proj = projects.find((p) => String(p.id) === String(projectId));
+
           if (!proj) {
             console.warn('⚠️ Projet non trouvé dans le contexte');
             return;
           }
 
-          const projectTx = transactions.filter(t => 
-            String(t.project_id || t.projectId) === String(projectId)
+          const projectTx = transactions.filter(
+            (t) => String(t.project_id || t.projectId) === String(projectId)
           );
 
           const parseList = (data) => {
@@ -172,19 +251,22 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             }
           };
 
-          const expenses = parseList(proj.expenses).map(e => ({ ...e }));
-          const revenues = parseList(proj.revenues).map(r => ({ ...r }));
+          const expenses = parseList(proj.expenses).map((e) => ({ ...e }));
+          const revenues = parseList(proj.revenues).map((r) => ({ ...r }));
 
           const matchTx = (line, txs, type) => {
-            return txs.find(t => {
+            return txs.find((t) => {
               const tAmount = parseFloat(t.amount || 0);
               const lAmount = parseFloat(line.amount || 0);
               const sameAmount = Math.abs(tAmount - lAmount) < 0.01;
-              const sameType = (type === 'expense' && t.type === 'expense') ||
-                              (type === 'revenue' && t.type === 'income');
-              const descMatch = line.description && t.description ?
-                t.description.includes(line.description) ||
-                line.description.includes(t.description) : true;
+              const sameType =
+                (type === 'expense' && t.type === 'expense') ||
+                (type === 'revenue' && t.type === 'income');
+              const descMatch =
+                line.description && t.description
+                  ? t.description.includes(line.description) ||
+                    line.description.includes(t.description)
+                  : true;
               return sameAmount && sameType && descMatch;
             });
           };
@@ -213,7 +295,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             remaining_budget: proj.remaining_budget || 0,
             total_available: proj.total_available || 0,
             expenses: JSON.stringify(expenses),
-            revenues: JSON.stringify(revenues)
+            revenues: JSON.stringify(revenues),
           };
 
           await updateProject(projectId, payload);
@@ -237,26 +319,30 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
   if (!transaction) return null;
 
   // ✅ Catégories dynamiques selon le type
-  const availableCategories = formData.type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
+  const availableCategories =
+    formData.type === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        
         {/* 🎨 HEADER AVEC GRADIENT */}
-        <div className={`p-6 border-b border-gray-100 bg-gradient-to-r ${
-          formData.type === 'income' 
-            ? 'from-green-50 to-emerald-50' 
-            : 'from-red-50 to-rose-50'
-        }`}>
+        <div
+          className={`p-6 border-b border-gray-100 bg-gradient-to-r ${
+            formData.type === 'income'
+              ? 'from-green-50 to-emerald-50'
+              : 'from-red-50 to-rose-50'
+          }`}
+        >
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl ${
-                formData.type === 'income' ? 'bg-green-100' : 'bg-red-100'
-              }`}>
+              <div
+                className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl ${
+                  formData.type === 'income' ? 'bg-green-100' : 'bg-red-100'
+                }`}
+              >
                 {getCategoryIcon(formData.category)}
               </div>
-              
+
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">
                   Modifier la Transaction
@@ -277,21 +363,29 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
 
           {/* Badges statut */}
           <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
-              formData.type === 'income'
-                ? 'bg-green-100 text-green-700 border border-green-200'
-                : 'bg-red-100 text-red-700 border border-red-200'
-            }`}>
+            <span
+              className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold ${
+                formData.type === 'income'
+                  ? 'bg-green-100 text-green-700 border border-green-200'
+                  : 'bg-red-100 text-red-700 border border-red-200'
+              }`}
+            >
               {formData.type === 'income' ? '↗' : '↘'}
               {formData.type === 'income' ? 'Encaissement' : 'Dépense'}
             </span>
-            
-            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
-              formData.isPosted
-                ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                : 'bg-orange-100 text-orange-700 border border-orange-200'
-            }`}>
-              {formData.isPosted ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+
+            <span
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold ${
+                formData.isPosted
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'bg-orange-100 text-orange-700 border border-orange-200'
+              }`}
+            >
+              {formData.isPosted ? (
+                <CheckCircle className="w-4 h-4" />
+              ) : (
+                <XCircle className="w-4 h-4" />
+              )}
               {formData.isPosted ? 'Validée / Postée' : 'Non validé'}
             </span>
 
@@ -307,7 +401,6 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
         {/* 📋 FORMULAIRE SCROLLABLE */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-6">
-            
             {/* Type */}
             <div>
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
@@ -316,7 +409,9 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
               </label>
               <select
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value, category: '' })}
+                onChange={(e) =>
+                  setFormData({ ...formData, type: e.target.value, category: '' })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               >
                 <option value="expense">💸 Dépense</option>
@@ -373,7 +468,9 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
               </label>
               <textarea
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all resize-none"
                 rows="3"
                 placeholder="Détails de la transaction..."
@@ -407,7 +504,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
                 required
               >
                 <option value="">-- Choisir un compte --</option>
-                {accounts.map(acc => (
+                {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
                     {acc.name} ({formatCurrency(acc.balance)})
                   </option>
@@ -419,11 +516,14 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             <div>
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                 <Briefcase className="w-4 h-4" />
-                Projet <span className="text-gray-400 text-xs font-normal">(optionnel)</span>
+                Projet{' '}
+                <span className="text-gray-400 text-xs font-normal">(optionnel)</span>
               </label>
               <select
-                value={formData.projectId || ""}
-                onChange={(e) => setFormData({ ...formData, projectId: e.target.value || null })}
+                value={formData.projectId || ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, projectId: e.target.value || null })
+                }
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
               >
                 <option value="">-- Aucun projet --</option>
@@ -444,7 +544,10 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
                 onChange={(e) => setFormData({ ...formData, isPosted: e.target.checked })}
                 className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
               />
-              <label htmlFor="is_posted" className="text-sm font-medium text-gray-700 cursor-pointer">
+              <label
+                htmlFor="is_posted"
+                className="text-sm font-medium text-gray-700 cursor-pointer"
+              >
                 ✅ Transaction Validée / Postée
                 <span className="block text-xs text-gray-500 mt-1">
                   Cocher cette case met à jour automatiquement le solde du compte
@@ -473,7 +576,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
             >
               Annuler
             </button>
-            
+
             <button
               type="submit"
               onClick={handleSubmit}

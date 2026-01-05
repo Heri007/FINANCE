@@ -7,16 +7,16 @@ export const contentService = {
   },
 
   async createMasterContent(contentData) {
-    return apiRequest('/content', { 
-      method: 'POST', 
-      body: JSON.stringify(contentData) 
+    return apiRequest('/content', {
+      method: 'POST',
+      body: JSON.stringify(contentData),
     });
   },
 
   async updateMasterContent(id, updates) {
-    return apiRequest(`/content/${id}`, { 
-      method: 'PUT', 
-      body: JSON.stringify(updates) 
+    return apiRequest(`/content/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
     });
   },
 
@@ -26,21 +26,21 @@ export const contentService = {
 
   // --- DERIVATIVES ---
   async addDerivative(masterId, derivativeData) {
-    return apiRequest(`/content/${masterId}/derivatives`, { 
-      method: 'POST', 
-      body: JSON.stringify(derivativeData) 
+    return apiRequest(`/content/${masterId}/derivatives`, {
+      method: 'POST',
+      body: JSON.stringify(derivativeData),
     });
   },
 
   async updateDerivative(id, updates) {
-    return apiRequest(`/content/derivatives/${id}`, { 
-      method: 'PUT', 
-      body: JSON.stringify(updates) 
+    return apiRequest(`/content/derivatives/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
     });
   },
 
   async deleteDerivative(id) {
     return apiRequest(`/content/derivatives/${id}`, { method: 'DELETE' });
-  }
+  },
 };
 export default contentService;

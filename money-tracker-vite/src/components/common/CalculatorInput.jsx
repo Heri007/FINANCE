@@ -2,7 +2,13 @@
 import React, { useState } from 'react';
 import { Calculator } from 'lucide-react';
 
-export function CalculatorInput({ value, onChange, placeholder, className = '', min = 0 }) {
+export function CalculatorInput({
+  value,
+  onChange,
+  placeholder,
+  className = '',
+  min = 0,
+}) {
   const [expression, setExpression] = useState('');
   const [showCalc, setShowCalc] = useState(false);
 
@@ -14,7 +20,7 @@ export function CalculatorInput({ value, onChange, placeholder, className = '', 
 
       // Évaluer en toute sécurité
       const result = Function(`"use strict"; return (${cleanExpr})`)();
-      
+
       if (isNaN(result) || !isFinite(result)) {
         return null;
       }
@@ -73,7 +79,7 @@ export function CalculatorInput({ value, onChange, placeholder, className = '', 
         placeholder={placeholder}
         className={`${className} ${showCalc ? 'border-green-500 border-2 pr-24' : ''}`}
       />
-      
+
       {/* Indicateur calculatrice */}
       {showCalc && calculatedResult !== null && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 bg-green-50 px-2 py-1 rounded text-sm pointer-events-none">
@@ -86,4 +92,3 @@ export function CalculatorInput({ value, onChange, placeholder, className = '', 
     </div>
   );
 }
-

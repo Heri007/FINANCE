@@ -23,8 +23,8 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
     emergencyContact: {
       name: '',
       phone: '',
-      relationship: ''
-    }
+      relationship: '',
+    },
   });
 
   const [photoFile, setPhotoFile] = useState(null);
@@ -34,7 +34,7 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
   useEffect(() => {
     if (employee && open) {
       console.log('🔄 Initializing form with employee:', employee);
-      
+
       setFormData({
         firstName: employee.firstName || '',
         lastName: employee.lastName || '',
@@ -54,8 +54,8 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
         emergencyContact: {
           name: employee.emergencyContact?.name || '',
           phone: employee.emergencyContact?.phone || '',
-          relationship: employee.emergencyContact?.relationship || ''
-        }
+          relationship: employee.emergencyContact?.relationship || '',
+        },
       });
 
       setPhotoPreview(employee.photo ? `${API_BASE}${employee.photo}` : null);
@@ -64,28 +64,28 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
   }, [employee, open]);
 
   const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSkillsChange = (skillsString) => {
     const skillsArray = skillsString
       .split(',')
-      .map(s => s.trim())
+      .map((s) => s.trim())
       .filter(Boolean);
-    setFormData(prev => ({ ...prev, skills: skillsArray }));
+    setFormData((prev) => ({ ...prev, skills: skillsArray }));
   };
 
   const handleProjectsChange = (selectedProjects) => {
-    setFormData(prev => ({ ...prev, projects: selectedProjects }));
+    setFormData((prev) => ({ ...prev, projects: selectedProjects }));
   };
 
   const handleEmergencyContactChange = (field, value) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       emergencyContact: {
         ...prev.emergencyContact,
-        [field]: value
-      }
+        [field]: value,
+      },
     }));
   };
 
@@ -102,34 +102,34 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  try {
-    const dataToSend = {
-      id: employee.id, // ✅ CRITIQUE
-      ...formData,
-      skills: formData.skills,
-      projects: formData.projects,
-      emergencyContact: formData.emergencyContact
-    };
+    try {
+      const dataToSend = {
+        id: employee.id, // ✅ CRITIQUE
+        ...formData,
+        skills: formData.skills,
+        projects: formData.projects,
+        emergencyContact: formData.emergencyContact,
+      };
 
-    console.log('💾 Saving employee ID:', dataToSend.id);
+      console.log('💾 Saving employee ID:', dataToSend.id);
 
-    await onSave(dataToSend);
-    onClose();
-  } catch (err) {
-    console.error('Erreur sauvegarde:', err);
-  }
-};
+      await onSave(dataToSend);
+      onClose();
+    } catch (err) {
+      console.error('Erreur sauvegarde:', err);
+    }
+  };
 
   if (!open || !employee) return null;
 
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -342,7 +342,9 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
 
           {/* Contact d'urgence */}
           <div className="bg-red-50 rounded-xl p-4 border-2 border-red-200">
-            <h3 className="text-sm font-black text-red-800 mb-3 uppercase">Contact d'urgence</h3>
+            <h3 className="text-sm font-black text-red-800 mb-3 uppercase">
+              Contact d'urgence
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <input
                 type="text"
@@ -362,7 +364,9 @@ export function EmployeeEditModal({ employee, open, onClose, onSave, projects = 
                 type="text"
                 placeholder="Relation"
                 value={formData.emergencyContact.relationship}
-                onChange={(e) => handleEmergencyContactChange('relationship', e.target.value)}
+                onChange={(e) =>
+                  handleEmergencyContactChange('relationship', e.target.value)
+                }
                 className="px-4 py-2.5 border-2 border-red-200 rounded-lg focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition-all font-semibold"
               />
             </div>

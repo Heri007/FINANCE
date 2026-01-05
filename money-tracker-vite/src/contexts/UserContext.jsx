@@ -1,5 +1,12 @@
 // src/contexts/UserContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from 'react';
 
 const UserContext = createContext(null);
 
@@ -43,8 +50,11 @@ export function UserProvider({ children }) {
   }, [token]);
 
   const setAuthToken = useCallback((newToken) => {
-    console.log('✅ UserContext.setAuthToken appelé avec:', newToken ? 'TOKEN_PRÉSENT' : 'NULL');
-    
+    console.log(
+      '✅ UserContext.setAuthToken appelé avec:',
+      newToken ? 'TOKEN_PRÉSENT' : 'NULL'
+    );
+
     if (newToken) {
       localStorage.setItem('token', newToken);
       setToken(newToken);
@@ -76,11 +86,7 @@ export function UserProvider({ children }) {
     console.log('🔄 UserContext: isAuthenticated =', Boolean(token));
   }, [token]);
 
-  return (
-    <UserContext.Provider value={value}>
-      {children}
-    </UserContext.Provider>
-  );
+  return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
 
 export function useUser() {

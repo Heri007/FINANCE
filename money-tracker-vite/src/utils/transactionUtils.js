@@ -29,11 +29,10 @@ export function normalizeDate(d) {
     const year = dateObj.getFullYear();
     const month = String(dateObj.getMonth() + 1).padStart(2, '0');
     const day = String(dateObj.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
 
+    return `${year}-${month}-${day}`;
   } catch (e) {
-    console.error("Erreur normalisation date:", d, e);
+    console.error('Erreur normalisation date:', d, e);
     return null;
   }
 }
@@ -41,7 +40,7 @@ export function normalizeDate(d) {
 /**
  * Créer une signature unique pour une transaction (Deduplication)
  * ⚠️ ALIGNÉ À 100% AVEC LE BACKEND (importController.createSig)
- * 
+ *
  * Règles strictes pour correspondre au backend:
  * - Date au format YYYY-MM-DD (tronqué si ISO)
  * - Montant: Math.abs().toFixed(2)
@@ -51,33 +50,35 @@ export function normalizeDate(d) {
  */
 export function createSignature(accountId, date, amount, type, description) {
   const cleanAccId = accountId ? String(accountId).trim() : null;
-  
+
   // Date normalisée puis tronquée (si ISO complet type "2024-12-15T12:00:00")
   let cleanDate = normalizeDate(date);
   if (cleanDate && cleanDate.includes('T')) {
     cleanDate = cleanDate.split('T')[0];
   }
-  
+
   // Montant absolu avec 2 décimales
-  const cleanAmount = amount !== null && amount !== undefined 
-    ? Math.abs(parseFloat(amount)).toFixed(2) 
-    : null;
-    
+  const cleanAmount =
+    amount !== null && amount !== undefined
+      ? Math.abs(parseFloat(amount)).toFixed(2)
+      : null;
+
   const cleanType = type ? String(type).trim().toLowerCase() : null;
-  
+
   // ⚠️ IMPORTANT: Nettoyage IDENTIQUE au backend
-  const cleanDesc = description 
+  const cleanDesc = description
     ? String(description)
         .trim()
         .toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Enlève les accents
-        .replace(/\s+/g, ' ')                              // Compresse espaces multiples en UN espace
-        .replace(/[.,;:!?@#$%^&*()]/g, '')                // Retire ponctuation spécifique
-        .substring(0, 40)                                  // Tronque à 40 caractères
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Enlève les accents
+        .replace(/\s+/g, ' ') // Compresse espaces multiples en UN espace
+        .replace(/[.,;:!?@#$%^&*()]/g, '') // Retire ponctuation spécifique
+        .substring(0, 40) // Tronque à 40 caractères
     : '';
-  
+
   if (!cleanAccId || !cleanDate || !cleanAmount || !cleanType) return null;
-  
+
   // Format: accountId|date|amount|type|description (PAS de catégorie)
   return `${cleanAccId}|${cleanDate}|${cleanAmount}|${cleanType}|${cleanDesc}`;
 }
@@ -87,25 +88,19 @@ export function createSignature(accountId, date, amount, type, description) {
  */
 export function indexTransactions(transactions) {
   const index = new Map();
-  
+
   if (!Array.isArray(transactions)) return index;
 
-  transactions.forEach(t => {
+  transactions.forEach((t) => {
     // Gestion snake_case (DB) ou camelCase (App)
     const accId = t.account_id || t.accountId;
     const dateVal = t.transaction_date || t.date;
 
-    const sig = createSignature(
-      accId,
-      dateVal,
-      t.amount,
-      t.type,
-      t.description
-    );
-    
+    const sig = createSignature(accId, dateVal, t.amount, t.type, t.description);
+
     if (sig) index.set(sig, { id: t.id, description: t.description });
   });
-  
+
   return index;
 }
 
@@ -116,17 +111,17 @@ export function filterNewTransactions(imported, existingIndex) {
   const newTransactions = [];
   const duplicates = [];
   const invalid = [];
-  
+
   // Copie de l'index pour gérer les doublons au sein même du fichier importé
   const localIndex = new Map(existingIndex);
-  
+
   imported.forEach((trx, i) => {
     // Gestion souple des noms de propriétés
     const accId = trx.account_id || trx.accountId;
     const dateVal = trx.transaction_date || trx.date;
 
     const sig = createSignature(accId, dateVal, trx.amount, trx.type, trx.description);
-    
+
     if (!sig) {
       invalid.push({ index: i + 1, trx, reason: 'Données manquantes ou invalides' });
     } else if (localIndex.has(sig)) {
@@ -137,7 +132,7 @@ export function filterNewTransactions(imported, existingIndex) {
       localIndex.set(sig, { new: true, description: trx.description });
     }
   });
-  
+
   return { newTransactions, duplicates, invalid };
 }
 
@@ -146,26 +141,26 @@ export function filterNewTransactions(imported, existingIndex) {
  */
 export function calculateImpact(transactions, accounts) {
   const impact = {};
-  
-  transactions.forEach(trx => {
+
+  transactions.forEach((trx) => {
     const accId = trx.account_id || trx.accountId;
     if (!accId) return;
 
     if (!impact[accId]) {
-      const acc = accounts.find(a => String(a.id) === String(accId));
+      const acc = accounts.find((a) => String(a.id) === String(accId));
       impact[accId] = {
         name: acc?.name || `Compte #${accId}`,
         currentBalance: parseFloat(acc?.balance || 0),
         income: 0,
         expense: 0,
         count: 0,
-        finalBalance: parseFloat(acc?.balance || 0)
+        finalBalance: parseFloat(acc?.balance || 0),
       };
     }
-    
+
     const amount = parseFloat(trx.amount || 0);
     impact[accId].count++;
-    
+
     if (trx.type === 'income') {
       impact[accId].income += amount;
       impact[accId].finalBalance += amount;
@@ -174,6 +169,6 @@ export function calculateImpact(transactions, accounts) {
       impact[accId].finalBalance -= amount;
     }
   });
-  
+
   return impact;
 }

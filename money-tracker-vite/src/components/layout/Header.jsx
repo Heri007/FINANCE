@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  Plus, 
-  LogOut, 
-  Upload, 
-  Download, 
-  FileText, 
+import {
+  Plus,
+  LogOut,
+  Upload,
+  Download,
+  FileText,
   Calculator,
   UserCog,
   Copy,
@@ -12,7 +12,7 @@ import {
   FolderKanban,
   List,
   Menu,
-  X
+  X,
 } from 'lucide-react';
 
 export function Header({
@@ -27,42 +27,41 @@ export function Header({
   onShowContent,
   onShowReports,
   onShowProjectPlanner,
-  onShowProjectsList
+  onShowProjectsList,
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
-    <header className="
+    <header
+      className="
       bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800
       shadow-xl 
       border-b-4 border-slate-600
       sticky top-0 z-50
       backdrop-blur-sm
-    ">
+    "
+    >
       <div className="px-6 py-4">
         <div className="flex items-center justify-between">
-          
           {/* Logo & Titre */}
           <div className="flex items-center gap-4">
             <div className="bg-slate-600 p-3 rounded-xl shadow-lg">
-              <svg 
-                className="w-7 h-7 text-white" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                className="w-7 h-7 text-white"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
                 strokeWidth={2.5}
               >
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 />
               </svg>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
-                MONEY 💰
-              </h1>
+              <h1 className="text-2xl font-black text-white tracking-tight">MONEY 💰</h1>
               <p className="text-xs text-slate-300 font-semibold uppercase tracking-widest">
                 Gestion de Porte-Feuille
               </p>
@@ -71,7 +70,6 @@ export function Header({
 
           {/* Navigation Desktop */}
           <nav className="hidden lg:flex items-center gap-2">
-            
             {/* Transaction */}
             <button
               onClick={onAddTransaction}
@@ -108,7 +106,7 @@ export function Header({
                 <Upload size={16} strokeWidth={2.5} />
                 <span className="text-xs">Import CSV</span>
               </button>
-              
+
               <button
                 onClick={onBackup}
                 className="
@@ -125,7 +123,7 @@ export function Header({
                 <Download size={16} strokeWidth={2.5} />
                 <span className="text-xs">Backup</span>
               </button>
-              
+
               <button
                 onClick={onRestore}
                 className="
@@ -159,7 +157,7 @@ export function Header({
               >
                 <FileText size={18} strokeWidth={2.5} />
               </button>
-              
+
               <button
                 onClick={onShowReports}
                 className="
@@ -173,7 +171,7 @@ export function Header({
               >
                 <BarChart3 size={18} strokeWidth={2.5} />
               </button>
-              
+
               <button
                 onClick={onShowBookkeeper}
                 className="
@@ -187,7 +185,7 @@ export function Header({
               >
                 <Calculator size={18} strokeWidth={2.5} />
               </button>
-              
+
               <button
                 onClick={onShowOperator}
                 className="
@@ -201,7 +199,7 @@ export function Header({
               >
                 <UserCog size={18} strokeWidth={2.5} />
               </button>
-              
+
               <button
                 onClick={onShowContent}
                 className="
@@ -235,7 +233,7 @@ export function Header({
                 <FolderKanban size={16} strokeWidth={2.5} />
                 <span className="text-xs">Planifier Projet</span>
               </button>
-              
+
               <button
                 onClick={onShowProjectsList}
                 className="
@@ -288,63 +286,87 @@ export function Header({
         {isMenuOpen && (
           <div className="lg:hidden mt-4 pt-4 border-t-2 border-slate-600 space-y-2">
             <button
-              onClick={() => { onAddTransaction(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onAddTransaction();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-emerald-600 text-white font-bold px-4 py-3 rounded-lg"
             >
               <Plus size={18} />
               <span>Nouvelle Transaction</span>
             </button>
-            
+
             <button
-              onClick={() => { onImport(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onImport();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-slate-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <Upload size={18} />
               <span>Import CSV</span>
             </button>
-            
+
             <button
-              onClick={() => { onBackup(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onBackup();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-slate-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <Download size={18} />
               <span>Exporter Backup</span>
             </button>
-            
+
             <button
-              onClick={() => { onRestore(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onRestore();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-amber-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <Upload size={18} />
               <span>Restaurer</span>
             </button>
-            
+
             <button
-              onClick={() => { onShowReports(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onShowReports();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-slate-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <BarChart3 size={18} />
               <span>Rapports</span>
             </button>
-            
+
             <button
-              onClick={() => { onShowProjectPlanner(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onShowProjectPlanner();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-blue-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <FolderKanban size={18} />
               <span>Planifier Projet</span>
             </button>
-            
+
             <button
-              onClick={() => { onShowProjectsList(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onShowProjectsList();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-indigo-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <List size={18} />
               <span>Mes Projets</span>
             </button>
-            
+
             <button
-              onClick={() => { onLogout(); setIsMenuOpen(false); }}
+              onClick={() => {
+                onLogout();
+                setIsMenuOpen(false);
+              }}
               className="w-full flex items-center gap-3 bg-rose-600 text-white font-semibold px-4 py-3 rounded-lg"
             >
               <LogOut size={18} />

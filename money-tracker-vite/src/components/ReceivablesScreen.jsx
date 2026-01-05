@@ -1,14 +1,14 @@
 // src/components/ReceivablesScreen.jsx
-import React, { useEffect, useState, useMemo } from "react";
-import { receivablesService } from "../services/receivablesService";
+import React, { useEffect, useState, useMemo } from 'react';
+import { receivablesService } from '../services/receivablesService';
 import { Users, TrendingUp, CheckCircle, Clock, Plus } from 'lucide-react';
 
 const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => {
   const [items, setItems] = useState([]);
-  const [person, setPerson] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [sourceAccountId, setSourceAccountId] = useState("");
+  const [person, setPerson] = useState('');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [sourceAccountId, setSourceAccountId] = useState('');
   const [loading, setLoading] = useState(false);
 
   const fetchReceivables = async () => {
@@ -33,9 +33,12 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
     [items]
   );
 
-  const coffreAccount = accounts.find(a => a.name === "Coffre");
+  const coffreAccount = accounts.find((a) => a.name === 'Coffre');
   const currentCoffreBalance = Number(coffreAccount?.balance || 0);
-  const currentTotalBalance = accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+  const currentTotalBalance = accounts.reduce(
+    (sum, a) => sum + Number(a.balance || 0),
+    0
+  );
 
   const coffreForecast = currentCoffreBalance + totalOpen;
   const totalForecast = currentTotalBalance + totalOpen;
@@ -49,13 +52,13 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
   }, [totalOpen, onTotalsChange]);
 
   const sourceAccounts = accounts.filter((a) =>
-    ["Argent Liquide", "Coffre"].includes(a.name)
+    ['Argent Liquide', 'Coffre'].includes(a.name)
   );
 
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!person || !amount || !sourceAccountId) return;
-    
+
     try {
       const created = await receivablesService.create({
         person,
@@ -63,12 +66,12 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         description,
         source_account_id: Number(sourceAccountId),
       });
-      
+
       setItems((prev) => [created, ...prev]);
-      setPerson("");
-      setAmount("");
-      setDescription("");
-      setSourceAccountId("");
+      setPerson('');
+      setAmount('');
+      setDescription('');
+      setSourceAccountId('');
 
       if (onAfterChange) {
         await onAfterChange();
@@ -81,7 +84,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
 
   const handleClose = async (id) => {
     if (!confirm('Marquer ce receivable comme payé ?')) return;
-    
+
     try {
       await receivablesService.pay(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
@@ -121,10 +124,8 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
 
       {/* Layout 3 colonnes avec hauteurs alignées */}
       <div className="grid gap-4 lg:grid-cols-[240px,1fr,380px]">
-        
         {/* COLONNE 1 : Cards Total & Nombre superposées avec flex-1 */}
         <div className="flex flex-col gap-2">
-          
           {/* Card 1 : Total receivables (flex-1 pour occuper la moitié) */}
           <div className="flex-1 bg-gradient-to-br from-[#807D9E] to-[#6f6c8d] rounded-lg shadow-md border-2 border-[#807D9E] p-3 flex flex-col justify-center">
             <div className="flex items-center gap-2 mb-2">
@@ -136,7 +137,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
               </p>
             </div>
             <p className="text-xl font-black text-white leading-none">
-              {totalOpen.toLocaleString("fr-FR")} Ar
+              {totalOpen.toLocaleString('fr-FR')} Ar
             </p>
           </div>
 
@@ -155,11 +156,13 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
         </div>
 
         {/* COLONNE 2 : Card "En Cours" */}
-        <div className={`rounded-lg shadow-md border-2 p-3 flex flex-col ${
-          receivablesTousRecoltes 
-            ? 'bg-gradient-to-br from-[#6D9C6D] to-[#5a8a5a] border-[#6D9C6D]' 
-            : 'bg-gradient-to-br from-[#b85b03] to-[#fcb169] border-[#C09858]'
-        }`}>
+        <div
+          className={`rounded-lg shadow-md border-2 p-3 flex flex-col ${
+            receivablesTousRecoltes
+              ? 'bg-gradient-to-br from-[#6D9C6D] to-[#5a8a5a] border-[#6D9C6D]'
+              : 'bg-gradient-to-br from-[#b85b03] to-[#fcb169] border-[#C09858]'
+          }`}
+        >
           {/* Header */}
           <div className="flex items-center gap-2 mb-3">
             <div className="bg-white/20 p-1 rounded">
@@ -170,49 +173,56 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
               )}
             </div>
             <p className="text-lg font-bold text-white uppercase tracking-wider">
-              {receivablesTousRecoltes ? "✅ Tout Récolté" : "📊 En Cours"}
+              {receivablesTousRecoltes ? '✅ Tout Récolté' : '📊 En Cours'}
             </p>
           </div>
-          
+
           {/* Contenu avec flex-1 pour remplir */}
           <div className="flex-1 flex flex-col justify-between space-y-2">
             {/* Coffre prévu */}
             <div className="flex justify-between items-baseline">
               <span className="text-lg text-white font-bold uppercase">Coffre</span>
-              <span className="text-xs text-white font-bold justify-self-center uppercase">(+ Receivables)</span>
+              <span className="text-xs text-white font-bold justify-self-center uppercase">
+                (+ Receivables)
+              </span>
               <span className="text-lg font-black text-white leading-none">
-                {coffreForecast.toLocaleString("fr-FR")} Ar
+                {coffreForecast.toLocaleString('fr-FR')} Ar
               </span>
             </div>
-            
+
             {/* Total prévu */}
             <div className="flex justify-between items-baseline pt-2 border-t border-white/20">
               <span className="text-lg text-white font-bold uppercase">TOTAL</span>
-              <span className="text-xs text-white justify-self-center font-bold uppercase">(+ TOUS LES COMPTES)</span>
+              <span className="text-xs text-white justify-self-center font-bold uppercase">
+                (+ TOUS LES COMPTES)
+              </span>
               <span className="text-lg font-black text-white leading-none">
-                {totalForecast.toLocaleString("fr-FR")} Ar
+                {totalForecast.toLocaleString('fr-FR')} Ar
               </span>
             </div>
-            
+
             {/* Badge */}
             <div className="pt-2 border-t border-white/20">
               <span className="inline-block text-lg px-2 py-1 rounded bg-yellow-200 text-black font-bold">
-                +{totalOpen.toLocaleString("fr-FR")} Ar attendus
+                +{totalOpen.toLocaleString('fr-FR')} Ar attendus
               </span>
             </div>
-            
+
             {/* Message */}
             <p className="text-xs text-white italic font-semibold leading-tight pt-1">
-              {receivablesTousRecoltes 
-                ? "Le Coffre couvre tous les receivables" 
-                : "Débourse depuis Argent Liquide ou Coffre"}
+              {receivablesTousRecoltes
+                ? 'Le Coffre couvre tous les receivables'
+                : 'Débourse depuis Argent Liquide ou Coffre'}
             </p>
           </div>
         </div>
 
         {/* COLONNE 3 : Formulaire d'ajout */}
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-md border-2 border-slate-200 p-3 flex flex-col">
-          <form onSubmit={handleAdd} className="flex-1 flex flex-col justify-between space-y-2">
+          <form
+            onSubmit={handleAdd}
+            className="flex-1 flex flex-col justify-between space-y-2"
+          >
             <input
               type="text"
               placeholder="Personne / source"
@@ -243,7 +253,7 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
               <option value="">Déboursé depuis...</option>
               {sourceAccounts.map((acc) => (
                 <option key={acc.id} value={acc.id}>
-                  {acc.name} ({Number(acc.balance).toLocaleString("fr-FR")} Ar)
+                  {acc.name} ({Number(acc.balance).toLocaleString('fr-FR')} Ar)
                 </option>
               ))}
             </select>
@@ -278,15 +288,17 @@ const ReceivablesScreen = ({ onAfterChange, onTotalsChange, accounts = [] }) => 
               <div className="flex-1">
                 <p className="font-bold text-slate-900 text-base">{item.person}</p>
                 {item.description && (
-                  <p className="text-sm text-slate-600 mt-1 font-semibold">{item.description}</p>
+                  <p className="text-sm text-slate-600 mt-1 font-semibold">
+                    {item.description}
+                  </p>
                 )}
                 <p className="mt-2 text-xs text-slate-500 font-semibold">
-                  Créé le {new Date(item.created_at).toLocaleString("fr-FR")}
+                  Créé le {new Date(item.created_at).toLocaleString('fr-FR')}
                 </p>
               </div>
               <div className="flex items-center gap-4">
                 <p className="text-lg font-bold text-[#202023]">
-                  {Number(item.amount).toLocaleString("fr-FR")} Ar
+                  {Number(item.amount).toLocaleString('fr-FR')} Ar
                 </p>
                 <button
                   onClick={() => handleClose(item.id)}

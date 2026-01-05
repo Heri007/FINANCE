@@ -13,24 +13,23 @@ import { ProductFlipModal } from './modals/ProductFlipModal';
 
 /**
  * ProjectPlannerHub - Hub intelligent de création/édition de projets
- * 
+ *
  * Comportement:
  * 1. Si on édite un projet existant → Ouvre directement le bon modal selon le type
  * 2. Si nouveau projet → Affiche l'écran de sélection du type
  * 3. PRODUCTFLIP et autres types génériques → Utilise l'ancien ProjectPlannerModal
  * 4. CARRIERE, EXPORT, LIVESTOCK → Utilise les nouveaux modals spécialisés
  */
-export function ProjectPlannerHub({ 
-  isOpen, 
-  onClose, 
-  accounts = [], 
+export function ProjectPlannerHub({
+  isOpen,
+  onClose,
+  accounts = [],
   project = null,
   onProjectSaved,
   onProjectUpdated,
   createTransaction,
-  totalBalance
+  totalBalance,
 }) {
-  
   const [selectedType, setSelectedType] = useState(null);
 
   // Reset du type sélectionné quand on ferme le modal
@@ -52,22 +51,22 @@ export function ProjectPlannerHub({
       onProjectSaved,
       onProjectUpdated,
       createTransaction,
-      totalBalance
+      totalBalance,
     };
 
     switch (project.type) {
       case 'CARRIERE':
         return <CarriereModal {...commonProps} />;
-      
+
       case 'EXPORT':
         return <ExportModal {...commonProps} />;
-      
+
       case 'LIVESTOCK':
         return <LivestockModal {...commonProps} />;
-      
+
       case 'PRODUCTFLIP': // ← AJOUT
         return <ProductFlipModal {...commonProps} />;
-      
+
       // ✅ FALLBACK: Types génériques (PRODUCTFLIP, REALESTATE, FISHING, etc.)
       default:
         return <ProjectPlannerModal {...commonProps} />;
@@ -84,26 +83,26 @@ export function ProjectPlannerHub({
       onProjectSaved,
       onProjectUpdated,
       createTransaction,
-      totalBalance
+      totalBalance,
     };
 
     switch (selectedType) {
       case 'CARRIERE':
         return <CarriereModal {...commonProps} />;
-      
+
       case 'EXPORT':
         return <ExportModal {...commonProps} />;
-      
+
       case 'LIVESTOCK':
         return <LivestockModal {...commonProps} />;
-      
+
       case 'PRODUCTFLIP': // ← AJOUT
         return <ProductFlipModal {...commonProps} />;
 
       // ✅ FALLBACK: Types génériques
       default:
         return (
-          <ProjectPlannerModal 
+          <ProjectPlannerModal
             {...commonProps}
             // Force le type sélectionné
             initialType={selectedType}
@@ -116,7 +115,6 @@ export function ProjectPlannerHub({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full p-8 max-h-[90vh] overflow-y-auto">
-        
         {/* En-tête */}
         <div className="flex justify-between items-start mb-8">
           <div>
@@ -127,8 +125,8 @@ export function ProjectPlannerHub({
               Choisissez le type de projet que vous souhaitez créer
             </p>
           </div>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors p-2"
           >
             <X className="w-6 h-6" />
@@ -137,7 +135,6 @@ export function ProjectPlannerHub({
 
         {/* Grille de sélection */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          
           {/* ========== CARRIÈRE ========== */}
           <button
             onClick={() => setSelectedType('CARRIERE')}
@@ -206,7 +203,6 @@ export function ProjectPlannerHub({
               Spécialisé
             </span>
           </button>
-
         </div>
 
         {/* Section des types génériques (optionnel, peut être caché) */}
@@ -215,7 +211,6 @@ export function ProjectPlannerHub({
             Autres types de projets
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            
             <button
               onClick={() => setSelectedType('REALESTATE')}
               className="p-4 border border-gray-200 rounded-lg hover:border-gray-400 hover:bg-gray-50 transition text-sm font-medium text-gray-700"
@@ -243,7 +238,6 @@ export function ProjectPlannerHub({
             >
               💼 Service
             </button>
-
           </div>
         </div>
 
@@ -260,7 +254,6 @@ export function ProjectPlannerHub({
             Annuler
           </button>
         </div>
-
       </div>
     </div>
   );

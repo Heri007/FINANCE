@@ -3,9 +3,7 @@
     {
       "path": "tailwind.config.js",
       "imports": [],
-      "exports": [
-        "export default {"
-      ],
+      "exports": ["export default {"],
       "uses_fetch": false
     },
     {
@@ -14,9 +12,7 @@
         "import { defineConfig } from 'vite'",
         "import react from '@vitejs/plugin-react'"
       ],
-      "exports": [
-        "export default defineConfig({"
-      ],
+      "exports": ["export default defineConfig({"],
       "uses_fetch": false
     },
     {
@@ -28,78 +24,49 @@
         "import reactRefresh from 'eslint-plugin-react-refresh'",
         "import { defineConfig, globalIgnores } from 'eslint/config'"
       ],
-      "exports": [
-        "export default defineConfig(["
-      ],
+      "exports": ["export default defineConfig(["],
       "uses_fetch": false
     },
     {
       "path": "postcss.config.js",
       "imports": [],
-      "exports": [
-        "export default {"
-      ],
+      "exports": ["export default {"],
       "uses_fetch": false
     },
     {
       "path": ".vite/deps/react-dom_client.js",
-      "imports": [
-        "import {",
-        "import {"
-      ],
-      "exports": [
-        "export default require_client();"
-      ],
+      "imports": ["import {", "import {"],
+      "exports": ["export default require_client();"],
       "uses_fetch": true
     },
     {
       "path": ".vite/deps/react.js",
-      "imports": [
-        "import {",
-        "import \"./chunk-G3PMV62Z.js\";"
-      ],
-      "exports": [
-        "export default require_react();"
-      ],
+      "imports": ["import {", "import \"./chunk-G3PMV62Z.js\";"],
+      "exports": ["export default require_react();"],
       "uses_fetch": false
     },
     {
       "path": ".vite/deps/chunk-ULSRCYB6.js",
-      "imports": [
-        "import {"
-      ],
-      "exports": [
-        "export {"
-      ],
+      "imports": ["import {"],
+      "exports": ["export {"],
       "uses_fetch": false
     },
     {
       "path": ".vite/deps/lucide-react.js",
-      "imports": [
-        "import {",
-        "import {"
-      ],
-      "exports": [
-        "export {"
-      ],
+      "imports": ["import {", "import {"],
+      "exports": ["export {"],
       "uses_fetch": false
     },
     {
       "path": ".vite/deps/chunk-G3PMV62Z.js",
       "imports": [],
-      "exports": [
-        "export {"
-      ],
+      "exports": ["export {"],
       "uses_fetch": false
     },
     {
       "path": ".vite/deps/papaparse.js",
-      "imports": [
-        "import {"
-      ],
-      "exports": [
-        "export default require_papaparse_min();"
-      ],
+      "imports": ["import {"],
+      "exports": ["export default require_papaparse_min();"],
       "uses_fetch": false
     },
     {
@@ -109,9 +76,7 @@
         "import { X, Upload, AlertTriangle } from 'lucide-react';",
         "import { API_BASE } from './services/api';"
       ],
-      "exports": [
-        "export function BackupImportModal({ onClose, onRestoreSuccess }) {"
-      ],
+      "exports": ["export function BackupImportModal({ onClose, onRestoreSuccess }) {"],
       "uses_fetch": true
     },
     {
@@ -132,9 +97,7 @@
         "import React, { useState } from 'react';",
         "import Papa from 'papaparse';"
       ],
-      "exports": [
-        "export default ImportModal;"
-      ],
+      "exports": ["export default ImportModal;"],
       "uses_fetch": false
     },
     {
@@ -144,9 +107,7 @@
         "import {",
         "import { CopyButton } from './components/common/CopyButton';"
       ],
-      "exports": [
-        "export function ContentReplicator({ onClose }) {"
-      ],
+      "exports": ["export function ContentReplicator({ onClose }) {"],
       "uses_fetch": false
     },
     {
@@ -156,9 +117,7 @@
         "import { X, Plus, Eye, Edit, Trash2, TrendingUp, Calendar, DollarSign, CheckCircle, AlertCircle } from 'lucide-react';",
         "import { ProjectDetailsModal } from './ProjectDetailsModal';"
       ],
-      "exports": [
-        "export function ProjectsListModal({"
-      ],
+      "exports": ["export function ProjectsListModal({"],
       "uses_fetch": false
     },
     {
@@ -192,9 +151,7 @@
         "import {",
         "import { formatCurrency, formatDate } from './utils/formatters';"
       ],
-      "exports": [
-        "export function ProjectDetailsModal({"
-      ],
+      "exports": ["export function ProjectDetailsModal({"],
       "uses_fetch": false
     },
     {
@@ -246,9 +203,7 @@
         "import backupService from \"./services/backupService\";",
         "import { formatCurrency } from \"./utils/formatters\";"
       ],
-      "exports": [
-        "export default function App() {"
-      ],
+      "exports": ["export default function App() {"],
       "uses_fetch": true
     },
     {
@@ -258,9 +213,7 @@
         "import { X, TrendingUp, TrendingDown, AlertTriangle, DollarSign, Calendar, Clock, Target, ArrowRight, AlertCircle, CheckCircle, XCircle } from 'lucide-react';",
         "import { CopyButton } from './components/common/CopyButton';"
       ],
-      "exports": [
-        "export function BookkeeperDashboard({"
-      ],
+      "exports": ["export function BookkeeperDashboard({"],
       "uses_fetch": true
     },
     {
@@ -274,16 +227,12 @@
         "import { transactionsService } from './services/transactionsService';",
         "import { normalizeDate } from './utils/transactionUtils';"
       ],
-      "exports": [
-        "export function ProjectPlannerModal({"
-      ],
+      "exports": ["export function ProjectPlannerModal({"],
       "uses_fetch": true
     },
     {
       "path": "src/utils/constants.js",
-      "imports": [
-        "import {"
-      ],
+      "imports": ["import {"],
       "exports": [
         "export const categoryIcons = {",
         "export const accountIcons = {",
@@ -319,9 +268,7 @@
         "import React, { useEffect, useState } from \"react\";",
         "import { API_BASE } from \"../services/api\";"
       ],
-      "exports": [
-        "export default ReceivablesScreen;"
-      ],
+      "exports": ["export default ReceivablesScreen;"],
       "uses_fetch": true
     },
     {
@@ -351,20 +298,13 @@
         "import React from 'react';",
         "import { Wallet, Plus, Save, Calculator, Eye } from 'lucide-react';"
       ],
-      "exports": [
-        "export function Header({",
-        "export default Header;"
-      ],
+      "exports": ["export function Header({", "export default Header;"],
       "uses_fetch": false
     },
     {
       "path": "src/components/layout/Navigation.jsx",
-      "imports": [
-        "import React from \"react\";"
-      ],
-      "exports": [
-        "export function Navigation({ activeTab, onTabChange }) {"
-      ],
+      "imports": ["import React from \"react\";"],
+      "exports": ["export function Navigation({ activeTab, onTabChange }) {"],
       "uses_fetch": false
     },
     {
@@ -413,9 +353,7 @@
         "import React, { useState } from 'react';",
         "import { Copy, Check } from 'lucide-react';"
       ],
-      "exports": [
-        "export function CopyButton({ getText }) {"
-      ],
+      "exports": ["export function CopyButton({ getText }) {"],
       "uses_fetch": false
     },
     {
@@ -424,9 +362,7 @@
         "import { useState } from 'react';",
         "import { Lock } from 'lucide-react';"
       ],
-      "exports": [
-        "export function PinInput({ onSubmit, title, subtitle }) {"
-      ],
+      "exports": ["export function PinInput({ onSubmit, title, subtitle }) {"],
       "uses_fetch": false
     },
     {
@@ -435,9 +371,7 @@
         "import { useEffect } from 'react';",
         "import { X } from 'lucide-react';"
       ],
-      "exports": [
-        "export function Toast({ message, type = 'success', onClose }) {"
-      ],
+      "exports": ["export function Toast({ message, type = 'success', onClose }) {"],
       "uses_fetch": false
     },
     {
@@ -466,9 +400,7 @@
         "import { accountIcons } from '../../utils/constants';",
         "import { formatCurrency } from '../../utils/formatters';"
       ],
-      "exports": [
-        "export function AccountCard({ account, onDelete, onClick }) {"
-      ],
+      "exports": ["export function AccountCard({ account, onDelete, onClick }) {"],
       "uses_fetch": false
     },
     {
@@ -529,19 +461,13 @@
         "import { useState, useEffect } from 'react';",
         "import { authService } from '../services/authService';"
       ],
-      "exports": [
-        "export function useAuth() {"
-      ],
+      "exports": ["export function useAuth() {"],
       "uses_fetch": false
     },
     {
       "path": "src/hooks/useToast.js",
-      "imports": [
-        "import { useState, useCallback } from 'react';"
-      ],
-      "exports": [
-        "export const useToast = () => {"
-      ],
+      "imports": ["import { useState, useCallback } from 'react';"],
+      "exports": ["export const useToast = () => {"],
       "uses_fetch": false
     },
     {
@@ -550,9 +476,7 @@
         "import { useState, useEffect, useCallback } from 'react';",
         "import { transactionsService } from '../services/transactionsService';"
       ],
-      "exports": [
-        "export const useTransactions = (isAuthenticated) => {"
-      ],
+      "exports": ["export const useTransactions = (isAuthenticated) => {"],
       "uses_fetch": true
     },
     {
@@ -561,20 +485,13 @@
         "import { useState, useEffect, useCallback } from 'react';",
         "import { accountsService } from '../services/accountsService';"
       ],
-      "exports": [
-        "export const useAccounts = (isAuthenticated) => {"
-      ],
+      "exports": ["export const useAccounts = (isAuthenticated) => {"],
       "uses_fetch": true
     },
     {
       "path": "src/services/operatorService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
-      "exports": [
-        "export const operatorService = {",
-        "export default operatorService;"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
+      "exports": ["export const operatorService = {", "export default operatorService;"],
       "uses_fetch": false
     },
     {
@@ -594,42 +511,26 @@
     },
     {
       "path": "src/services/backupService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
-      "exports": [
-        "export const backupService = {",
-        "export default backupService;"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
+      "exports": ["export const backupService = {", "export default backupService;"],
       "uses_fetch": true
     },
     {
       "path": "src/services/contentService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
-      "exports": [
-        "export const contentService = {",
-        "export default contentService;"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
+      "exports": ["export const contentService = {", "export default contentService;"],
       "uses_fetch": false
     },
     {
       "path": "src/services/accountsService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
-      "exports": [
-        "export const accountsService = {"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
+      "exports": ["export const accountsService = {"],
       "uses_fetch": false
     },
     {
       "path": "src/services/authService.js",
       "imports": [],
-      "exports": [
-        "export const authService = {"
-      ],
+      "exports": ["export const authService = {"],
       "uses_fetch": true
     },
     {
@@ -644,9 +545,7 @@
     },
     {
       "path": "src/services/transactionsService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
       "exports": [
         "export const transactionsService = {",
         "export default transactionsService;"
@@ -655,13 +554,8 @@
     },
     {
       "path": "src/services/projectsService.js",
-      "imports": [
-        "import { apiRequest } from './api';"
-      ],
-      "exports": [
-        "export const projectsService = {",
-        "export default projectsService;"
-      ],
+      "imports": ["import { apiRequest } from './api';"],
+      "exports": ["export const projectsService = {", "export default projectsService;"],
       "uses_fetch": false
     }
   ]

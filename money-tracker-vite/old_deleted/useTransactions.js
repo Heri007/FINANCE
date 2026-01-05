@@ -8,7 +8,7 @@ export const useTransactions = (isAuthenticated) => {
 
   const fetchTransactions = useCallback(async () => {
     if (!isAuthenticated) return;
-    
+
     setLoading(true);
     setError(null);
     try {
@@ -30,7 +30,7 @@ export const useTransactions = (isAuthenticated) => {
     setLoading(true);
     try {
       const newTransaction = await transactionsService.create(transactionData);
-      setTransactions(prev => [newTransaction, ...prev]);
+      setTransactions((prev) => [newTransaction, ...prev]);
       return newTransaction;
     } catch (err) {
       setError(err.message);
@@ -40,25 +40,28 @@ export const useTransactions = (isAuthenticated) => {
     }
   }, []);
 
-  const createBulkTransactions = useCallback(async (transactionsArray) => {
-    setLoading(true);
-    try {
-      const result = await transactionsService.createBulk(transactionsArray);
-      await fetchTransactions();
-      return result;
-    } catch (err) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchTransactions]);
+  const createBulkTransactions = useCallback(
+    async (transactionsArray) => {
+      setLoading(true);
+      try {
+        const result = await transactionsService.createBulk(transactionsArray);
+        await fetchTransactions();
+        return result;
+      } catch (err) {
+        setError(err.message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchTransactions]
+  );
 
   const deleteTransaction = useCallback(async (transactionId) => {
     setLoading(true);
     try {
       await transactionsService.delete(transactionId);
-      setTransactions(prev => prev.filter(t => t.id !== transactionId));
+      setTransactions((prev) => prev.filter((t) => t.id !== transactionId));
     } catch (err) {
       setError(err.message);
       throw err;

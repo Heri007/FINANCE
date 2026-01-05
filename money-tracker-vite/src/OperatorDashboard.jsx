@@ -92,7 +92,6 @@ export function OperatorDashboard({
   }
 };
 
-
   // CRUD SOPs
   const handleCreateSOP = async (sopData) => {
     try {
@@ -136,7 +135,6 @@ export function OperatorDashboard({
     alert(`Erreur lors de la mise à jour de la SOP: ${error.message}`);
   }
 };
-
 
   const handleDeleteSOP = async (id) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette SOP ?')) return;
@@ -293,33 +291,297 @@ const projectStats = useMemo(() => {
       }));
   }, [transactions, projects]);
 
-  // Texte à copier
-const generateCopyText = () => {
-  const now = new Date().toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
+// ✅ CORRECT - Ajouter le calcul
+const stepGroups = useMemo(() => {
+  if (!projects.expenses && !projects.revenues) return [];
+  
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(projects.expenses);
+  const revenues = parseData(projects.revenues);
+  
+  return [
+    {
+      phase: 'expenses',
+      label: 'Dépenses',
+      items: expenses.map(exp => ({
+        id: exp.id || Math.random(),
+        code: exp.code,
+        label: exp.label,
+        amount: parseFloat(exp.amount || 0),
+        type: 'expense',
+        isDone: exp.isPaid || false
+      }))
+    },
+    {
+      phase: 'revenues',
+      label: 'Revenus',
+      items: revenues.map(rev => ({
+        id: rev.id || Math.random(),
+        code: rev.code,
+        label: rev.label,
+        amount: parseFloat(rev.amount || 0),
+        type: 'revenue',
+        isDone: rev.isReceived || false
+      }))
+    }
+  ].filter(g => g.items.length > 0);
+}, [projects]);
+
+  const generateCopyText = () => {
+  const now = new Date().toLocaleDateString('fr-FR', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
   });
+  
+  let text = '';
+  
+  // ═══════════════════════════════════════════════════════════
+  // 📊 EN-TÊTE
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += '📊 OPERATOR DASHBOARD - RAPPORT COMPLET\n';
+  text += '═'.repeat(60) + '\n';
+  text += `📅 Date: ${now}\n`;
+  text += `⏰ Généré à: ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '\n';
 
-  let text = '📊 OPERATOR DASHBOARD\n';
-  text += `\n📅 Date: ${now}\n`;
-  text += '\n🎯 INDICATEURS\n';
-  text += `• SOPs: Total ${stats.totalSOPs} | Actives ${stats.activeSOPs}\n`;
-  text += `• Tâches: En Cours ${stats.pendingTasks}\n`;
-  text += `• SOPs à Revoir: ${stats.overdueSOPs}\n`;
-  text += `• Projets Actifs: ${projectStats.active}\n`;
+  // ═══════════════════════════════════════════════════════════
+  // 🎯 INDICATEURS CLÉS
+  // ═══════════════════════════════════════════════════════════
+  text += '🎯 INDICATEURS CLÉS\n';
+  text += '─'.repeat(60) + '\n';
+  text += `📋 SOPs Total: ${stats.totalSOPs} | Actives: ${stats.activeSOPs}\n`;
+  text += `✅ Tâches En Cours: ${stats.pendingTasks}\n`;
+  text += `🚀 Projets Actifs: ${projectStats.active}\n`;
+  text += `⚠️  SOPs à Revoir: ${stats.overdueSOPs}\n`;
+  text += '\n';
 
+  // ═══════════════════════════════════════════════════════════
+  // 💰 SYNTHÈSE FINANCIÈRE
+  // ═══════════════════════════════════════════════════════════
   if (projectStats.active > 0) {
-    text += '\n💰 PROJETS ACTIFS\n';
-    text += `• Investi: ${formatCurrency(projectStats.totalCost)}\n`;
-    text += `• CA prévu: ${formatCurrency(projectStats.totalRevenues)}\n`;
-    text += `• ROI moyen: ${projectStats.roi.toFixed(1)}%\n`;
+    text += '💰 SYNTHÈSE FINANCIÈRE\n';
+    text += '─'.repeat(60) + '\n';
+    text += `💸 Investi Total: ${formatCurrency(projectStats.totalCost)}\n`;
+    text += `💵 CA Prévu: ${formatCurrency(projectStats.totalRevenues)}\n`;
+    text += `📈 ROI Moyen: ${projectStats.roi.toFixed(1)}%\n`;
+    text += `💎 Bénéfice Estimé: ${formatCurrency(projectStats.totalRevenues - projectStats.totalCost)}\n`;
+    text += '\n';
   }
 
-  text += `\n⚡ Généré par Money Tracker | ${new Date().toLocaleTimeString('fr-FR')}`;
+  // ═══════════════════════════════════════════════════════════
+  // 📋 DÉTAILS DES SOPs
+  // ═══════════════════════════════════════════════════════════
+  if (sops.length > 0) {
+    text += '📋 STANDARD OPERATING PROCEDURES (SOPs)\n';
+    text += '─'.repeat(60) + '\n';
+    
+    sops.forEach((sop, index) => {
+      text += `\n${index + 1}. ${sop.title}\n`;
+      text += `   📝 Description: ${sop.description || 'N/A'}\n`;
+      text += `   👤 Responsable: ${sop.owner || 'Non assigné'}\n`;
+      text += `   📂 Catégorie: ${sop.category || 'Général'}\n`;
+      text += `   ⏱️  Durée moy.: ${sop.avg_time || sop.avgtime || 0} jours\n`;
+      text += `   🎯 Statut: ${
+        sop.status === 'active' ? '🟢 Active' : 
+        sop.status === 'draft' ? '🟡 Brouillon' : 
+        '⚫ Archivée'
+      }\n`;
+      
+      // Étapes
+      if (sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0) {
+        text += `   📌 Étapes (${sop.steps.length}):\n`;
+        sop.steps.forEach((step, idx) => {
+          text += `      ${idx + 1}) ${step.title}${step.duration ? ' (' + step.duration + ')' : ''}\n`;
+        });
+      }
+      
+      // Checklist
+      if (sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0) {
+        const completed = sop.checklist.filter(i => i.checked).length;
+        text += `   ✅ Checklist: ${completed}/${sop.checklist.length} complétée\n`;
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ TÂCHES OPÉRATIONNELLES
+  // ═══════════════════════════════════════════════════════════
+  if (tasks.length > 0) {
+    text += '✅ TÂCHES OPÉRATIONNELLES\n';
+    text += '─'.repeat(60) + '\n';
+    
+    // Grouper par statut
+    const tasksByStatus = {
+      todo: tasks.filter(t => t.status === 'todo'),
+      'in-progress': tasks.filter(t => t.status === 'in-progress'),
+      done: tasks.filter(t => t.status === 'done')
+    };
+    
+    Object.entries(tasksByStatus).forEach(([status, taskList]) => {
+      if (taskList.length > 0) {
+        const statusLabel = 
+          status === 'todo' ? '📝 À FAIRE' :
+          status === 'in-progress' ? '⚙️  EN COURS' :
+          '✅ TERMINÉES';
+        
+        text += `\n${statusLabel} (${taskList.length})\n`;
+        
+        taskList.forEach((task, index) => {
+          text += `  ${index + 1}. ${task.title}\n`;
+          if (task.description) {
+            text += `     💬 ${task.description}\n`;
+          }
+          text += `     👤 Assigné: ${task.assigned_to || task.assignedto || 'Non assigné'}\n`;
+          text += `     📅 Échéance: ${task.due_date || task.duedate || 'Non définie'}\n`;
+          text += `     ⚡ Priorité: ${
+            task.priority === 'critical' ? '🔴 Critique' :
+            task.priority === 'high' ? '🟠 Haute' :
+            task.priority === 'medium' ? '🟡 Moyenne' :
+            '🟢 Faible'
+          }\n`;
+        });
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🚀 PROJETS ACTIFS - DÉTAILS COMPLETS
+  // ═══════════════════════════════════════════════════════════
+if (projectStats.active > 0) {
+  text += `\n🚀 PROJETS ACTIFS - DÉTAILS COMPLETS\n`;
+  text += `${'─'.repeat(60)}\n`;
+  
+  projectStats.activeProjects.forEach((project, index) => {
+    const investedAmount = calculateInvestedAmount(project);
+    const totalBudget = parseFloat(project.totalCost || project.totalcost || 0);
+    const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+    const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+    const costs = parseFloat(project.totalcost || project.totalCost || 0);
+    const roi = costs > 0 ? ((revenues - costs) / costs) * 100 : 0;
+    const profit = revenues - costs;
+
+    text += `\n${index + 1}. 📦 ${project.name}\n`;
+    text += `   ${'-'.repeat(55)}\n`;
+    
+    if (project.description) {
+      text += `   📝 Description: ${project.description}\n`;
+    }
+    
+    text += `   📅 Créé le: ${project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : 'N/A'}\n`;
+    text += `   💰 Budget Total: ${formatCurrency(totalBudget)}\n`;
+    text += `   💸 Investi (Payé): ${formatCurrency(investedAmount)}\n`;
+    text += `   📊 Progression: ${progress.toFixed(1)}% payé\n`;
+    text += `   💵 Revenus Prévus: ${formatCurrency(revenues)}\n`;
+    text += `   📈 ROI: ${roi >= 0 ? '🟢' : '🔴'} ${roi.toFixed(1)}%\n`;
+    text += `   💎 Bénéfice Net: ${profit >= 0 ? '🟢' : '🔴'} ${formatCurrency(profit)}\n`;
+
+    // Parser expenses et revenues (JSONB)
+    const parseData = (data) => {
+      if (!data) return [];
+      if (typeof data === 'string') {
+        try { return JSON.parse(data); } 
+        catch { return []; }
+      }
+      return Array.isArray(data) ? data : [];
+    };
+
+    const expenses = parseData(project.expenses);
+    const projectRevenues = parseData(project.revenues);
+
+    // DÉPENSES (CORRIGÉ)
+    if (expenses.length > 0) {
+      text += `\n   💳 DÉPENSES (${expenses.length}):\n`;
+      expenses.forEach((exp, idx) => {
+        const status = exp.isPaid ? '✅ Payé' : '⏳ À payer';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Dépense';
+        
+        if (exp.description && exp.description.trim() !== '') {
+          label = exp.description.trim();
+        } else if (exp.label && exp.label.trim() !== '') {
+          label = exp.label.trim();
+        } else if (exp.code && exp.code.trim() !== '') {
+          label = exp.code.trim();
+        } else if (exp.category && exp.category.trim() !== '') {
+          label = exp.category.trim();
+        } else if (exp.phase && exp.phase.trim() !== '') {
+          label = `Dépense ${exp.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(exp.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // REVENUS (CORRIGÉ)
+    if (projectRevenues.length > 0) {
+      text += `\n   💰 REVENUS (${projectRevenues.length}):\n`;
+      projectRevenues.forEach((rev, idx) => {
+        const status = rev.isReceived ? '✅ Reçu' : '⏳ En attente';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Revenu';
+        
+        if (rev.description && rev.description.trim() !== '') {
+          label = rev.description.trim();
+        } else if (rev.label && rev.label.trim() !== '') {
+          label = rev.label.trim();
+        } else if (rev.code && rev.code.trim() !== '') {
+          label = rev.code.trim();
+        } else if (rev.category && rev.category.trim() !== '') {
+          label = rev.category.trim();
+        } else if (rev.phase && rev.phase.trim() !== '') {
+          label = `Revenu ${rev.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(rev.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // TRANSACTIONS RÉCENTES (si disponibles)
+    if (transactions) {
+      const projectTransactions = transactions.filter(t => t.projectid === project.id);
+      if (projectTransactions.length > 0) {
+        text += `\n   💳 TRANSACTIONS RÉCENTES (${projectTransactions.length}):\n`;
+        projectTransactions.slice(0, 5).forEach((t) => {
+          const symbol = t.type === 'income' ? '+' : '-';
+          const icon = t.type === 'income' ? '💰' : '💸';
+          const desc = t.description ? ` - ${t.description.substring(0, 30)}` : '';
+          const date = t.transactiondate ? new Date(t.transactiondate).toLocaleDateString('fr-FR') : '';
+          text += `      ${icon} ${symbol}${formatCurrency(parseFloat(t.amount || 0))}${desc} ${date}\n`;
+        });
+        if (projectTransactions.length > 5) {
+          text += `      ... et ${projectTransactions.length - 5} autres\n`;
+        }
+      }
+    }
+
+    text += '\n';
+  });
+}
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔚 FOOTER
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += `⚡ Généré par Money Tracker • ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '═'.repeat(60) + '\n';
+
   return text;
 };
+
 
   if (loading) {
     return (
@@ -547,7 +809,7 @@ const calculateInvestedAmount = (project) => {
                   className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition flex items-center gap-2 text-sm"
                 >
                   <Plus size={16} />
-                  Nouvelle TÃ¢che
+                  Nouvelle Tâche
                 </button>
               </div>
 
@@ -555,12 +817,12 @@ const calculateInvestedAmount = (project) => {
                 {tasks.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg">
                     <CheckSquare size={48} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-500">Aucune tÃ¢che crÃ©Ã©e</p>
+                    <p className="text-gray-500">Aucune tâche crée</p>
                     <button 
                       onClick={() => setShowTaskModal(true)}
                       className="mt-3 text-pink-600 hover:text-pink-700 font-semibold"
                     >
-                      CrÃ©er votre premiÃ¨re tÃ¢che
+                      Créer votre première tâche
                     </button>
                   </div>
                 ) : (
@@ -653,212 +915,167 @@ const calculateInvestedAmount = (project) => {
     <div className="text-center py-12...">...</div>
   ) : (
     projectStats.activeProjects.map((project) => {
-      const stepGroups = buildProjectSteps(project);
-      
-      // CALCULER LE MONTANT INVESTI
-      const investedAmount = calculateInvestedAmount(project);
-      
-      // CALCULER LE POURCENTAGE DE PROGRESSION
-      const totalBudget = parseFloat(project.totalCost || project.totalcost) || 0;
-      const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
-      
-      return (
-        <div key={project.id} className="group border border-gray-200...">
-          {/* En-tête projet */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex-1 mr-4">
-              <h4 className="font-bold text-xl...">{project.name}</h4>
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-emerald-100...">Actif</span>
-                
-                {/* MONTANT INVESTI (PAYÉ) */}
-                <span className="text-sm font-medium text-gray-700">
-                  {formatCurrency(investedAmount)}
-                </span>
-                
-                {/* POURCENTAGE */}
-                <span className="text-xs text-gray-500">
-                  {progress.toFixed(1)}% payé
-                </span>
-                
-                <span className="text-xs text-gray-500">
-                  {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
-                </span>
-              </div>
-              
-              {project.description && (
-                <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
-              )}
-            </div>
+  const investedAmount = calculateInvestedAmount(project);
+  const totalBudget = parseFloat(project.totalcost || 0);
+  const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+
+  const expenses = parseData(project.expenses);
+  const revenues = parseData(project.revenues);
+
+  const allSteps = [
+    ...expenses.map(e => ({ ...e, type: 'expense', phase: e.phase || 'general' })),
+    ...revenues.map(r => ({ ...r, type: 'revenue', phase: r.phase || 'general' }))
+  ];
+
+  const phases = [...new Set(allSteps.map(s => s.phase))];
+  const stepGroups = phases.map(phase => ({
+    phase,
+    label: phase.charAt(0).toUpperCase() + phase.slice(1),
+    items: allSteps.filter(s => s.phase === phase)
+  }));
+
+  return (
+    <div key={project.id} className="group border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50">
+      {/* En-tête projet */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 mr-4">
+          <h4 className="font-bold text-xl text-gray-900 mb-2">{project.name}</h4>
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+              Actif
+            </span>
             
-            {/* ROI rapide */}
-            <div className="w-28 text-right">
-              <div className={`text-2xl font-bold ${
-                (project.totalrevenues || project.totalRevenues || 0) - (project.totalcost || project.totalCost || 0) > 0
-                  ? 'text-emerald-600'
-                  : 'text-red-600'
-              }`}>
-                {project.totalrevenues
-                  ? ((parseFloat(project.totalrevenues) / Math.max(parseFloat(project.totalcost), 1)) * 100).toFixed(0)
-                  : 0}%
-              </div>
-            </div>
+            <span className="text-sm font-medium text-gray-700">
+              {formatCurrency(investedAmount)}
+            </span>
+            
+            {/* ✅ CORRECTION : Affichage correct du pourcentage payé */}
+            <span className="text-xs text-gray-500">
+              {progress.toFixed(1)}% payé
+            </span>
+            
+            <span className="text-xs text-gray-500">
+              {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
+            </span>
           </div>
-
-                    {/* Suivi par étapes (codes) */}
-                    {stepGroups.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        {stepGroups.map(group => (
-                          <div key={group.phase} className="mb-2">
-                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                              {group.label}
-                            </div>
-                            <div className="space-y-1">
-                              {group.items.map(step => (
-                                <div
-                                  key={step.id}
-                                  className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-2 py-1"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${
-                                      step.type === 'expense' ? 'bg-red-400' : 'bg-emerald-400'
-                                    }`}></span>
-                                    <span className="truncate max-w-[180px]">
-                                      {step.code ? step.code : step.label}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-medium text-gray-600">
-                                      {formatCurrency(step.amount)}
-                                    </span>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                                      step.isDone 
-                                        ? 'bg-emerald-100 text-emerald-700' 
-                                        : 'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                      {step.isDone ? '✅ Fait' : 'À faire'}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                                        {/* Aperçu transactions projet */}
-                    {projectTransactions.filter(t => t.projectid === project.id).length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex flex-wrap gap-2">
-                          {projectTransactions
-                            .filter(t => t.projectid === project.id)
-                            .slice(0, 3)
-                            .map((t, idx) => (
-                              <span
-                                key={idx}
-                                className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
-                              >
-                                {t.type === 'income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount))}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+          
+          {project.description && (
+            <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
+          )}
+        </div>
+        
+        {/* ✅ CORRECTION : Calcul ROI correct */}
+        <div className="w-32 text-right flex-shrink-0">
+          <div className="text-xs text-gray-500 mb-1">ROI</div>
+          <div className={`text-2xl font-bold ${
+            ((parseFloat(project.totalrevenues || 0) - parseFloat(project.totalcost || 0)) > 0)
+              ? 'text-emerald-600'
+              : 'text-red-600'
+          }`}>
+            {(() => {
+              const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+  const costs = parseFloat(project.totalcost || project.totalCost || 0);
+  
+  if (costs === 0) return revenues > 0 ? '∞' : '0';
+  
+  const roi = ((revenues - costs) / costs) * 100;
+  return roi.toFixed(0);
+            })()}%
+          </div>
+          
+          {/* ✅ AJOUT : Bénéfice net */}
+          <div className="text-xs text-gray-500 mt-1">
+            {formatCurrency(
+              (parseFloat(project.totalrevenues || 0)) - 
+              (parseFloat(project.totalcost || 0))
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Best Practices */}
-          <div className="mt-8 p-8 rounded-2xl border-t-2 border-purple-200 bg-gradient-to-r from-purple-50/50 to-pink-50/50">
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8">
-              <h3 className="text-2xl font-black text-gray-900 mb-8 flex items-center gap-3">
-                <Target size={32} className="text-purple-600 shrink-0" />
-                Best Practices Operator
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* 1. Documenter */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-purple-200 hover:border-purple-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">💰</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-purple-700">
-                      Documenter avant automatiser
+      {/* Suivi par étapes */}
+      {stepGroups.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {stepGroups.map(group => (
+            <div key={group.phase} className="mb-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                {group.label}
+              </div>
+              <div className="space-y-1">
+                {group.items.map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-2 py-1"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        step.type === 'expense' ? 'bg-red-400' : 'bg-emerald-400'
+                      }`}></span>
+                      <span className="truncate max-w-[180px]">
+                        {step.description || step.code || step.label || 'Sans nom'}
+                      </span>
                     </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Ne jamais automatiser un processus mal défini
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[11px] font-medium text-gray-600">
+                        {formatCurrency(step.amount || 0)}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
+                        step.isPaid || step.isReceived
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {step.isPaid || step.isReceived ? '✅ Fait' : '⏳ À faire'}
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* 2. Revue hebdo */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-pink-200 hover:border-pink-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📈</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-pink-700">
-                      Revue hebdo stand-up
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      15 min pour faire le point sur l'exécution
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Rétro bi-mensuelle */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-indigo-200 hover:border-indigo-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📝</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-indigo-700">
-                      Rétro bi-mensuelle
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Qu'est-ce qui fonctionne ? Qu'est-ce qui coince ?
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. SOP 1 page */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-emerald-200 hover:border-emerald-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📄</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-emerald-700">
-                      Une SOP = 1 page max
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      But • Entrées • Étapes • Checkpoints • Responsables
-                    </div>
-                  </div>
-                </div>
-
-                {/* 5. 3 outils max */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-blue-200 hover:border-blue-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">🛠️</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-blue-700">
-                      Standardiser 3 outils max
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Éviter la multiplication des plateformes
-                    </div>
-                  </div>
-                </div>
-
-                {/* 6. Mesurer */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-yellow-200 hover:border-yellow-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">✅</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-yellow-700">
-                      Mesurer pour améliorer
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Temps, qualité, coûts - Track everything
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aperçu transactions projet */}
+      {transactions && transactions.filter(t => t.projectid === project.id).length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 mb-2">Dernières transactions</div>
+          <div className="flex flex-wrap gap-2">
+            {projectTransactions
+              .filter(t => t.projectid === project.id)
+              .slice(0, 3)
+              .map((t, idx) => (
+                <span
+                  key={t.id || idx}
+                  className={`px-2 py-1 text-xs rounded-full font-medium ${
+                    t.type === 'income' 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {t.type === 'income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount || 0))}
+                </span>
+              ))}
+            {projectTransactions.filter(t => t.projectid === project.id).length > 3 && (
+              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                +{projectTransactions.filter(t => t.projectid === project.id).length - 3} autre(s)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})
+
+            )}
           </div>
         </div>
 
@@ -1173,7 +1390,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
       <div className="bg-white rounded-xl max-w-lg w-full p-6">
-        <h3 className="text-xl font-bold mb-4">Nouvelle TÃ¢che</h3>
+        <h3 className="text-xl font-bold mb-4">Nouvelle Tâche</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="text"
@@ -1195,10 +1412,10 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
             onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
             className="w-full border rounded-lg px-3 py-2"
           >
-            <option value="low">PrioritÃ© Faible</option>
-            <option value="medium">PrioritÃ© Moyenne</option>
-            <option value="high">PrioritÃ© Haute</option>
-            <option value="critical">PrioritÃ© Critique</option>
+            <option value="low">Priorité Faible</option>
+            <option value="medium">Priorité Moyenne</option>
+            <option value="high">Priorité Haute</option>
+            <option value="critical">Priorité Critique</option>
           </select>
           <input
             type="date"
@@ -1221,7 +1438,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
           >
             <option value="todo">À faire</option>
             <option value="in-progress">En cours</option>
-            <option value="done">TerminÃ©</option>
+            <option value="done">Terminer</option>
           </select>
           <select
             value={formData.sop_id || ''}
@@ -1231,7 +1448,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
             })}
             className="w-full border rounded-lg px-3 py-2"
           >
-            <option value="">Aucune SOP liÃ©e</option>
+            <option value="">Aucune SOP liée</option>
             {sops.map(sop => (
               <option key={sop.id} value={sop.id}>
                 {sop.title}
@@ -1243,7 +1460,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
               type="submit"
               className="flex-1 bg-pink-600 text-white py-2 rounded-lg hover:bg-pink-700"
             >
-              CrÃ©er
+              Créer
             </button>
             <button
               type="button"

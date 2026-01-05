@@ -16,8 +16,7 @@ export function AccountDetails({
     .filter((t) => (t.account_id || t.accountId) === account.id)
     .sort(
       (a, b) =>
-        new Date(b.transaction_date || b.date) -
-        new Date(a.transaction_date || a.date)
+        new Date(b.transaction_date || b.date) - new Date(a.transaction_date || a.date)
     );
 
   // Calculer les statistiques
@@ -62,9 +61,7 @@ export function AccountDetails({
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-bold">{account.name}</h2>
-              <p className="text-3xl font-bold mt-2">
-                {formatCurrency(account.balance)}
-              </p>
+              <p className="text-3xl font-bold mt-2">{formatCurrency(account.balance)}</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -73,10 +70,7 @@ export function AccountDetails({
               >
                 Copier données
               </button>
-              <button
-                onClick={onClose}
-                className="text-white/80 hover:text-white"
-              >
+              <button onClick={onClose} className="text-white/80 hover:text-white">
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -89,18 +83,14 @@ export function AccountDetails({
                 <TrendingUp className="w-5 h-5 text-emerald-300" />
                 <span className="text-sm">Revenus</span>
               </div>
-              <p className="text-xl font-bold">
-                {formatCurrency(stats.income)}
-              </p>
+              <p className="text-xl font-bold">{formatCurrency(stats.income)}</p>
             </div>
             <div className="bg-white/20 rounded-xl p-3">
               <div className="flex items-center space-x-2">
                 <TrendingDown className="w-5 h-5 text-rose-300" />
                 <span className="text-sm">Dépenses</span>
               </div>
-              <p className="text-xl font-bold">
-                {formatCurrency(stats.expense)}
-              </p>
+              <p className="text-xl font-bold">{formatCurrency(stats.expense)}</p>
             </div>
           </div>
         </div>
@@ -127,9 +117,7 @@ export function AccountDetails({
                     className="flex items-center space-x-3 flex-1 cursor-pointer"
                     onClick={() => onSelectTransaction?.(t)}
                   >
-                    <span className="text-2xl">
-                      {categoryIcons[t.category] || '📝'}
-                    </span>
+                    <span className="text-2xl">{categoryIcons[t.category] || '📝'}</span>
                     <div>
                       <p className="font-medium text-gray-800">
                         {t.description || 'Sans description'}
@@ -144,9 +132,7 @@ export function AccountDetails({
                   <div className="flex items-center gap-3">
                     <span
                       className={`font-bold ${
-                        t.type === 'income'
-                          ? 'text-emerald-600'
-                          : 'text-rose-600'
+                        t.type === 'income' ? 'text-emerald-600' : 'text-rose-600'
                       }`}
                     >
                       {t.type === 'income' ? '+' : '-'}

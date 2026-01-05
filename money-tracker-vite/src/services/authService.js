@@ -43,11 +43,13 @@ export const authService = {
       // Sauvegarder le token
       if (data.token) {
         localStorage.setItem('token', data.token);
-        
+
         // ✅ Notifier UserContext du nouveau token
-        window.dispatchEvent(new CustomEvent('auth:login', { 
-          detail: { token: data.token } 
-        }));
+        window.dispatchEvent(
+          new CustomEvent('auth:login', {
+            detail: { token: data.token },
+          })
+        );
       }
 
       return data;
@@ -73,11 +75,13 @@ export const authService = {
       // Sauvegarder le token
       if (data.token) {
         localStorage.setItem('token', data.token);
-        
+
         // ✅ Notifier UserContext du nouveau token
-        window.dispatchEvent(new CustomEvent('auth:login', { 
-          detail: { token: data.token } 
-        }));
+        window.dispatchEvent(
+          new CustomEvent('auth:login', {
+            detail: { token: data.token },
+          })
+        );
       }
 
       return data;
@@ -93,7 +97,7 @@ export const authService = {
    */
   verifyToken: async () => {
     const token = localStorage.getItem('token');
-    
+
     if (!token) {
       return { valid: false };
     }
@@ -102,7 +106,7 @@ export const authService = {
       const result = await apiRequest('/api/auth/verify-token', {
         method: 'GET',
       });
-      
+
       return { valid: true, ...result };
     } catch (error) {
       // Si erreur 401, le token est invalide/expiré
@@ -123,8 +127,8 @@ export const authService = {
    */
   logout: () => {
     localStorage.removeItem('token');
-    
+
     // ✅ Notifier UserContext et FinanceContext
     window.dispatchEvent(new Event('auth:logout'));
-  }
+  },
 };

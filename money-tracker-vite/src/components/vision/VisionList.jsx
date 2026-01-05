@@ -25,7 +25,7 @@ export function VisionList({ onSelect, onCreate }) {
 
   const handleDelete = async (id) => {
     if (!confirm('Supprimer cette vision ?')) return;
-    
+
     try {
       await apiRequest(`vision/${id}`, { method: 'DELETE' });
       await loadVisions();

@@ -5,7 +5,7 @@ import { authService } from '../services/authService';
 
 export function useAuth() {
   const { isAuthenticated, setAuthToken, clearAuth } = useUser();
-  
+
   const [isLoading, setIsLoading] = useState(true);
   const [hasPin, setHasPin] = useState(false);
   const [pinStep, setPinStep] = useState('enter'); // 'enter' ou 'confirm'
@@ -54,13 +54,13 @@ export function useAuth() {
   const setupPin = async (pin) => {
     try {
       const response = await authService.setupPin(pin);
-      
+
       // ✅ CORRECTION: Utiliser setAuthToken de UserContext
       if (response.token) {
         setAuthToken(response.token);
         console.log('✅ useAuth.setupPin: Token défini via UserContext');
       }
-      
+
       setHasPin(true);
       setFirstPin('');
       setPinStep('enter');
@@ -75,13 +75,13 @@ export function useAuth() {
   const login = async (pin) => {
     try {
       const response = await authService.loginWithPin(pin);
-      
+
       // ✅ CORRECTION: Utiliser setAuthToken de UserContext
       if (response.token) {
         setAuthToken(response.token);
         console.log('✅ useAuth.login: Token défini via UserContext');
       }
-      
+
       return { success: true };
     } catch (error) {
       console.error('Erreur login:', error);

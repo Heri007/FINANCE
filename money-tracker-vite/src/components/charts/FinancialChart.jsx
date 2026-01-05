@@ -1,14 +1,14 @@
 // src/components/charts/FinancialChart.jsx
 import React, { useMemo } from 'react';
-import { 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
+import {
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
-  ComposedChart
+  ComposedChart,
 } from 'recharts';
 
 const FinancialChart = ({ transactions = [] }) => {
@@ -18,7 +18,7 @@ const FinancialChart = ({ transactions = [] }) => {
     }
 
     const grouped = {};
-    transactions.forEach(t => {
+    transactions.forEach((t) => {
       const date = t.date?.split('T')[0] || t.transaction_date?.split('T')[0];
       if (!date) return;
 
@@ -60,10 +60,11 @@ const FinancialChart = ({ transactions = [] }) => {
       return (
         <div className="bg-white/95 backdrop-blur-sm border-2 border-slate-300 rounded-xl p-4 shadow-xl">
           <p className="font-bold text-slate-900 mb-2 text-sm">
-            📅 {new Date(label).toLocaleDateString('fr-FR', { 
-              day: 'numeric', 
-              month: 'short', 
-              year: 'numeric' 
+            📅{' '}
+            {new Date(label).toLocaleDateString('fr-FR', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
             })}
           </p>
           <div className="space-y-1">
@@ -82,12 +83,15 @@ const FinancialChart = ({ transactions = [] }) => {
             <div className="pt-2 mt-2 border-t-2 border-slate-200">
               <div className="flex items-center justify-between gap-4">
                 <span className="text-xs font-semibold text-slate-700">💰 Net:</span>
-                <span className={`text-sm font-black ${
-                  (payload[0]?.value - payload[1]?.value) >= 0 
-                    ? 'text-emerald-900' 
-                    : 'text-rose-900'
-                }`}>
-                  {((payload[0]?.value - payload[1]?.value) || 0).toLocaleString('fr-FR')} Ar
+                <span
+                  className={`text-sm font-black ${
+                    payload[0]?.value - payload[1]?.value >= 0
+                      ? 'text-emerald-900'
+                      : 'text-rose-900'
+                  }`}
+                >
+                  {(payload[0]?.value - payload[1]?.value || 0).toLocaleString('fr-FR')}{' '}
+                  Ar
                 </span>
               </div>
             </div>
@@ -105,9 +109,9 @@ const FinancialChart = ({ transactions = [] }) => {
         margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-        
+
         {/* ✅ AXES SANS PROPRIÉTÉS PROBLÉMATIQUES */}
-        <XAxis 
+        <XAxis
           dataKey="date"
           stroke="#cbd5e1"
           tick={{ fill: '#64748b' }}
@@ -116,7 +120,7 @@ const FinancialChart = ({ transactions = [] }) => {
             return `${d.getDate()}/${d.getMonth() + 1}`;
           }}
         />
-        <YAxis 
+        <YAxis
           stroke="#cbd5e1"
           tick={{ fill: '#64748b' }}
           tickFormatter={(value) => {
@@ -125,30 +129,26 @@ const FinancialChart = ({ transactions = [] }) => {
             return value;
           }}
         />
-        
+
         <Tooltip content={<CustomTooltip />} />
-        
-        <Legend 
-          wrapperStyle={{ paddingTop: '15px' }}
-          iconType="line"
-          iconSize={16}
-        />
-        
+
+        <Legend wrapperStyle={{ paddingTop: '15px' }} iconType="line" iconSize={16} />
+
         {/* ✅ LIGNES SIMPLES SANS GRADIENTS */}
-        <Line 
-          type="monotone" 
-          dataKey="income" 
-          stroke="#10b981" 
+        <Line
+          type="monotone"
+          dataKey="income"
+          stroke="#10b981"
           strokeWidth={3}
           dot={{ fill: '#10b981', strokeWidth: 2, stroke: '#fff', r: 5 }}
           activeDot={{ r: 7, fill: '#059669', stroke: '#fff', strokeWidth: 3 }}
           name="💰 Revenus"
         />
-        
-        <Line 
-          type="monotone" 
-          dataKey="expense" 
-          stroke="#f43f5e" 
+
+        <Line
+          type="monotone"
+          dataKey="expense"
+          stroke="#f43f5e"
           strokeWidth={3}
           dot={{ fill: '#f43f5e', strokeWidth: 2, stroke: '#fff', r: 5 }}
           activeDot={{ r: 7, fill: '#e11d48', stroke: '#fff', strokeWidth: 3 }}

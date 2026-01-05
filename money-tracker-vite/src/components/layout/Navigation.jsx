@@ -1,13 +1,13 @@
 // FICHIER: src/components/layout/Navigation.jsx
 
-import React from "react";
-import { Calendar } from "lucide-react";
+import React from 'react';
+import { Calendar } from 'lucide-react';
 
 export function Navigation({ activeTab, onTabChange }) {
   const tabs = [
-    { id: "overview", label: "Vue d'ensemble" },
-    { id: "transactions", label: "Transactions" },
-    { id: "receivables", label: "Receivables" },
+    { id: 'overview', label: "Vue d'ensemble" },
+    { id: 'transactions', label: 'Transactions' },
+    { id: 'receivables', label: 'Receivables' },
   ];
 
   return (
@@ -21,11 +21,11 @@ export function Navigation({ activeTab, onTabChange }) {
                 type="button"
                 onClick={() => onTabChange(tab.id)}
                 className={[
-                  "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                  'px-4 py-2 rounded-full text-sm font-medium transition-all',
                   isActive
-                    ? "bg-indigo-600 text-white shadow"
-                    : "text-gray-600 hover:bg-indigo-200"
-                ].join(" ")}
+                    ? 'bg-indigo-600 text-white shadow'
+                    : 'text-gray-600 hover:bg-indigo-200',
+                ].join(' ')}
               >
                 {tab.label}
               </button>

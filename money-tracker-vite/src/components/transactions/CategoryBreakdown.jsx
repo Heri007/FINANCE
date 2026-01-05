@@ -5,12 +5,12 @@ import { formatCurrency } from '../../utils/formatters';
 import { categoryIcons } from '../../utils/constants';
 
 // ✅ COMPOSANT MODAL POUR AFFICHER LES TRANSACTIONS D'UNE CATÉGORIE
-const CategoryTransactionsModal = ({ 
-  category, 
-  transactions, 
-  type, 
+const CategoryTransactionsModal = ({
+  category,
+  transactions,
+  type,
   onClose,
-  onTransactionClick 
+  onTransactionClick,
 }) => {
   if (!transactions || transactions.length === 0) return null;
 
@@ -18,10 +18,10 @@ const CategoryTransactionsModal = ({
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('fr-FR', { 
-        day: 'numeric', 
-        month: 'short', 
-        year: 'numeric' 
+      return date.toLocaleDateString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
       });
     } catch {
       return 'N/A';
@@ -33,35 +33,38 @@ const CategoryTransactionsModal = ({
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border-2 border-slate-300">
-        
         {/* Header */}
-        <div className={`p-6 border-b-2 border-slate-200 bg-gradient-to-r ${
-          type === 'income' 
-            ? 'from-emerald-100 to-teal-100' 
-            : 'from-rose-100 to-pink-100'
-        }`}>
+        <div
+          className={`p-6 border-b-2 border-slate-200 bg-gradient-to-r ${
+            type === 'income'
+              ? 'from-emerald-100 to-teal-100'
+              : 'from-rose-100 to-pink-100'
+          }`}
+        >
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className={`
+              <div
+                className={`
                 w-16 h-16 
                 rounded-2xl 
                 flex items-center justify-center 
                 text-3xl
                 border-2
-                ${type === 'income' 
-                  ? 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-300' 
-                  : 'bg-gradient-to-br from-rose-100 to-pink-100 border-rose-300'
+                ${
+                  type === 'income'
+                    ? 'bg-gradient-to-br from-emerald-100 to-teal-100 border-emerald-300'
+                    : 'bg-gradient-to-br from-rose-100 to-pink-100 border-rose-300'
                 }
-              `}>
+              `}
+              >
                 {categoryIcons[category] || '📦'}
               </div>
-              
+
               <div>
-                <h2 className="text-2xl font-black text-slate-900">
-                  {category}
-                </h2>
+                <h2 className="text-2xl font-black text-slate-900">{category}</h2>
                 <p className="text-sm text-slate-600 mt-1 font-semibold">
-                  {transactions.length} transaction{transactions.length > 1 ? 's' : ''} • {formatCurrency(total)}
+                  {transactions.length} transaction{transactions.length > 1 ? 's' : ''} •{' '}
+                  {formatCurrency(total)}
                 </p>
               </div>
             </div>
@@ -113,23 +116,35 @@ const CategoryTransactionsModal = ({
                     {formatDate(tx.transactiondate || tx.date || tx.transaction_date)}
                   </p>
                 </div>
-                
+
                 <div className="text-right ml-4 flex-shrink-0">
                   <div className="flex items-center justify-end gap-2">
                     {type === 'income' ? (
-                      <ArrowUpRight className="text-emerald-600" size={18} strokeWidth={3} />
+                      <ArrowUpRight
+                        className="text-emerald-600"
+                        size={18}
+                        strokeWidth={3}
+                      />
                     ) : (
-                      <ArrowDownRight className="text-rose-600" size={18} strokeWidth={3} />
+                      <ArrowDownRight
+                        className="text-rose-600"
+                        size={18}
+                        strokeWidth={3}
+                      />
                     )}
-                    <p className={`
+                    <p
+                      className={`
                       font-black text-lg tracking-tight
                       ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
-                    `}>
-                      {type === 'income' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    `}
+                    >
+                      {type === 'income' ? '+' : '-'}
+                      {formatCurrency(tx.amount)}
                     </p>
                   </div>
                   {!tx.is_posted && !tx.isposted && (
-                    <span className="
+                    <span
+                      className="
                       inline-flex items-center gap-1
                       text-xs font-bold 
                       text-amber-700 
@@ -138,7 +153,8 @@ const CategoryTransactionsModal = ({
                       px-2 py-0.5 
                       rounded-md 
                       mt-1
-                    ">
+                    "
+                    >
                       ⚠ Non validé
                     </span>
                   )}
@@ -152,10 +168,12 @@ const CategoryTransactionsModal = ({
         <div className="border-t-2 border-slate-200 p-6 bg-slate-50">
           <div className="flex justify-between items-center">
             <span className="text-slate-700 font-bold text-base">Total</span>
-            <span className={`
+            <span
+              className={`
               text-3xl font-black tracking-tight
               ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
-            `}>
+            `}
+            >
               {formatCurrency(total)}
             </span>
           </div>
@@ -166,10 +184,10 @@ const CategoryTransactionsModal = ({
 };
 
 // ✅ COMPOSANT PRINCIPAL CategoryBreakdown
-export default function CategoryBreakdown({ 
-  transactions = [], 
+export default function CategoryBreakdown({
+  transactions = [],
   type = 'expense',
-  onTransactionClick
+  onTransactionClick,
 }) {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
@@ -178,15 +196,15 @@ export default function CategoryBreakdown({
       return [];
     }
 
-    const filteredTransactions = transactions.filter(t => t.type === type);
+    const filteredTransactions = transactions.filter((t) => t.type === type);
     const byCategory = {};
 
-    filteredTransactions.forEach(t => {
+    filteredTransactions.forEach((t) => {
       const cat = t.category || 'Non catégorisé';
       if (!byCategory[cat]) {
         byCategory[cat] = {
           total: 0,
-          transactions: []
+          transactions: [],
         };
       }
       byCategory[cat].total += parseFloat(t.amount) || 0;
@@ -194,10 +212,10 @@ export default function CategoryBreakdown({
     });
 
     return Object.entries(byCategory)
-      .map(([category, data]) => ({ 
-        category, 
+      .map(([category, data]) => ({
+        category,
         total: data.total,
-        transactions: data.transactions
+        transactions: data.transactions,
       }))
       .sort((a, b) => b.total - a.total);
   }, [transactions, type]);
@@ -211,14 +229,16 @@ export default function CategoryBreakdown({
           📊 Répartition par catégorie
         </h3>
         <div className="flex flex-col items-center justify-center py-8">
-          <div className="
+          <div
+            className="
             bg-slate-100 
             w-20 h-20 
             rounded-full 
             flex items-center justify-center 
             mb-4
             border-2 border-slate-300
-          ">
+          "
+          >
             <span className="text-4xl">📭</span>
           </div>
           <p className="text-slate-600 font-semibold">
@@ -232,34 +252,36 @@ export default function CategoryBreakdown({
   return (
     <>
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border-2 border-slate-200 overflow-hidden hover:shadow-xl transition-shadow duration-300">
-        
         {/* Header fixe */}
-        <div className={`
+        <div
+          className={`
           p-6 pb-4 
           border-b-2 border-slate-200 
           bg-gradient-to-r 
-          ${type === 'income' 
-            ? 'from-emerald-50 to-teal-50' 
-            : 'from-rose-50 to-pink-50'
-          }
-        `}>
+          ${type === 'income' ? 'from-emerald-50 to-teal-50' : 'from-rose-50 to-pink-50'}
+        `}
+        >
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 📊 Transaction par catégorie
               </h3>
               <p className="text-sm text-slate-600 mt-1 font-semibold">
-                {breakdown.length} {breakdown.length > 1 ? 'catégories' : 'catégorie'} • {formatCurrency(total)}
+                {breakdown.length} {breakdown.length > 1 ? 'catégories' : 'catégorie'} •{' '}
+                {formatCurrency(total)}
               </p>
             </div>
-            
-            <div className={`
+
+            <div
+              className={`
               p-3 rounded-xl border-2
-              ${type === 'income' 
-                ? 'bg-emerald-100 border-emerald-300' 
-                : 'bg-rose-100 border-rose-300'
+              ${
+                type === 'income'
+                  ? 'bg-emerald-100 border-emerald-300'
+                  : 'bg-rose-100 border-rose-300'
               }
-            `}>
+            `}
+            >
               {type === 'income' ? (
                 <TrendingUp className="w-6 h-6 text-emerald-700" strokeWidth={2.5} />
               ) : (
@@ -272,9 +294,9 @@ export default function CategoryBreakdown({
         {/* Conteneur avec scroll indépendant */}
         <div className="overflow-y-auto max-h-96 p-6 pt-4 custom-scrollbar">
           <div className="space-y-3">
-            {breakdown.map(item => {
+            {breakdown.map((item) => {
               const percentage = total > 0 ? ((item.total / total) * 100).toFixed(1) : 0;
-              
+
               return (
                 <button
                   key={item.category}
@@ -296,18 +318,21 @@ export default function CategoryBreakdown({
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <span className="
+                      <span
+                        className="
                         text-2xl 
                         group-hover:scale-110 
                         transition-transform duration-200
-                      ">
+                      "
+                      >
                         {categoryIcons[item.category] || '📦'}
                       </span>
                       <div>
                         <span className="font-bold text-slate-900 text-base">
                           {item.category}
                         </span>
-                        <span className="
+                        <span
+                          className="
                           text-xs 
                           text-slate-600 
                           ml-2 
@@ -315,43 +340,49 @@ export default function CategoryBreakdown({
                           px-2 py-0.5 
                           rounded-md
                           font-semibold
-                        ">
+                        "
+                        >
                           {item.transactions.length} trx
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="text-right">
                       <div className="flex items-baseline gap-2">
-                        <span className={`
+                        <span
+                          className={`
                           font-black text-lg tracking-tight
                           ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
-                        `}>
+                        `}
+                        >
                           {formatCurrency(item.total)}
                         </span>
-                        <span className="
+                        <span
+                          className="
                           text-sm 
                           font-bold 
                           text-slate-500
                           bg-slate-200
                           px-2 py-0.5
                           rounded-md
-                        ">
+                        "
+                        >
                           {percentage}%
                         </span>
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Barre de progression */}
                   <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden border border-slate-300">
-                    <div 
+                    <div
                       className={`
                         h-full 
                         transition-all duration-500 
-                        ${type === 'income' 
-                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500' 
-                          : 'bg-gradient-to-r from-rose-500 to-pink-500'
+                        ${
+                          type === 'income'
+                            ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                            : 'bg-gradient-to-r from-rose-500 to-pink-500'
                         }
                       `}
                       style={{ width: `${percentage}%` }}
@@ -364,16 +395,20 @@ export default function CategoryBreakdown({
         </div>
 
         {/* Footer fixe */}
-        <div className="border-t-2 border-slate-200 p-6 pt-4 bg-gradient-to-r 
-          from-rose-50 to-pink-50">
+        <div
+          className="border-t-2 border-slate-200 p-6 pt-4 bg-gradient-to-r 
+          from-rose-50 to-pink-50"
+        >
           <div className="flex justify-between items-center">
             <span className="text-slate-800 font-bold text-base">
               Total des {type === 'expense' ? 'dépenses' : 'revenus'}
             </span>
-            <span className={`
+            <span
+              className={`
               text-2xl font-black tracking-tight
               ${type === 'income' ? 'text-emerald-700' : 'text-rose-700'}
-            `}>
+            `}
+            >
               {formatCurrency(total)}
             </span>
           </div>

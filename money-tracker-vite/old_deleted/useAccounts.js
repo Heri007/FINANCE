@@ -33,7 +33,7 @@ export const useAccounts = (isAuthenticated) => {
     setLoading(true);
     try {
       const newAccount = await accountsService.create(accountData);
-      setAccounts(prev => [...prev, newAccount]);
+      setAccounts((prev) => [...prev, newAccount]);
       return newAccount;
     } catch (err) {
       setError(err.message);
@@ -47,7 +47,7 @@ export const useAccounts = (isAuthenticated) => {
     setLoading(true);
     try {
       await accountsService.delete(accountId);
-      setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+      setAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
     } catch (err) {
       setError(err.message);
       throw err;

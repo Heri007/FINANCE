@@ -10,7 +10,7 @@ export const useProjects = (isAuthenticated) => {
   // Fonction pour recharger la liste des projets
   const refreshProjects = useCallback(async () => {
     if (!isAuthenticated) return;
-    
+
     setLoading(true);
     try {
       // ✅ CORRECTION: Utiliser getAll() au lieu de getAllProjects()
@@ -18,8 +18,8 @@ export const useProjects = (isAuthenticated) => {
       setProjects(data || []);
       setError(null);
     } catch (err) {
-      console.error("Erreur chargement projets:", err);
-      setError("Impossible de charger les projets");
+      console.error('Erreur chargement projets:', err);
+      setError('Impossible de charger les projets');
     } finally {
       setLoading(false);
     }
@@ -40,7 +40,7 @@ export const useProjects = (isAuthenticated) => {
     // ✅ CORRECTION: Utiliser les bons noms de fonctions
     createProject: projectsService.create,
     updateProject: projectsService.update,
-    deleteProject: projectsService.delete
+    deleteProject: projectsService.delete,
   };
 };
 

@@ -18,21 +18,21 @@ export const runCsrfTestSuite = async () => {
     console.log('✅ Recalculate-all OK');
 
     // ⚠️ POUR LES TESTS PROJETS : adapter avec un vrai projectId et exp/revId
-    const TEST_PROJECT_ID = 27;      // mets un ID réel
+    const TEST_PROJECT_ID = 27; // mets un ID réel
     const TEST_EXPENSE_LINE_ID = 56; // mets un ID réel
     const TEST_REVENUE_LINE_ID = 10; // mets un ID réel
 
     // 3) Mark expense paid
     console.log('3️⃣ PATCH /projects/:id/expense-lines/:expId/mark-paid...');
     await api.patch(
-  `/projects/${TEST_PROJECT_ID}/expense-lines/${TEST_EXPENSE_LINE_ID}/mark-paid`,
-  {
-    paidexternally: true,                                  // ✅ même naming que backend
-    amount: 1000,
-    paiddate: new Date().toISOString().split('T')[0],      // ✅ même naming que backend
-    accountid: 5,                                          // ✅ un vrai compte (ex: Coffre)
-  }
-);
+      `/projects/${TEST_PROJECT_ID}/expense-lines/${TEST_EXPENSE_LINE_ID}/mark-paid`,
+      {
+        paidexternally: true, // ✅ même naming que backend
+        amount: 1000,
+        paiddate: new Date().toISOString().split('T')[0], // ✅ même naming que backend
+        accountid: 5, // ✅ un vrai compte (ex: Coffre)
+      }
+    );
 
     console.log('✅ mark-paid OK');
 

@@ -1,4 +1,4 @@
-// routes/operator.js - VERSION OPTIMISÉE
+// routes/operator.js - VERSION CORRIGÉE snake_case
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
@@ -20,7 +20,6 @@ router.use((req, res, next) => {
 // GET ALL
 router.get('/sops', async (req, res) => {
   try {
-    // Utilisation de sops pour la cohérence
     const result = await pool.query('SELECT * FROM sops ORDER BY created_at DESC');
     res.json(result.rows);
   } catch (err) {
@@ -42,21 +41,30 @@ router.get('/sops/:id', async (req, res) => {
 
 // POST
 router.post('/sops', validate('sop'), async (req, res) => {
-  const { title, description, owner, steps, avg_time, status, category, checklist } = req.body;
+  const { 
+    title, description, owner, steps, avg_time, 
+    status, category, checklist, project_id, last_review 
+  } = req.body;
+  
   try {
     const result = await pool.query(
-      `INSERT INTO sops (title, description, owner, steps, avg_time, status, category, checklist) 
-       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb) 
-       RETURNING *`,
+      `INSERT INTO sops (
+        title, description, owner, steps, avg_time, 
+        status, category, checklist, project_id, last_review
+      ) 
+      VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8::jsonb, $9, $10) 
+      RETURNING *`,
       [
         title, 
         description, 
         owner, 
         JSON.stringify(steps || []), 
-        avg_time, 
+        avg_time || 0, 
         status || 'draft', 
-        category, 
-        JSON.stringify(checklist || [])
+        category || 'Général', 
+        JSON.stringify(checklist || []),
+        project_id || null,
+        last_review || null
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -69,28 +77,27 @@ router.post('/sops', validate('sop'), async (req, res) => {
 // PUT (Mise à jour complète ou partielle)
 router.put('/sops/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, description, owner, steps, avg_time, status, category, checklist } = req.body;
+  const { 
+    title, description, owner, steps, avg_time, 
+    status, category, checklist, project_id, last_review 
+  } = req.body;
 
   try {
-    // On récupère d'abord l'existant pour faire un COALESCE intelligent
-    const existing = await pool.query('SELECT * FROM sops WHERE id = $1', [id]);
-    if (existing.rows.length === 0) return res.status(404).json({ error: 'SOP introuvable' });
-    
-    const current = existing.rows[0];
-
     const result = await pool.query(
       `UPDATE sops 
        SET 
          title = COALESCE($1, title),
          description = COALESCE($2, description),
          owner = COALESCE($3, owner),
-         steps = COALESCE($4::jsonb, steps),
+         steps = CASE WHEN $4 IS NOT NULL THEN $4::jsonb ELSE steps END,
          avg_time = COALESCE($5, avg_time),
          status = COALESCE($6, status),
          category = COALESCE($7, category),
-         checklist = COALESCE($8::jsonb, checklist),
+         checklist = CASE WHEN $8 IS NOT NULL THEN $8::jsonb ELSE checklist END,
+         project_id = COALESCE($9, project_id),
+         last_review = COALESCE($10, last_review),
          updated_at = NOW()
-       WHERE id = $9
+       WHERE id = $11
        RETURNING *`,
       [
         title, 
@@ -100,10 +107,17 @@ router.put('/sops/:id', async (req, res) => {
         avg_time, 
         status, 
         category, 
-        checklist ? JSON.stringify(checklist) : null, 
+        checklist ? JSON.stringify(checklist) : null,
+        project_id,
+        last_review,
         id
       ]
     );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'SOP introuvable' });
+    }
+    
     res.json(result.rows[0]);
   } catch (err) {
     console.error('❌ PUT /sops:', err.message);
@@ -123,28 +137,28 @@ router.delete('/sops/:id', async (req, res) => {
 });
 
 // ============================================================================
-// ROUTES TASKS (operator_tasks)
+// ROUTES TASKS (operator_tasks) - CORRIGÉ snake_case
 // ============================================================================
 
 router.get('/tasks', async (req, res) => {
   try {
-    const { projectid, status, priority, sopid } = req.query;
+    const { project_id, status, priority, sop_id } = req.query; // ✅ CORRIGÉ
     let query = `
       SELECT t.*, s.title as sop_title, p.name as project_name
       FROM operator_tasks t
-      LEFT JOIN sops s ON t.sopid = s.id
-      LEFT JOIN projects p ON t.projectid = p.id
+      LEFT JOIN sops s ON t.sop_id = s.id
+      LEFT JOIN projects p ON t.project_id = p.id
       WHERE 1=1
     `;
     const params = [];
     let idx = 1;
 
-    if (projectid) { query += ` AND t.projectid = $${idx++}`; params.push(projectid); }
+    if (project_id) { query += ` AND t.project_id = $${idx++}`; params.push(project_id); } // ✅
     if (status) { query += ` AND t.status = $${idx++}`; params.push(status); }
     if (priority) { query += ` AND t.priority = $${idx++}`; params.push(priority); }
-    if (sopid) { query += ` AND t.sopid = $${idx++}`; params.push(sopid); }
+    if (sop_id) { query += ` AND t.sop_id = $${idx++}`; params.push(sop_id); } // ✅
 
-    query += ' ORDER BY t.duedate ASC NULLS LAST, t.priority DESC'; // NULLS LAST pour mettre les dates vides à la fin
+    query += ' ORDER BY t.due_date ASC NULLS LAST, t.priority DESC'; // ✅
 
     const result = await pool.query(query, params);
     res.json(result.rows);
@@ -164,8 +178,8 @@ router.get('/tasks/:id', async (req, res) => {
         s.title as sop_title,
         p.name as project_name
       FROM operator_tasks t
-      LEFT JOIN sops s ON t.sopid = s.id
-      LEFT JOIN projects p ON t.projectid = p.id
+      LEFT JOIN sops s ON t.sop_id = s.id
+      LEFT JOIN projects p ON t.project_id = p.id
       WHERE t.id = $1
     `, [id]);
     
@@ -181,22 +195,22 @@ router.get('/tasks/:id', async (req, res) => {
 
 // POST - Créer une nouvelle tâche
 router.post('/tasks', async (req, res) => {
-  const { title, description, priority, duedate, assignedto, status, sopid, projectid, category } = req.body;
+  const { title, description, priority, due_date, assigned_to, status, sop_id, project_id, category } = req.body; // ✅
   
   try {
     const result = await pool.query(
-      `INSERT INTO operator_tasks (title, description, priority, duedate, assignedto, status, sopid, projectid, category) 
+      `INSERT INTO operator_tasks (title, description, priority, due_date, assigned_to, status, sop_id, project_id, category) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
        RETURNING *`,
       [
         title,
         description || null,
         priority || 'medium',
-        duedate,
-        assignedto || null,
+        due_date, // ✅
+        assigned_to || null, // ✅
         status || 'todo',
-        sopid || null,
-        projectid || null,
+        sop_id || null, // ✅
+        project_id || null, // ✅
         category || null
       ]
     );
@@ -212,7 +226,7 @@ router.post('/tasks', async (req, res) => {
 // PUT - Mettre à jour une tâche
 router.put('/tasks/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, description, priority, duedate, assignedto, status, sopid, projectid, category } = req.body;
+  const { title, description, priority, due_date, assigned_to, status, sop_id, project_id, category } = req.body; // ✅
   
   try {
     const result = await pool.query(
@@ -221,16 +235,16 @@ router.put('/tasks/:id', async (req, res) => {
          title = COALESCE($1, title),
          description = COALESCE($2, description),
          priority = COALESCE($3, priority),
-         duedate = COALESCE($4, duedate),
-         assignedto = COALESCE($5, assignedto),
+         due_date = COALESCE($4, due_date),
+         assigned_to = COALESCE($5, assigned_to),
          status = COALESCE($6, status),
-         sopid = COALESCE($7, sopid),
-         projectid = COALESCE($8, projectid),
+         sop_id = COALESCE($7, sop_id),
+         project_id = COALESCE($8, project_id),
          category = COALESCE($9, category),
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $10
        RETURNING *`,
-      [title, description, priority, duedate, assignedto, status, sopid, projectid, category, id]
+      [title, description, priority, due_date, assigned_to, status, sop_id, project_id, category, id] // ✅
     );
 
     if (result.rows.length === 0) {
@@ -303,7 +317,7 @@ router.get('/stats/tasks-by-project', async (req, res) => {
         COUNT(t.id) FILTER (WHERE t.status = 'done') as done,
         COUNT(t.id) FILTER (WHERE t.priority = 'critical') as critical
       FROM projects p
-      LEFT JOIN operator_tasks t ON p.id = t.projectid
+      LEFT JOIN operator_tasks t ON p.id = t.project_id
       GROUP BY p.id, p.name
       ORDER BY total_tasks DESC
     `);
@@ -321,12 +335,10 @@ router.put('/projects/:id', async (req, res) => {
     const { id } = req.params;
     const { start_date, end_date, progress, status } = req.body;
 
-    // Vérifier que le projet appartient à cet opérateur
-const checkProject = await client.query(
-  'SELECT id FROM projects WHERE id = $1',
-  [id]
-);
-
+    const checkProject = await client.query(
+      'SELECT id FROM projects WHERE id = $1',
+      [id]
+    );
 
     if (checkProject.rows.length === 0) {
       return res.status(404).json({ error: 'Projet non trouvé ou non autorisé' });
@@ -388,6 +400,5 @@ const checkProject = await client.query(
     client.release();
   }
 });
-
 
 module.exports = router;

@@ -1,24 +1,35 @@
 // src/components/projects/modals/ProductFlipModal.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Plus, Trash2, Save, Package, DollarSign, TrendingUp, TrendingDown, Calculator, Percent, ShoppingCart } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  Save,
+  Package,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  Calculator,
+  Percent,
+  ShoppingCart,
+} from 'lucide-react';
 import DatePicker from 'react-datepicker';
-import "react-datepicker/dist/react-datepicker.css";
+import 'react-datepicker/dist/react-datepicker.css';
 import { v4 as uuidv4 } from 'uuid';
 import { projectsService } from '../../../services/projectsService';
 import { transactionsService } from '../../../services/transactionsService';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
 
-export function ProductFlipModal({ 
-  isOpen, 
-  onClose, 
-  accounts = [], 
+export function ProductFlipModal({
+  isOpen,
+  onClose,
+  accounts = [],
   project = null,
   onProjectSaved,
   onProjectUpdated,
-  createTransaction 
+  createTransaction,
 }) {
-  
   // ===== VÉRIFICATION SÉCURITÉ =====
   if (!createTransaction) {
     console.error('❌ createTransaction manquant dans ProductFlipModal !');
@@ -52,7 +63,7 @@ export function ProductFlipModal({
         setProjectName(project.name || '');
         setDescription(project.description || '');
         setStatus(project.status || 'active');
-        
+
         const start = project.startDate || project.start_date;
         const end = project.endDate || project.end_date;
         setStartDate(start ? new Date(start) : new Date());
@@ -60,10 +71,11 @@ export function ProductFlipModal({
 
         // Charger metadata
         if (project.metadata) {
-          const meta = typeof project.metadata === 'string' 
-            ? JSON.parse(project.metadata) 
-            : project.metadata;
-          
+          const meta =
+            typeof project.metadata === 'string'
+              ? JSON.parse(project.metadata)
+              : project.metadata;
+
           setProductName(meta.productName || '');
           setSupplier(meta.supplier || '');
           setPurchasePrice(meta.purchasePrice || 0);
@@ -76,75 +88,87 @@ export function ProductFlipModal({
         const parseList = (data) => {
           if (!data) return [];
           if (Array.isArray(data)) return data;
-          try { return JSON.parse(data); } catch { return []; }
+          try {
+            return JSON.parse(data);
+          } catch {
+            return [];
+          }
         };
 
-        let currentExpenses = parseList(project.expenses).map(e => ({
+        let currentExpenses = parseList(project.expenses).map((e) => ({
           ...e,
           id: e.id || uuidv4(),
           date: e.date ? new Date(e.date) : new Date(),
-          amount: parseFloat(e.amount) || 0
+          amount: parseFloat(e.amount) || 0,
         }));
 
-        let currentRevenues = parseList(project.revenues).map(r => ({
+        let currentRevenues = parseList(project.revenues).map((r) => ({
           ...r,
           id: r.id || uuidv4(),
           date: r.date ? new Date(r.date) : new Date(),
-          amount: parseFloat(r.amount) || 0
+          amount: parseFloat(r.amount) || 0,
         }));
 
         // ✅ RÉCUPÉRER LES TRANSACTIONS RÉELLES LIÉES AU PROJET
         if (project.id) {
           try {
             const allTx = await transactionsService.getAll();
-            const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
-            console.log(`📥 Transactions récupérées pour ProductFlip ${project.name}:`, projectTx.length);
+            const projectTx = allTx.filter(
+              (t) => String(t.project_id) === String(project.id)
+            );
+            console.log(
+              `📥 Transactions récupérées pour ProductFlip ${project.name}:`,
+              projectTx.length
+            );
 
             // Fusionner les transactions réelles avec les lignes budgétaires
             const mergeTransactions = (lines, type) => {
-  const newLines = [...lines];
+              const newLines = [...lines];
 
-  projectTx
-    .filter(t => t.type === type)
-    .forEach(tx => {
-      const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-      const realDate = tx.transaction_date || tx.date; // ✅ date réelle
+              projectTx
+                .filter((t) => t.type === type)
+                .forEach((tx) => {
+                  const accName =
+                    accounts.find((a) => a.id === tx.account_id)?.name || 'Inconnu';
+                  const realDate = tx.transaction_date || tx.date; // ✅ date réelle
 
-      const existingIdx = newLines.findIndex(l =>
-        String(l.id) === String(tx.project_line_id) ||
-        (l.amount === parseFloat(tx.amount) && l.description === tx.description && !l.isPaid)
-      );
+                  const existingIdx = newLines.findIndex(
+                    (l) =>
+                      String(l.id) === String(tx.project_line_id) ||
+                      (l.amount === parseFloat(tx.amount) &&
+                        l.description === tx.description &&
+                        !l.isPaid)
+                  );
 
-      if (existingIdx >= 0) {
-        newLines[existingIdx] = {
-          ...newLines[existingIdx],
-          isPaid: true,
-          account: accName,
-          realDate: realDate ? new Date(realDate) : null, // ✅ nouvelle propriété
-        };
-      } else {
-        newLines.push({
-          id: tx.project_line_id || uuidv4(),
-          description: tx.description,
-          amount: parseFloat(tx.amount),
-          category: tx.category,
-          date: new Date(), // planifiée par défaut
-          realDate: realDate ? new Date(realDate) : null, // ✅ réelle
-          account: accName,
-          isPaid: true,
-          isRecurring: false,
-        });
-      }
-    });
+                  if (existingIdx >= 0) {
+                    newLines[existingIdx] = {
+                      ...newLines[existingIdx],
+                      isPaid: true,
+                      account: accName,
+                      realDate: realDate ? new Date(realDate) : null, // ✅ nouvelle propriété
+                    };
+                  } else {
+                    newLines.push({
+                      id: tx.project_line_id || uuidv4(),
+                      description: tx.description,
+                      amount: parseFloat(tx.amount),
+                      category: tx.category,
+                      date: new Date(), // planifiée par défaut
+                      realDate: realDate ? new Date(realDate) : null, // ✅ réelle
+                      account: accName,
+                      isPaid: true,
+                      isRecurring: false,
+                    });
+                  }
+                });
 
-  return newLines;
-};
-
+              return newLines;
+            };
 
             currentExpenses = mergeTransactions(currentExpenses, 'expense');
             currentRevenues = mergeTransactions(currentRevenues, 'income');
           } catch (err) {
-            console.error("Erreur synchronisation transactions:", err);
+            console.error('Erreur synchronisation transactions:', err);
           }
         }
 
@@ -179,9 +203,8 @@ export function ProductFlipModal({
   const totalPurchaseCost = purchasePrice * quantity;
   const totalRevenue = sellingPrice * quantity;
   const grossProfit = totalRevenue - totalPurchaseCost;
-  const grossMarginPercent = totalPurchaseCost > 0 
-    ? ((grossProfit / totalPurchaseCost) * 100).toFixed(1) 
-    : 0;
+  const grossMarginPercent =
+    totalPurchaseCost > 0 ? ((grossProfit / totalPurchaseCost) * 100).toFixed(1) : 0;
 
   // Prix de vente suggéré basé sur la marge cible
   const suggestedSellingPrice = purchasePrice * (1 + targetMargin / 100);
@@ -194,16 +217,28 @@ export function ProductFlipModal({
     }
 
     // Vérifier si les lignes existent déjà
-    const hasPurchase = expenses.some(e => e.category === 'Achat Stock' && e.description.includes(productName));
-    const hasSale = revenues.some(r => r.category === 'Vente' && r.description.includes(productName));
+    const hasPurchase = expenses.some(
+      (e) => e.category === 'Achat Stock' && e.description.includes(productName)
+    );
+    const hasSale = revenues.some(
+      (r) => r.category === 'Vente' && r.description.includes(productName)
+    );
 
     if (hasPurchase || hasSale) {
       if (!confirm("Des lignes d'achat/vente existent déjà. Les remplacer ?")) {
         return;
       }
       // Supprimer les anciennes lignes
-      setExpenses(prev => prev.filter(e => !(e.category === 'Achat Stock' && e.description.includes(productName))));
-      setRevenues(prev => prev.filter(r => !(r.category === 'Vente' && r.description.includes(productName))));
+      setExpenses((prev) =>
+        prev.filter(
+          (e) => !(e.category === 'Achat Stock' && e.description.includes(productName))
+        )
+      );
+      setRevenues((prev) =>
+        prev.filter(
+          (r) => !(r.category === 'Vente' && r.description.includes(productName))
+        )
+      );
     }
 
     // Créer ligne d'achat
@@ -220,8 +255,8 @@ export function ProductFlipModal({
         productName,
         supplier,
         quantity,
-        unitPrice: purchasePrice
-      }
+        unitPrice: purchasePrice,
+      },
     };
 
     // Créer ligne de vente (si prix de vente défini)
@@ -240,17 +275,19 @@ export function ProductFlipModal({
           productName,
           quantity,
           unitPrice: sellingPrice,
-          margin: grossMarginPercent
-        }
+          margin: grossMarginPercent,
+        },
       };
     }
 
-    setExpenses(prev => [...prev, purchaseExpense]);
+    setExpenses((prev) => [...prev, purchaseExpense]);
     if (saleRevenue) {
-      setRevenues(prev => [...prev, saleRevenue]);
+      setRevenues((prev) => [...prev, saleRevenue]);
     }
 
-    alert(`✅ Ligne(s) générée(s) :\n- Achat: ${formatCurrency(totalPurchaseCost)}\n${saleRevenue ? `- Vente: ${formatCurrency(totalRevenue)}` : ''}`);
+    alert(
+      `✅ Ligne(s) générée(s) :\n- Achat: ${formatCurrency(totalPurchaseCost)}\n${saleRevenue ? `- Vente: ${formatCurrency(totalRevenue)}` : ''}`
+    );
   };
 
   // ===== CALCULER PRIX DE VENTE DEPUIS MARGE =====
@@ -264,294 +301,306 @@ export function ProductFlipModal({
 
   // ===== CATÉGORIES =====
   const expenseCategories = [
-    { value: "Achat Stock", label: "🛒 Achat Stock" },
-    { value: "Transport", label: "🚚 Transport" },
-    { value: "Automobile", label: "🚗 Automobile" },
-    { value: "Fonds de roulement", label: "💰 Fonds de Roulmt" },
-    { value: "Équipements", label: "🔧 Équipements" },
-    { value: "Marketing", label: "📣 Marketing" },
-    { value: "Stockage", label: "📦 Stockage" },
-    { value: "Autre", label: "📋 Autre" }
+    { value: 'Achat Stock', label: '🛒 Achat Stock' },
+    { value: 'Transport', label: '🚚 Transport' },
+    { value: 'Automobile', label: '🚗 Automobile' },
+    { value: 'Fonds de roulement', label: '💰 Fonds de Roulmt' },
+    { value: 'Équipements', label: '🔧 Équipements' },
+    { value: 'Marketing', label: '📣 Marketing' },
+    { value: 'Stockage', label: '📦 Stockage' },
+    { value: 'Autre', label: '📋 Autre' },
   ];
 
   const revenueCategories = [
-    { value: "Vente", label: "💵 Vente" },
-    { value: "Vente Partielle", label: "💰 Vente Partielle" },
-    { value: "Autre", label: "💸 Autre" }
+    { value: 'Vente', label: '💵 Vente' },
+    { value: 'Vente Partielle', label: '💰 Vente Partielle' },
+    { value: 'Autre', label: '💸 Autre' },
   ];
 
   // ===== GESTION DES LIGNES =====
   const addExpense = () => {
-    setExpenses([...expenses, {
-      id: uuidv4(),
-      description: '',
-      amount: 0,
-      category: 'Autre',
-      date: new Date(),
-      account: '',
-      isPaid: false,
-      isRecurring: false
-    }]);
+    setExpenses([
+      ...expenses,
+      {
+        id: uuidv4(),
+        description: '',
+        amount: 0,
+        category: 'Autre',
+        date: new Date(),
+        account: '',
+        isPaid: false,
+        isRecurring: false,
+      },
+    ]);
   };
 
   const addRevenue = () => {
-    setRevenues([...revenues, {
-      id: uuidv4(),
-      description: '',
-      amount: 0,
-      category: 'Vente',
-      date: new Date(),
-      account: '',
-      isPaid: false,
-      isRecurring: false
-    }]);
+    setRevenues([
+      ...revenues,
+      {
+        id: uuidv4(),
+        description: '',
+        amount: 0,
+        category: 'Vente',
+        date: new Date(),
+        account: '',
+        isPaid: false,
+        isRecurring: false,
+      },
+    ]);
   };
 
   const updateExpense = (id, field, value) => {
-    setExpenses(expenses.map(e => e.id === id ? { ...e, [field]: value } : e));
+    setExpenses(expenses.map((e) => (e.id === id ? { ...e, [field]: value } : e)));
   };
 
   const updateRevenue = (id, field, value) => {
-    setRevenues(revenues.map(r => r.id === id ? { ...r, [field]: value } : r));
+    setRevenues(revenues.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
   };
 
   const removeExpense = (id) => {
     if (confirm('Supprimer cette charge ?')) {
-      setExpenses(expenses.filter(e => e.id !== id));
+      setExpenses(expenses.filter((e) => e.id !== id));
     }
   };
 
   const removeRevenue = (id) => {
     if (confirm('Supprimer ce revenu ?')) {
-      setRevenues(revenues.filter(r => r.id !== id));
+      setRevenues(revenues.filter((r) => r.id !== id));
     }
   };
 
   // ===== PAYER DÉPENSE =====
   const handlePayerDepense = async (exp, index) => {
-  try {
-    if (!exp.account) return alert('Choisis un compte');
+    try {
+      if (!exp.account) return alert('Choisis un compte');
 
-    const accountObj = accounts.find(a => a.name === exp.account);
-    if (!accountObj) return alert('Compte introuvable');
+      const accountObj = accounts.find((a) => a.name === exp.account);
+      if (!accountObj) return alert('Compte introuvable');
 
-    if (!project?.id) return alert('Erreur: Projet introuvable.');
+      if (!project?.id) return alert('Erreur: Projet introuvable.');
 
-    const alreadyPaid = window.confirm(
-      `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et débite le compte.`
-    );
+      const alreadyPaid = window.confirm(
+        `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
+          `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
+          `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
+          `- NON (Annuler) → Je crée une transaction et débite le compte.`
+      );
 
-    const payload = alreadyPaid
-      ? {
-          paid_externally: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-        }
-      : {
-          create_transaction: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-        };
+      const payload = alreadyPaid
+        ? {
+            paid_externally: true,
+            amount: parseFloat(exp.amount),
+            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
+          }
+        : {
+            create_transaction: true,
+            amount: parseFloat(exp.amount),
+            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
+          };
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-      payload
-    );
+      // 🔐 Appel backend via client API (CSRF + JWT auto)
+      const result = await api.patch(
+        `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
+        payload
+      );
 
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: true };
-    setExpenses(updated);
+      const updated = [...expenses];
+      updated[index] = { ...updated[index], isPaid: true };
+      setExpenses(updated);
 
-    await saveProjectState(updated, revenues);
+      await saveProjectState(updated, revenues);
 
-    if (onProjectUpdated) onProjectUpdated();
+      if (onProjectUpdated) onProjectUpdated();
 
-    alert(result.message || 'Dépense marquée comme payée !');
-  } catch (error) {
-    console.error('Erreur handlePayerDepense:', error);
-    alert(error?.message || 'Erreur paiement');
-  }
-};
-
+      alert(result.message || 'Dépense marquée comme payée !');
+    } catch (error) {
+      console.error('Erreur handlePayerDepense:', error);
+      alert(error?.message || 'Erreur paiement');
+    }
+  };
 
   // ===== ENCAISSER REVENU =====
   const handleEncaisser = async (rev, index) => {
-  try {
-    if (!rev.account) return alert('Choisis un compte');
+    try {
+      if (!rev.account) return alert('Choisis un compte');
 
-    const accountObj = accounts.find(a => a.name === rev.account);
-    if (!accountObj) return alert('Compte introuvable');
+      const accountObj = accounts.find((a) => a.name === rev.account);
+      if (!accountObj) return alert('Compte introuvable');
 
-    if (!project?.id) return alert('Erreur: Projet introuvable.');
+      if (!project?.id) return alert('Erreur: Projet introuvable.');
 
-    const alreadyReceived = window.confirm(
-      `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
-      `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
-      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
-    );
+      const alreadyReceived = window.confirm(
+        `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
+          `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
+          `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
+          `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+      );
 
-    const payload = alreadyReceived
-      ? {
-          received_externally: true,
-          amount: parseFloat(rev.amount),
-          received_date: rev.realDate || new Date().toISOString().split('T')[0],
-        }
-      : {
-          create_transaction: true,
-          amount: parseFloat(rev.amount),
-          received_date: rev.realDate || new Date().toISOString().split('T')[0],
-        };
+      const payload = alreadyReceived
+        ? {
+            received_externally: true,
+            amount: parseFloat(rev.amount),
+            received_date: rev.realDate || new Date().toISOString().split('T')[0],
+          }
+        : {
+            create_transaction: true,
+            amount: parseFloat(rev.amount),
+            received_date: rev.realDate || new Date().toISOString().split('T')[0],
+          };
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
-      payload
-    );
+      // 🔐 Appel backend via client API (CSRF + JWT auto)
+      const result = await api.patch(
+        `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
+        payload
+      );
 
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: true };
-    setRevenues(updated);
+      const updated = [...revenues];
+      updated[index] = { ...updated[index], isPaid: true };
+      setRevenues(updated);
 
-    await saveProjectState(expenses, updated);
+      await saveProjectState(expenses, updated);
 
-    if (onProjectUpdated) onProjectUpdated();
+      if (onProjectUpdated) onProjectUpdated();
 
-    alert(result.message || 'Revenu marqué comme reçu !');
-  } catch (error) {
-    console.error('Erreur handleEncaisser:', error);
-    alert(error?.message || 'Erreur encaissement');
-  }
-};
+      alert(result.message || 'Revenu marqué comme reçu !');
+    } catch (error) {
+      console.error('Erreur handleEncaisser:', error);
+      alert(error?.message || 'Erreur encaissement');
+    }
+  };
 
   // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
- const handleCancelPaymentExpense = async (exp, index) => {
-  try {
-    if (!project?.id) return alert('Projet non enregistré');
+  const handleCancelPaymentExpense = async (exp, index) => {
+    try {
+      if (!project?.id) return alert('Projet non enregistré');
 
-    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
+      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`))
+        return;
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
-      {} // pas de payload spécifique
-    );
+      // 🔐 Appel backend via client API (CSRF + JWT auto)
+      const result = await api.patch(
+        `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
+        {} // pas de payload spécifique
+      );
 
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: false };
-    setExpenses(updated);
+      const updated = [...expenses];
+      updated[index] = { ...updated[index], isPaid: false };
+      setExpenses(updated);
 
-    await saveProjectState(expenses, updated);
+      await saveProjectState(expenses, updated);
 
-    if (onProjectUpdated) onProjectUpdated();
+      if (onProjectUpdated) onProjectUpdated();
 
-    alert(result.message);
-  } catch (err) {
-    console.error('Erreur handleCancelPaymentExpense:', err);
-    alert('Erreur annulation: ' + (err.message || err));
-  }
-};
+      alert(result.message);
+    } catch (err) {
+      console.error('Erreur handleCancelPaymentExpense:', err);
+      alert('Erreur annulation: ' + (err.message || err));
+    }
+  };
 
+  const handleCancelPaymentRevenue = async (rev, index) => {
+    try {
+      if (!project?.id) return alert('Projet non enregistré');
 
-const handleCancelPaymentRevenue = async (rev, index) => {
-  try {
-    if (!project?.id) return alert('Projet non enregistré');
+      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`))
+        return;
 
-    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+      // 🔐 Appel backend via client API (CSRF + JWT auto)
+      const result = await api.patch(
+        `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
+        {} // pas de payload spécifique
+      );
 
-    // 🔐 Appel backend via client API (CSRF + JWT auto)
-    const result = await api.patch(
-      `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-      {} // pas de payload spécifique
-    );
+      const updated = [...revenues];
+      updated[index] = { ...updated[index], isPaid: false };
+      setRevenues(updated);
 
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: false };
-    setRevenues(updated);
+      await saveProjectState(expenses, updated);
 
-    await saveProjectState(expenses, updated);
+      if (onProjectUpdated) onProjectUpdated();
 
-    if (onProjectUpdated) onProjectUpdated();
-
-    alert(result.message);
-  } catch (err) {
-    console.error('Erreur handleCancelPaymentRevenue:', err);
-    alert('Erreur annulation: ' + (err.message || err));
-  }
-};
-
+      alert(result.message);
+    } catch (err) {
+      console.error('Erreur handleCancelPaymentRevenue:', err);
+      alert('Erreur annulation: ' + (err.message || err));
+    }
+  };
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
-  if (!project?.id) {
-    console.warn('⚠️ saveProjectState: Projet non enregistré');
-    return;
-  }
-  
-  // ✅ MAPPER plannedDate AVANT stringify
-  const expensesWithDate = currentExpenses.map(exp => ({
-    ...exp,
-    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
-  }));
-  
-  const revenuesWithDate = currentRevenues.map(rev => ({
-    ...rev,
-    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
-  }));
+    if (!project?.id) {
+      console.warn('⚠️ saveProjectState: Projet non enregistré');
+      return;
+    }
 
-  console.log('💾 saveProjectState démarré:', {
-    projectId: project.id,
-    expensesCount: currentExpenses.length,
-    revenuesCount: currentRevenues.length,
-    expensesPaid: currentExpenses.filter(e => e.isPaid).length
-  });
+    // ✅ MAPPER plannedDate AVANT stringify
+    const expensesWithDate = currentExpenses.map((exp) => ({
+      ...exp,
+      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
+    }));
 
-  const newTotalRevenues = revenuesWithDate.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
-  const newTotalExpenses = expensesWithDate.reduce((s, e) => s + parseFloat(e.amount || 0), 0);
-  const newNetProfit = newTotalRevenues - newTotalExpenses;
-  const newRoi = newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
+    const revenuesWithDate = currentRevenues.map((rev) => ({
+      ...rev,
+      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
+    }));
 
-  const payload = {
-  name: projectName.trim(),
-  type: 'PRODUCTFLIP',
-  description: description || '',
-  status: status || 'active',
-  startDate: startDate ? new Date(startDate).toISOString() : null,
-  endDate: endDate ? new Date(endDate).toISOString() : null,
-  totalCost: newTotalExpenses,
-  totalRevenues: newTotalRevenues,
-  netProfit: newNetProfit,
-  roi: parseFloat(newRoi),
-  expenses: JSON.stringify(expensesWithDate),
-  revenues: JSON.stringify(revenuesWithDate),
-  metadata: JSON.stringify({
-    productName,
-    supplier,
-    purchasePrice,
-    quantity,
-    sellingPrice,
-    targetMargin,
-  }),
-};
+    console.log('💾 saveProjectState démarré:', {
+      projectId: project.id,
+      expensesCount: currentExpenses.length,
+      revenuesCount: currentRevenues.length,
+      expensesPaid: currentExpenses.filter((e) => e.isPaid).length,
+    });
 
-  console.log('📤 Payload envoyé:', {
-    ...payload,
-    expenses: `${expensesWithDate.length} lignes`,
-    revenues: `${revenuesWithDate.length} lignes`
-  });
+    const newTotalRevenues = revenuesWithDate.reduce(
+      (s, r) => s + parseFloat(r.amount || 0),
+      0
+    );
+    const newTotalExpenses = expensesWithDate.reduce(
+      (s, e) => s + parseFloat(e.amount || 0),
+      0
+    );
+    const newNetProfit = newTotalRevenues - newTotalExpenses;
+    const newRoi =
+      newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
 
-  try {
-    const result = await projectsService.updateProject(project.id, payload);
-    console.log('✅ Projet sauvegardé:', result);
-  } catch (error) {
-    console.error('❌ Erreur saveProjectState:', error);
-    throw error;
-  }
-};
+    const payload = {
+      name: projectName.trim(),
+      type: 'PRODUCTFLIP',
+      description: description || '',
+      status: status || 'active',
+      startDate: startDate ? new Date(startDate).toISOString() : null,
+      endDate: endDate ? new Date(endDate).toISOString() : null,
+      totalCost: newTotalExpenses,
+      totalRevenues: newTotalRevenues,
+      netProfit: newNetProfit,
+      roi: parseFloat(newRoi),
+      expenses: JSON.stringify(expensesWithDate),
+      revenues: JSON.stringify(revenuesWithDate),
+      metadata: JSON.stringify({
+        productName,
+        supplier,
+        purchasePrice,
+        quantity,
+        sellingPrice,
+        targetMargin,
+      }),
+    };
+
+    console.log('📤 Payload envoyé:', {
+      ...payload,
+      expenses: `${expensesWithDate.length} lignes`,
+      revenues: `${revenuesWithDate.length} lignes`,
+    });
+
+    try {
+      const result = await projectsService.updateProject(project.id, payload);
+      console.log('✅ Projet sauvegardé:', result);
+    } catch (error) {
+      console.error('❌ Erreur saveProjectState:', error);
+      throw error;
+    }
+  };
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -565,22 +614,21 @@ const handleCancelPaymentRevenue = async (rev, index) => {
   // ===== SAUVEGARDE FINALE =====
   const handleSave = async () => {
     if (!projectName.trim()) {
-      alert("Le nom du projet est obligatoire");
+      alert('Le nom du projet est obligatoire');
       return;
     }
 
     setLoading(true);
 
-    const expensesWithDate = expenses.map(exp => ({
-  ...exp,
-  plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null
-}));
+    const expensesWithDate = expenses.map((exp) => ({
+      ...exp,
+      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
+    }));
 
-const revenuesWithDate = revenues.map(rev => ({
-  ...rev,
-  plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null
-}));
-
+    const revenuesWithDate = revenues.map((rev) => ({
+      ...rev,
+      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
+    }));
 
     try {
       const payload = {
@@ -602,8 +650,8 @@ const revenuesWithDate = revenues.map(rev => ({
           purchasePrice,
           quantity,
           sellingPrice,
-          targetMargin
-        })
+          targetMargin,
+        }),
       };
 
       if (project?.id) {
@@ -615,7 +663,7 @@ const revenuesWithDate = revenues.map(rev => ({
       if (onProjectSaved) onProjectSaved();
       onClose();
     } catch (e) {
-      alert("Erreur sauvegarde: " + e.message);
+      alert('Erreur sauvegarde: ' + e.message);
     } finally {
       setLoading(false);
     }
@@ -626,7 +674,6 @@ const revenuesWithDate = revenues.map(rev => ({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
-        
         {/* HEADER */}
         <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -640,18 +687,20 @@ const revenuesWithDate = revenues.map(rev => ({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-lg transition">
+          <button
+            onClick={onClose}
+            className="hover:bg-white/20 p-2 rounded-lg transition"
+          >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* BODY */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
           {/* SECTION 1: INFORMATIONS GÉNÉRALES */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="font-bold text-lg mb-4">📋 Informations Générales</h3>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Nom du Projet *</label>
@@ -699,7 +748,9 @@ const revenuesWithDate = revenues.map(rev => ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Date Fin (Optionnelle)</label>
+                <label className="block text-sm font-medium mb-1">
+                  Date Fin (Optionnelle)
+                </label>
                 <DatePicker
                   selected={endDate}
                   onChange={setEndDate}
@@ -753,7 +804,9 @@ const revenuesWithDate = revenues.map(rev => ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Prix d'Achat Unitaire</label>
+                <label className="block text-sm font-medium mb-1">
+                  Prix d'Achat Unitaire
+                </label>
                 <CalculatorInput
                   value={purchasePrice}
                   onChange={setPurchasePrice}
@@ -788,7 +841,9 @@ const revenuesWithDate = revenues.map(rev => ({
             <div className="border-t-2 border-blue-300 pt-4 mt-4">
               <div className="grid grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Marge Cible (%)</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Marge Cible (%)
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -809,7 +864,9 @@ const revenuesWithDate = revenues.map(rev => ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Prix de Vente Suggéré</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Prix de Vente Suggéré
+                  </label>
                   <input
                     type="text"
                     value={formatCurrency(suggestedSellingPrice)}
@@ -819,7 +876,9 @@ const revenuesWithDate = revenues.map(rev => ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Prix de Vente Unitaire</label>
+                  <label className="block text-sm font-medium mb-1">
+                    Prix de Vente Unitaire
+                  </label>
                   <CalculatorInput
                     value={sellingPrice}
                     onChange={setSellingPrice}
@@ -843,24 +902,30 @@ const revenuesWithDate = revenues.map(rev => ({
             {/* Aperçu marges */}
             {totalPurchaseCost > 0 && totalRevenue > 0 && (
               <div className="mt-4 bg-white p-4 rounded-lg border-2 border-green-300">
-                <h4 className="font-semibold mb-3 text-green-800">📊 Analyse de Marge :</h4>
+                <h4 className="font-semibold mb-3 text-green-800">
+                  📊 Analyse de Marge :
+                </h4>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Bénéfice Brut</p>
-                    <p className={`text-2xl font-bold ${grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p
+                      className={`text-2xl font-bold ${grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                    >
                       {formatCurrency(grossProfit)}
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Marge Brute</p>
-                    <p className={`text-2xl font-bold ${grossMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p
+                      className={`text-2xl font-bold ${grossMarginPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                    >
                       {grossMarginPercent}%
                     </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Marge par Unité</p>
                     <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrency((sellingPrice - purchasePrice))}
+                      {formatCurrency(sellingPrice - purchasePrice)}
                     </p>
                   </div>
                 </div>
@@ -886,7 +951,10 @@ const revenuesWithDate = revenues.map(rev => ({
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {expenses.map((exp, idx) => (
-                <div key={exp.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}>
+                <div
+                  key={exp.id}
+                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+                >
                   <input
                     type="text"
                     value={exp.description}
@@ -894,52 +962,50 @@ const revenuesWithDate = revenues.map(rev => ({
                     className="col-span-3 p-2 border rounded text-sm"
                     placeholder="Description"
                   />
-                  
                   <select
                     value={exp.category}
                     onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                   >
-                    {expenseCategories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    {expenseCategories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
                     ))}
                   </select>
-
                   <CalculatorInput
-  value={exp.amount}
-  onChange={(val) => updateExpense(exp.id, 'amount', val)}
-  className="col-span-2 p-2 border rounded text-sm font-semibold"
-/>
-
-{/* Date planifiée */}
-<DatePicker
-  selected={exp.date}
-  onChange={(date) => updateExpense(exp.id, 'date', date)}
-  dateFormat="dd/MM/yy"
-  className="col-span-2 p-2 border rounded text-sm"
-  placeholderText="Date planifiée"
-/>
-
-/* Date réelle */
-<DatePicker
-  selected={exp.realDate || null}
-  onChange={(date) => updateExpense(exp.id, 'realDate', date)}
-  dateFormat="dd/MM/yy"
-  className="col-span-2 p-2 border rounded text-sm bg-amber-50"
-  placeholderText="Date réelle"
-/>
-
+                    value={exp.amount}
+                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
+                    className="col-span-2 p-2 border rounded text-sm font-semibold"
+                  />
+                  {/* Date planifiée */}
+                  <DatePicker
+                    selected={exp.date}
+                    onChange={(date) => updateExpense(exp.id, 'date', date)}
+                    dateFormat="dd/MM/yy"
+                    className="col-span-2 p-2 border rounded text-sm"
+                    placeholderText="Date planifiée"
+                  />
+                  /* Date réelle */
+                  <DatePicker
+                    selected={exp.realDate || null}
+                    onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+                    dateFormat="dd/MM/yy"
+                    className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+                    placeholderText="Date réelle"
+                  />
                   <select
                     value={exp.account}
                     onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                   >
                     <option value="">Compte</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.name}>
+                        {acc.name}
+                      </option>
                     ))}
                   </select>
-
                   {!exp.isPaid ? (
                     <button
                       onClick={() => handlePayerDepense(exp, idx)}
@@ -958,7 +1024,6 @@ const revenuesWithDate = revenues.map(rev => ({
                       ↩️
                     </button>
                   )}
-
                   <button
                     onClick={() => removeExpense(exp.id)}
                     className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
@@ -977,7 +1042,9 @@ const revenuesWithDate = revenues.map(rev => ({
 
             <div className="mt-3 text-right">
               <span className="text-sm text-gray-600">Total Charges: </span>
-              <span className="font-bold text-red-600 text-xl">{formatCurrency(totalExpenses)}</span>
+              <span className="font-bold text-red-600 text-xl">
+                {formatCurrency(totalExpenses)}
+              </span>
             </div>
           </div>
 
@@ -999,7 +1066,10 @@ const revenuesWithDate = revenues.map(rev => ({
 
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {revenues.map((rev, idx) => (
-                <div key={rev.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
+                <div
+                  key={rev.id}
+                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}
+                >
                   <input
                     type="text"
                     value={rev.description}
@@ -1007,53 +1077,50 @@ const revenuesWithDate = revenues.map(rev => ({
                     className="col-span-3 p-2 border rounded text-sm"
                     placeholder="Description"
                   />
-                  
                   <select
                     value={rev.category}
                     onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                   >
-                    {revenueCategories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    {revenueCategories.map((cat) => (
+                      <option key={cat.value} value={cat.value}>
+                        {cat.label}
+                      </option>
                     ))}
                   </select>
-
                   <CalculatorInput
-  value={rev.amount}
-  onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-  className="col-span-2 p-2 border rounded text-sm font-semibold"
-/>
-
-{/* Date planifiée */}
-<DatePicker
-  selected={rev.date}
-  onChange={(date) => updateRevenue(rev.id, 'date', date)}
-  dateFormat="dd/MM/yy"
-  className="col-span-2 p-2 border rounded text-sm"
-  placeholderText="Date planifiée"
-/>
-
-/* Date réelle */
-<DatePicker
-  selected={rev.realDate || null}
-  onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
-  dateFormat="dd/MM/yy"
-  className="col-span-2 p-2 border rounded text-sm bg-amber-50"
-  placeholderText="Date réelle"
-/>
-
-
+                    value={rev.amount}
+                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+                    className="col-span-2 p-2 border rounded text-sm font-semibold"
+                  />
+                  {/* Date planifiée */}
+                  <DatePicker
+                    selected={rev.date}
+                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
+                    dateFormat="dd/MM/yy"
+                    className="col-span-2 p-2 border rounded text-sm"
+                    placeholderText="Date planifiée"
+                  />
+                  /* Date réelle */
+                  <DatePicker
+                    selected={rev.realDate || null}
+                    onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
+                    dateFormat="dd/MM/yy"
+                    className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+                    placeholderText="Date réelle"
+                  />
                   <select
                     value={rev.account}
                     onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
                     className="col-span-2 p-2 border rounded text-sm"
                   >
                     <option value="">Compte</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.name}>{acc.name}</option>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.name}>
+                        {acc.name}
+                      </option>
                     ))}
                   </select>
-
                   {!rev.isPaid ? (
                     <button
                       onClick={() => handleEncaisser(rev, idx)}
@@ -1072,7 +1139,6 @@ const revenuesWithDate = revenues.map(rev => ({
                       ↩️
                     </button>
                   )}
-
                   <button
                     onClick={() => removeRevenue(rev.id)}
                     className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
@@ -1091,7 +1157,9 @@ const revenuesWithDate = revenues.map(rev => ({
 
             <div className="mt-3 text-right">
               <span className="text-sm text-gray-600">Total Revenus: </span>
-              <span className="font-bold text-green-600 text-xl">{formatCurrency(totalRevenues)}</span>
+              <span className="font-bold text-green-600 text-xl">
+                {formatCurrency(totalRevenues)}
+              </span>
             </div>
           </div>
 
@@ -1112,19 +1180,22 @@ const revenuesWithDate = revenues.map(rev => ({
               </div>
               <div>
                 <p className="text-indigo-100 text-sm">Bénéfice Net</p>
-                <p className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                <p
+                  className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-300' : 'text-red-300'}`}
+                >
                   {formatCurrency(netProfit)}
                 </p>
               </div>
               <div>
                 <p className="text-indigo-100 text-sm">ROI</p>
-                <p className={`text-2xl font-bold ${roi >= 0 ? 'text-green-300' : 'text-red-300'}`}>
+                <p
+                  className={`text-2xl font-bold ${roi >= 0 ? 'text-green-300' : 'text-red-300'}`}
+                >
                   {roi}%
                 </p>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* FOOTER */}
@@ -1135,14 +1206,18 @@ const revenuesWithDate = revenues.map(rev => ({
           >
             Annuler
           </button>
-          
+
           <button
             onClick={handleSave}
             disabled={loading || !projectName.trim()}
             className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-8 py-2 rounded-lg flex items-center gap-2 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             <Save className="w-5 h-5" />
-            {loading ? 'Enregistrement...' : project ? 'Mettre à Jour' : 'Créer le Projet'}
+            {loading
+              ? 'Enregistrement...'
+              : project
+                ? 'Mettre à Jour'
+                : 'Créer le Projet'}
           </button>
         </div>
       </div>

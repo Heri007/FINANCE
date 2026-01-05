@@ -1,5 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { X, TrendingUp, TrendingDown, Calendar, DollarSign, Tag, FileText, Search } from 'lucide-react';
+import {
+  X,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  DollarSign,
+  Tag,
+  FileText,
+  Search,
+} from 'lucide-react';
 
 export function TransactionDetailsModal({ type, transactions, onClose }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -7,11 +16,11 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
   const [selectedPeriod, setSelectedPeriod] = useState('all'); // all, today, week, month, year
 
   // Filtrer les transactions selon le type (income/expense)
-  const filteredByType = transactions.filter(t => t.type === type);
+  const filteredByType = transactions.filter((t) => t.type === type);
 
   // Extraire les catégories uniques
   const categories = useMemo(() => {
-    const cats = [...new Set(filteredByType.map(t => t.category))];
+    const cats = [...new Set(filteredByType.map((t) => t.category))];
     return cats.sort();
   }, [filteredByType]);
 
@@ -21,21 +30,22 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
 
     // Filtre par recherche
     if (searchTerm) {
-      result = result.filter(t => 
-        t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        t.category.toLowerCase().includes(searchTerm.toLowerCase())
+      result = result.filter(
+        (t) =>
+          t.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.category.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
     // Filtre par catégorie
     if (selectedCategory !== 'all') {
-      result = result.filter(t => t.category === selectedCategory);
+      result = result.filter((t) => t.category === selectedCategory);
     }
 
     // Filtre par période
     if (selectedPeriod !== 'all') {
       const now = new Date();
-      result = result.filter(t => {
+      result = result.filter((t) => {
         const txDate = new Date(t.transaction_date);
         switch (selectedPeriod) {
           case 'today':
@@ -44,7 +54,10 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
             const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             return txDate >= weekAgo;
           case 'month':
-            return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+            return (
+              txDate.getMonth() === now.getMonth() &&
+              txDate.getFullYear() === now.getFullYear()
+            );
           case 'year':
             return txDate.getFullYear() === now.getFullYear();
           default:
@@ -53,7 +66,9 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
       });
     }
 
-    return result.sort((a, b) => new Date(b.transaction_date) - new Date(a.transaction_date));
+    return result.sort(
+      (a, b) => new Date(b.transaction_date) - new Date(a.transaction_date)
+    );
   }, [filteredByType, searchTerm, selectedCategory, selectedPeriod]);
 
   // Calculs statistiques
@@ -61,12 +76,14 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
     const total = filteredTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
     const count = filteredTransactions.length;
     const average = count > 0 ? total / count : 0;
-    const max = count > 0 ? Math.max(...filteredTransactions.map(t => parseFloat(t.amount))) : 0;
-    const min = count > 0 ? Math.min(...filteredTransactions.map(t => parseFloat(t.amount))) : 0;
+    const max =
+      count > 0 ? Math.max(...filteredTransactions.map((t) => parseFloat(t.amount))) : 0;
+    const min =
+      count > 0 ? Math.min(...filteredTransactions.map((t) => parseFloat(t.amount))) : 0;
 
     // Stats par catégorie
     const byCategory = {};
-    filteredTransactions.forEach(t => {
+    filteredTransactions.forEach((t) => {
       if (!byCategory[t.category]) {
         byCategory[t.category] = { total: 0, count: 0 };
       }
@@ -93,7 +110,9 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
               <Icon className={`w-8 h-8 ${colorClass}`} />
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-                <p className="text-sm text-gray-600">{stats.count} transactions trouvées</p>
+                <p className="text-sm text-gray-600">
+                  {stats.count} transactions trouvées
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -103,45 +122,55 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
         </div>
 
         {/* Stats Cards avec dégradé subtil */}
-<div className="grid grid-cols-5 gap-4 p-6 bg-gray-50 border-b">
-  {/* Total - Plus foncé */}
-  <div className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-600 to-green-500' : 'bg-gradient-to-br from-red-600 to-red-500'}`}>
-    <p className="text-xs text-gray-700 uppercase font-semibold">Total</p>
-    <p className="text-xl font-bold text-gray-700">
-      {stats.total.toLocaleString('fr-FR')} Ar
-    </p>
-  </div>
+        <div className="grid grid-cols-5 gap-4 p-6 bg-gray-50 border-b">
+          {/* Total - Plus foncé */}
+          <div
+            className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-600 to-green-500' : 'bg-gradient-to-br from-red-600 to-red-500'}`}
+          >
+            <p className="text-xs text-gray-700 uppercase font-semibold">Total</p>
+            <p className="text-xl font-bold text-gray-700">
+              {stats.total.toLocaleString('fr-FR')} Ar
+            </p>
+          </div>
 
-  {/* Nombre */}
-  <div className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-500 to-green-400' : 'bg-gradient-to-br from-red-500 to-red-400'}`}>
-    <p className="text-xs text-gray-700 uppercase font-semibold">Nombre</p>
-    <p className="text-xl font-bold text-gray-700">{stats.count}</p>
-  </div>
+          {/* Nombre */}
+          <div
+            className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-500 to-green-400' : 'bg-gradient-to-br from-red-500 to-red-400'}`}
+          >
+            <p className="text-xs text-gray-700 uppercase font-semibold">Nombre</p>
+            <p className="text-xl font-bold text-gray-700">{stats.count}</p>
+          </div>
 
-  {/* Moyenne */}
-  <div className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-400 to-green-300' : 'bg-gradient-to-br from-red-400 to-red-300'}`}>
-    <p className="text-xs text-gray-700 uppercase font-semibold">Moyenne</p>
-    <p className="text-xl font-bold text-gray-700">
-      {stats.average.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} Ar
-    </p>
-  </div>
+          {/* Moyenne */}
+          <div
+            className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-400 to-green-300' : 'bg-gradient-to-br from-red-400 to-red-300'}`}
+          >
+            <p className="text-xs text-gray-700 uppercase font-semibold">Moyenne</p>
+            <p className="text-xl font-bold text-gray-700">
+              {stats.average.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} Ar
+            </p>
+          </div>
 
-  {/* Maximum */}
-  <div className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-300 to-green-200' : 'bg-gradient-to-br from-red-300 to-red-200'}`}>
-    <p className="text-xs text-gray-700 uppercase font-semibold">Maximum</p>
-    <p className="text-xl font-bold text-gray-900">
-      {stats.max.toLocaleString('fr-FR')} Ar
-    </p>
-  </div>
+          {/* Maximum */}
+          <div
+            className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-300 to-green-200' : 'bg-gradient-to-br from-red-300 to-red-200'}`}
+          >
+            <p className="text-xs text-gray-700 uppercase font-semibold">Maximum</p>
+            <p className="text-xl font-bold text-gray-900">
+              {stats.max.toLocaleString('fr-FR')} Ar
+            </p>
+          </div>
 
-  {/* Minimum - Plus clair */}
-  <div className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-200 to-green-100' : 'bg-gradient-to-br from-red-200 to-red-100'}`}>
-    <p className="text-xs text-gray-700 uppercase font-semibold">Minimum</p>
-    <p className="text-xl font-bold text-gray-900">
-      {stats.min.toLocaleString('fr-FR')} Ar
-    </p>
-  </div>
-</div>
+          {/* Minimum - Plus clair */}
+          <div
+            className={`p-4 rounded-lg shadow-md ${isIncome ? 'bg-gradient-to-br from-green-200 to-green-100' : 'bg-gradient-to-br from-red-200 to-red-100'}`}
+          >
+            <p className="text-xs text-gray-700 uppercase font-semibold">Minimum</p>
+            <p className="text-xl font-bold text-gray-900">
+              {stats.min.toLocaleString('fr-FR')} Ar
+            </p>
+          </div>
+        </div>
 
         {/* Filtres */}
         <div className="p-6 bg-white border-b space-y-4">
@@ -165,8 +194,10 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
             >
               <option value="all">Toutes les catégories ({categories.length})</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
               ))}
             </select>
 
@@ -200,11 +231,15 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
                   className="flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <div className="flex items-center gap-4 flex-1">
-                    <div className={`w-10 h-10 rounded-full ${bgClass} flex items-center justify-center`}>
+                    <div
+                      className={`w-10 h-10 rounded-full ${bgClass} flex items-center justify-center`}
+                    >
                       <Tag className={`w-5 h-5 ${colorClass}`} />
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{transaction.description}</p>
+                      <p className="font-semibold text-gray-900">
+                        {transaction.description}
+                      </p>
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <Tag className="w-3 h-3" />
@@ -212,11 +247,11 @@ export function TransactionDetailsModal({ type, transactions, onClose }) {
                         </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {new Date(transaction.transaction_date).toLocaleDateString('fr-FR')}
+                          {new Date(transaction.transaction_date).toLocaleDateString(
+                            'fr-FR'
+                          )}
                         </span>
-                        <span className="text-gray-400">
-                          {transaction.account_name}
-                        </span>
+                        <span className="text-gray-400">{transaction.account_name}</span>
                       </div>
                     </div>
                   </div>

@@ -16,11 +16,11 @@ export const fetchCsrfToken = async () => {
     const response = await fetch(`${API_BASE}/api/csrf-token`, {
       credentials: 'include', // ✅ IMPORTANT : Envoie les cookies
     });
-    
+
     if (!response.ok) {
       throw new Error('Impossible de récupérer le token CSRF');
     }
-    
+
     const data = await response.json();
     csrfToken = data.csrfToken;
     console.log('✅ Token CSRF récupéré');
@@ -69,11 +69,14 @@ const safeJson = async (response) => {
 export const apiRequest = async (endpoint, options = {}) => {
   // ✅ Normaliser l'endpoint
   let normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  
-  if (!normalizedEndpoint.startsWith('/api/') && !normalizedEndpoint.startsWith('/backup')) {
+
+  if (
+    !normalizedEndpoint.startsWith('/api/') &&
+    !normalizedEndpoint.startsWith('/backup')
+  ) {
     normalizedEndpoint = `/api${normalizedEndpoint}`;
   }
-  
+
   const url = `${API_BASE}${normalizedEndpoint}`;
   const method = (options.method || 'GET').toUpperCase();
 
@@ -93,7 +96,7 @@ export const apiRequest = async (endpoint, options = {}) => {
       const token = await getCsrfToken();
       headers['X-CSRF-Token'] = token;
     } catch (csrfError) {
-      console.warn('⚠️ Impossible d\'ajouter le token CSRF, tentative sans...');
+      console.warn("⚠️ Impossible d'ajouter le token CSRF, tentative sans...");
     }
   }
 
@@ -115,7 +118,7 @@ export const apiRequest = async (endpoint, options = {}) => {
         console.warn('🔒 Session expirée - Déconnexion automatique');
         localStorage.removeItem('token');
         window.dispatchEvent(new Event('auth:logout'));
-        
+
         throw {
           message: 'Session expirée. Veuillez vous reconnecter.',
           status: 401,
@@ -126,13 +129,13 @@ export const apiRequest = async (endpoint, options = {}) => {
       // ✅ NOUVEAU : GESTION 403 CSRF
       if (response.status === 403 && error.code === 'EBADCSRFTOKEN') {
         console.warn('⚠️ Token CSRF invalide, régénération...');
-        
+
         // Réinitialiser et réessayer UNE SEULE FOIS
         if (!options._csrfRetry) {
           csrfToken = null; // Reset du token
           return apiRequest(endpoint, { ...options, _csrfRetry: true });
         }
-        
+
         throw {
           message: 'Erreur de sécurité CSRF. Veuillez recharger la page.',
           status: 403,
@@ -165,7 +168,6 @@ export const apiRequest = async (endpoint, options = {}) => {
 
     // Succès (200-299)
     return await safeJson(response);
-
   } catch (error) {
     // Ne pas logger les erreurs 401 (déjà gérées)
     if (error?.status !== 401) {
@@ -181,22 +183,25 @@ export const apiRequest = async (endpoint, options = {}) => {
 
 export const api = {
   get: (endpoint) => apiRequest(endpoint, { method: 'GET' }),
-  
-  post: (endpoint, data) => apiRequest(endpoint, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  
-  put: (endpoint, data) => apiRequest(endpoint, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
-  
-  patch: (endpoint, data) => apiRequest(endpoint, {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  }),
-  
+
+  post: (endpoint, data) =>
+    apiRequest(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  put: (endpoint, data) =>
+    apiRequest(endpoint, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  patch: (endpoint, data) =>
+    apiRequest(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   delete: (endpoint) => apiRequest(endpoint, { method: 'DELETE' }),
 };
 

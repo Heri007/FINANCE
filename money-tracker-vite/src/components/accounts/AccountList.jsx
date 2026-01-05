@@ -3,12 +3,12 @@ import React from 'react';
 import { Wallet, Plus, RefreshCw } from 'lucide-react';
 import { AccountCard } from '../common/AccountCard';
 
-export function AccountList({ 
-  accounts, 
-  onSelectAccount, 
-  onAddAccount, 
-  onDeleteAccount, 
-  onInitDefaults 
+export function AccountList({
+  accounts,
+  onSelectAccount,
+  onAddAccount,
+  onDeleteAccount,
+  onInitDefaults,
 }) {
   if (!accounts || accounts.length === 0) {
     return (
@@ -19,7 +19,7 @@ export function AccountList({
             <h2 className="text-base font-bold text-slate-900">État des Comptes</h2>
           </div>
         </div>
-        
+
         <div className="text-center py-6 bg-slate-50 rounded-lg border-2 border-dashed border-slate-300">
           <p className="text-slate-600 mb-4 font-semibold">
             Vous n'avez aucun compte configuré pour le moment.
@@ -57,7 +57,7 @@ export function AccountList({
               {accounts.length}
             </span>
           </div>
-          
+
           <button
             onClick={onAddAccount}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all font-semibold text-xs shadow-sm"
@@ -70,7 +70,7 @@ export function AccountList({
 
       {/* Grille compacte avec gap réduit */}
       <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-        {accounts.map(account => (
+        {accounts.map((account) => (
           <AccountCard
             key={account.id}
             account={account}
