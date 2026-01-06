@@ -424,6 +424,7 @@ const GanttTimelineModal = ({
           {/* tu peux reprendre exactement les 6 cartes que tu as déjà, en passant juste aux classes slate/emerald/rose */}
         </div>
 
+
         {/* Timeline Coffre en hover */}
         <div
           className="px-2 pt-2 pb-2 border-b border-slate-200 bg-slate-600 transition-all duration-300"
@@ -438,13 +439,15 @@ const GanttTimelineModal = ({
     `}
           >
             <TreasuryTimeline
-              projects={normalizedProjects}
-              currentCashBalance={currentCoffreBalance}
-              startDate={today}
-              endDate={timelineEnd}
-              transactions={transactions}
-              plannedTransactions={plannedTransactions}
-            />
+  projects={normalizedProjects.filter(p => 
+    p.status === 'active' || p.status === 'inprogress'
+  )}
+  currentCashBalance={currentCoffreBalance}
+  startDate={today}
+  endDate={timelineEnd}
+  transactions={transactions}
+  plannedTransactions={plannedTransactions}
+/>
           </div>
         </div>
 
