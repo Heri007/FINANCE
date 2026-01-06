@@ -23,6 +23,9 @@ import { transactionsService } from '../../../services/transactionsService';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
 import api from '../../../services/api';
+import { PartnersSection } from '../../PartnersSection';
+import { ProfitDistributionPanel } from '../../ProfitDistributionPanel';
+
 
 export function LivestockModal({
   isOpen,
@@ -1406,6 +1409,14 @@ export function LivestockModal({
               </div>
             </div>
           </div>
+          
+          {/* SECTION 2.5 - ASSOCIÉS DU PROJET */}
+{project?.id && (
+  <PartnersSection 
+    projectId={project.id} 
+    totalInvestment={project.total_capital_investment || totalExpenses}
+  />
+)}
 
           {/* SECTION 3: CALCULS PAR CYCLE */}
           <div className="bg-gradient-to-r from-blue-50 to-cyan-50 p-6 rounded-lg border-2 border-blue-200">
@@ -1749,6 +1760,11 @@ export function LivestockModal({
               </span>
             </div>
           </div>
+
+          {/* SECTION 6 - DISTRIBUTION DES BÉNÉFICES */}
+{project?.id && (
+  <ProfitDistributionPanel projectId={project.id} />
+)}
 
           {/* RÉSUMÉ FINANCIER */}
           <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6 rounded-lg">

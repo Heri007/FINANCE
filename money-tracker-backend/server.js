@@ -30,6 +30,8 @@ const transactionLinkingRoutes = require('./routes/transactionLinking');
 const backupRoutes = require('./routes/backup');
 const notesRoutes = require('./routes/notes');
 const visionRouter = require('./routes/vision');
+const projectPartnersRoutes = require('./routes/projectPartners');
+const profitDistributionsRoutes = require('./routes/profitDistributions');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -162,6 +164,8 @@ app.use('/api/content', require('./routes/content'));
 app.use('/api/notes', notesRoutes);
 app.use('/api/transaction-linking', transactionLinkingRoutes);
 app.use('/api/vision', visionRouter);
+app.use('/api', projectPartnersRoutes);
+app.use('/api', profitDistributionsRoutes);
 
 // ✅ Routes BACKUP (protection spéciale recommandée)
 app.use('/backup', csrfProtection, backupRoutes);
