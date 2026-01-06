@@ -887,45 +887,100 @@ const GanttTimelineModal = ({
                             />
 
                             {/* Tooltip - Position adaptative selon le rang */}
-                            <div
-                              className={`absolute ${
-                                projectIndex === 0 || projectIndex === 1
-                                  ? 'top-full mt-2'
-                                  : 'bottom-full mb-2'
-                              } left-0 hidden group-hover:block bg-gray-800 text-white p-3 rounded shadow-xl text-xs w-64 z-50 pointer-events-none`}
-                            >
-                              <div className="font-semibold mb-2">{project.name}</div>
-                              <div className="space-y-1">
-                                <div>Client: {project.client_name}</div>
-                                <div>
-                                  Début:{' '}
-                                  {project.start_date
-                                    ? format(parseISO(project.start_date), 'dd/MM/yyyy')
-                                    : 'N/A'}
-                                </div>
-                                <div>
-                                  Fin:{' '}
-                                  {project.end_date
-                                    ? format(parseISO(project.end_date), 'dd/MM/yyyy')
-                                    : 'N/A'}
-                                </div>
-                                <div>Progression: {project.progress || 0}%</div>
-                                <div>Revenus: {formatCurrency(project.total_amount)}</div>
-                                <div>Coûts: {formatCurrency(project.total_cost)}</div>
-                                <div className="font-semibold pt-1 border-t border-gray-600">
-                                  Profit:{' '}
-                                  {formatCurrency(
-                                    parseFloat(project.total_amount || 0) -
-                                      parseFloat(project.total_cost || 0)
-                                  )}
-                                </div>
-                                {project.product_name &&
-                                  project.product_name !== 'N/A' && (
-                                    <div className="pt-1 border-t border-gray-600">
-                                      Produit: {project.product_name}
-                                    </div>
-                                  )}
-                              </div>
+<div
+  className={`absolute ${
+    projectIndex === 0 || projectIndex === 1
+      ? 'top-full mt-2'
+      : 'bottom-full mb-2'
+  } left-0 hidden group-hover:block bg-gray-800 text-white p-3 rounded shadow-xl text-xs w-64 z-50 pointer-events-none`}
+>
+  <div className="font-semibold mb-2">{project.name}</div>
+  <div className="space-y-1">
+    <div>Client: {project.client_name}</div>
+    <div>
+      Début:{' '}
+      {project.start_date
+        ? format(parseISO(project.start_date), 'dd/MM/yyyy')
+        : 'N/A'}
+    </div>
+    <div>
+      Fin:{' '}
+      {project.end_date
+        ? format(parseISO(project.end_date), 'dd/MM/yyyy')
+        : 'N/A'}
+    </div>
+    <div>Progression: {project.progress || 0}%</div>
+    <div>Revenus: {formatCurrency(project.total_amount)}</div>
+    <div>Coûts: {formatCurrency(project.total_cost)}</div>
+    
+    {/* ✅ NOUVEAUX CHAMPS : Payés et Reste à payer */}
+    <div className="pt-1 border-t border-gray-600">
+      <div>
+        Payés: {formatCurrency(
+          (() => {
+            // Parser expenses JSON
+            let expenses = [];
+            if (project.expenses) {
+              try {
+                expenses = typeof project.expenses === 'string' 
+                  ? JSON.parse(project.expenses) 
+                  : project.expenses;
+              } catch (e) {
+                expenses = [];
+              }
+            }
+            
+            // Calculer total payé
+            if (Array.isArray(expenses)) {
+              return expenses
+                .filter(exp => exp.isPaid === true)
+                .reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
+            }
+            return 0;
+          })()
+        )}
+      </div>
+      <div>
+        Reste à payer: {formatCurrency(
+          (() => {
+            // Parser expenses JSON
+            let expenses = [];
+            if (project.expenses) {
+              try {
+                expenses = typeof project.expenses === 'string' 
+                  ? JSON.parse(project.expenses) 
+                  : project.expenses;
+              } catch (e) {
+                expenses = [];
+              }
+            }
+            
+            // Calculer total non payé
+            if (Array.isArray(expenses)) {
+              return expenses
+                .filter(exp => exp.isPaid === false || !exp.isPaid)
+                .reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
+            }
+            return parseFloat(project.total_cost || 0);
+          })()
+        )}
+      </div>
+    </div>
+    
+    <div className="font-semibold pt-1 border-t border-gray-600">
+      Profit:{' '}
+      {formatCurrency(
+        parseFloat(project.total_amount || 0) -
+          parseFloat(project.total_cost || 0)
+      )}
+    </div>
+    {project.product_name &&
+      project.product_name !== 'N/A' && (
+        <div className="pt-1 border-t border-gray-600">
+          Produit: {project.product_name}
+        </div>
+      )}
+  </div>
 
                               {/* Petite flèche indicatrice */}
                               <div
