@@ -202,53 +202,52 @@ router.get('/full-export', authenticateToken, async (req, res) => {
   try {
     console.log('📦 Full export demandé');
 
-    // ✅ Requêtes parallèles SANS filtrage par user_id
     const [
-  accountsRes,
-  transactionsRes,
-  receivablesRes,
-  projectsRes,
-  notesRes,
-  visionsRes,
-  objectivesRes,
-  employeesRes,
-  contractsRes,
-  payrollsRes,
-  partnersRes,        
-  distributionsRes,      
-  paymentsRes,           
-] = await Promise.all([
-  pool.query('SELECT * FROM accounts ORDER BY id'),
-  pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
-  pool.query('SELECT * FROM receivables ORDER BY id'),
-  pool.query('SELECT * FROM projects ORDER BY id'),
-  pool.query('SELECT * FROM notes ORDER BY id'),
-  pool.query('SELECT * FROM visions ORDER BY id'),
-  pool.query('SELECT * FROM objectives ORDER BY id'),
-  pool.query('SELECT * FROM employees ORDER BY id'),
-  pool.query('SELECT * FROM project_partners ORDER BY id'),        
-  pool.query('SELECT * FROM profit_distributions ORDER BY id'),    
-  pool.query('SELECT * FROM partner_payments ORDER BY id'),       
-]);
+      accountsRes,
+      transactionsRes,
+      receivablesRes,
+      projectsRes,
+      notesRes,
+      visionsRes,
+      objectivesRes,
+      employeesRes,
+      partnersRes,
+      distributionsRes,
+      paymentsRes,
+    ] = await Promise.all([
+      pool.query('SELECT * FROM accounts ORDER BY id'),
+      pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
+      pool.query('SELECT * FROM receivables ORDER BY id'),
+      pool.query('SELECT * FROM projects ORDER BY id'),
+      pool.query('SELECT * FROM notes ORDER BY id'),
+      pool.query('SELECT * FROM visions ORDER BY id'),
+      pool.query('SELECT * FROM objectives ORDER BY id'),
+      pool.query('SELECT * FROM employees ORDER BY id'),
+      pool.query('SELECT * FROM project_partners ORDER BY id'),
+      pool.query('SELECT * FROM profit_distributions ORDER BY id'),
+      pool.query('SELECT * FROM partner_payments ORDER BY id'),
+    ]);
 
     console.log(
-  `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} receivables, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes, ${visionsRes.rows.length} visions, ${objectivesRes.rows.length} objectifs`
-);
+      `📦 Export: ${accountsRes.rows.length} comptes, ${transactionsRes.rows.length} transactions, ${receivablesRes.rows.length} receivables, ${projectsRes.rows.length} projets, ${notesRes.rows.length} notes, ${visionsRes.rows.length} visions, ${objectivesRes.rows.length} objectifs, ${employeesRes.rows.length} employés, ${partnersRes.rows.length} associés, ${distributionsRes.rows.length} distributions, ${paymentsRes.rows.length} paiements`
+    );
+
     const backup = {
-  version: '2.1',
-  date: new Date().toISOString(),
-  accounts: accountsRes.rows,
-  transactions: transactionsRes.rows,
-  receivables: receivablesRes.rows,
-  projects: projectsRes.rows,
-  notes: notesRes.rows,
-  visions: visionsRes.rows,
-  objectives: objectivesRes.rows,
-  employees: employeesRes.rows,
-  project_partners: partnersRes.rows,           
-  profit_distributions: distributionsRes.rows,  
-  partner_payments: paymentsRes.rows,          
-};
+      version: '2.2',
+      date: new Date().toISOString(),
+      accounts: accountsRes.rows,
+      transactions: transactionsRes.rows,
+      receivables: receivablesRes.rows,
+      projects: projectsRes.rows,
+      notes: notesRes.rows,
+      visions: visionsRes.rows,
+      objectives: objectivesRes.rows,
+      employees: employeesRes.rows,
+      project_partners: partnersRes.rows,
+      profit_distributions: distributionsRes.rows,
+      partner_payments: paymentsRes.rows,
+    };
+
     res.json(backup);
   } catch (err) {
     console.error('❌ Erreur full-export:', err);
@@ -665,21 +664,22 @@ if (Array.isArray(partner_payments) && partner_payments.length > 0) {
 }
 
     // 6) Reset des séquences PostgreSQL
-    await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
-    await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
-    await client.query(`SELECT setval('receivables_id_seq', (SELECT MAX(id) FROM receivables))`);
-    if (includeProjects) {
-    await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
-    }
-    await client.query(`SELECT setval('visions_id_seq', (SELECT MAX(id) FROM visions))`);
-    await client.query(`SELECT setval('objectives_id_seq', (SELECT MAX(id) FROM objectives))`);
-    await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))`);
-    await client.query('COMMIT');
-    await client.query(`SELECT setval('project_partners_id_seq', (SELECT MAX(id) FROM project_partners))`);         
-    await client.query(`SELECT setval('profit_distributions_id_seq', (SELECT MAX(id) FROM profit_distributions))`);   
-    await client.query(`SELECT setval('partner_payments_id_seq', (SELECT MAX(id) FROM partner_payments))`);         
-    
-    console.log('✅ Restauration committée avec succès');
+await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
+await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
+await client.query(`SELECT setval('receivables_id_seq', (SELECT MAX(id) FROM receivables))`);
+if (includeProjects) {
+  await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
+}
+await client.query(`SELECT setval('visions_id_seq', (SELECT MAX(id) FROM visions))`);
+await client.query(`SELECT setval('objectives_id_seq', (SELECT MAX(id) FROM objectives))`);
+await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))`);
+await client.query(`SELECT setval('project_partners_id_seq', (SELECT MAX(id) FROM project_partners))`);
+await client.query(`SELECT setval('profit_distributions_id_seq', (SELECT MAX(id) FROM profit_distributions))`);
+await client.query(`SELECT setval('partner_payments_id_seq', (SELECT MAX(id) FROM partner_payments))`);
+
+await client.query('COMMIT');
+
+console.log('✅ Restauration committée avec succès');
 
     // 7) Recalculer tous les soldes
     try {
