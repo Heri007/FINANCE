@@ -214,6 +214,9 @@ router.get('/full-export', authenticateToken, async (req, res) => {
   employeesRes,
   contractsRes,
   payrollsRes,
+  partnersRes,        
+  distributionsRes,      
+  paymentsRes,           
 ] = await Promise.all([
   pool.query('SELECT * FROM accounts ORDER BY id'),
   pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
@@ -223,6 +226,9 @@ router.get('/full-export', authenticateToken, async (req, res) => {
   pool.query('SELECT * FROM visions ORDER BY id'),
   pool.query('SELECT * FROM objectives ORDER BY id'),
   pool.query('SELECT * FROM employees ORDER BY id'),
+  pool.query('SELECT * FROM project_partners ORDER BY id'),        
+  pool.query('SELECT * FROM profit_distributions ORDER BY id'),    
+  pool.query('SELECT * FROM partner_payments ORDER BY id'),       
 ]);
 
     console.log(
@@ -239,6 +245,9 @@ router.get('/full-export', authenticateToken, async (req, res) => {
   visions: visionsRes.rows,
   objectives: objectivesRes.rows,
   employees: employeesRes.rows,
+  project_partners: partnersRes.rows,           
+  profit_distributions: distributionsRes.rows,  
+  partner_payments: paymentsRes.rows,          
 };
     res.json(backup);
   } catch (err) {
@@ -305,6 +314,9 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
   visions = [],
   objectives = [],
   employees = [],
+  project_partners = [],         
+  profit_distributions = [],    
+  partner_payments = [],        
 } = backup;
 
 
@@ -336,15 +348,18 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
 
     // 1) SUPPRIMER les données (SANS filtrer par user_id pour tout effacer)
    console.log('🗑️ Suppression de TOUTES les données...');
+  await client.query('DELETE FROM partner_payments');       
+  await client.query('DELETE FROM profit_distributions');   
+  await client.query('DELETE FROM project_partners');       
   await client.query('DELETE FROM transactions');
-    await client.query('DELETE FROM receivables');
+  await client.query('DELETE FROM receivables');
   if (includeProjects) {
   await client.query('DELETE FROM projects');
   }
-  await client.query('DELETE FROM objectives'); // 👈 NEW
-  await client.query('DELETE FROM visions');    // 👈 NEW
+  await client.query('DELETE FROM objectives'); 
+  await client.query('DELETE FROM visions');    
   await client.query('DELETE FROM accounts');
-await client.query('DELETE FROM employees');
+  await client.query('DELETE FROM employees');
 
     // 2) Restaurer les comptes
     console.log(`📦 Restauration de ${backup.accounts.length} comptes...`);
@@ -530,7 +545,6 @@ if (Array.isArray(backup.visions) && backup.visions.length > 0) {
   }
 }
 
-
 // 5ter) Restaurer les objectifs
 if (Array.isArray(backup.objectives) && backup.objectives.length > 0) {
   console.log(`📦 Restauration de ${backup.objectives.length} objectifs...`);
@@ -579,17 +593,91 @@ if (Array.isArray(employees) && employees.length > 0) {
   }
 }
 
+    // 5sexies) Restaurer les associés de projets
+if (Array.isArray(project_partners) && project_partners.length > 0) {
+  console.log(`📦 Restauration de ${project_partners.length} associés...`);
+  for (const partner of project_partners) {
+    await client.query(
+      `INSERT INTO project_partners
+       (id, project_id, name, phase1_percentage, phase2_percentage, 
+        is_main_investor, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        partner.id,
+        partner.project_id,
+        partner.name,
+        partner.phase1_percentage || 0,
+        partner.phase2_percentage || 0,
+        partner.is_main_investor || false,
+        partner.created_at || new Date(),
+        partner.updated_at || new Date(),
+      ]
+    );
+  }
+}
+
+// 5septies) Restaurer les distributions de profits
+if (Array.isArray(profit_distributions) && profit_distributions.length > 0) {
+  console.log(`📦 Restauration de ${profit_distributions.length} distributions...`);
+  for (const dist of profit_distributions) {
+    await client.query(
+      `INSERT INTO profit_distributions
+       (id, project_id, period, start_date, end_date, 
+        total_profit, is_reimbursement_phase, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        dist.id,
+        dist.project_id,
+        dist.period,
+        dist.start_date,
+        dist.end_date,
+        dist.total_profit || 0,
+        dist.is_reimbursement_phase || false,
+        dist.created_at || new Date(),
+      ]
+    );
+  }
+}
+
+// 5octies) Restaurer les paiements aux associés
+if (Array.isArray(partner_payments) && partner_payments.length > 0) {
+  console.log(`📦 Restauration de ${partner_payments.length} paiements...`);
+  for (const payment of partner_payments) {
+    await client.query(
+      `INSERT INTO partner_payments
+       (id, distribution_id, partner_id, amount, transaction_id, 
+        paid_at, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        payment.id,
+        payment.distribution_id,
+        payment.partner_id,
+        payment.amount || 0,
+        payment.transaction_id || null,
+        payment.paid_at || null,
+        payment.created_at || new Date(),
+      ]
+    );
+  }
+}
+
     // 6) Reset des séquences PostgreSQL
     await client.query(`SELECT setval('accounts_id_seq', (SELECT MAX(id) FROM accounts))`);
     await client.query(`SELECT setval('transactions_id_seq', (SELECT MAX(id) FROM transactions))`);
     await client.query(`SELECT setval('receivables_id_seq', (SELECT MAX(id) FROM receivables))`);
     if (includeProjects) {
-      await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
+    await client.query(`SELECT setval('projects_id_seq', (SELECT MAX(id) FROM projects))`);
     }
     await client.query(`SELECT setval('visions_id_seq', (SELECT MAX(id) FROM visions))`);
     await client.query(`SELECT setval('objectives_id_seq', (SELECT MAX(id) FROM objectives))`);
-await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))`);
+    await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM employees))`);
     await client.query('COMMIT');
+    await client.query(`SELECT setval('project_partners_id_seq', (SELECT MAX(id) FROM project_partners))`);         
+    await client.query(`SELECT setval('profit_distributions_id_seq', (SELECT MAX(id) FROM profit_distributions))`);   
+    await client.query(`SELECT setval('partner_payments_id_seq', (SELECT MAX(id) FROM partner_payments))`);         
     
     console.log('✅ Restauration committée avec succès');
 
@@ -711,6 +799,9 @@ router.post('/validate-full', authenticateToken, async (req, res) => {
         receivables: backup?.receivables?.length || 0,
         projects: backup?.projects?.length || 0,
         archived_projects: backup?.archived_projects?.length || 0,
+        project_partners: backup?.project_partners?.length || 0,           
+        profit_distributions: backup?.profit_distributions?.length || 0,   
+        partner_payments: backup?.partner_payments?.length || 0,           
       },
     });
   } catch (err) {
