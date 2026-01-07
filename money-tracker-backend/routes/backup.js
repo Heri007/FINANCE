@@ -214,6 +214,8 @@ router.get('/full-export', authenticateToken, async (req, res) => {
       partnersRes,
       distributionsRes,
       paymentsRes,
+      expenseLinesRes,        
+      revenueLinesRes,        
     ] = await Promise.all([
       pool.query('SELECT * FROM accounts ORDER BY id'),
       pool.query('SELECT * FROM transactions ORDER BY transaction_date, id'),
@@ -226,6 +228,8 @@ router.get('/full-export', authenticateToken, async (req, res) => {
       pool.query('SELECT * FROM project_partners ORDER BY id'),
       pool.query('SELECT * FROM profit_distributions ORDER BY id'),
       pool.query('SELECT * FROM partner_payments ORDER BY id'),
+      pool.query('SELECT * FROM project_expense_lines ORDER BY id'),    
+      pool.query('SELECT * FROM project_revenue_lines ORDER BY id'),    
     ]);
 
     console.log(
@@ -246,6 +250,8 @@ router.get('/full-export', authenticateToken, async (req, res) => {
       project_partners: partnersRes.rows,
       profit_distributions: distributionsRes.rows,
       partner_payments: paymentsRes.rows,
+      project_expense_lines: expenseLinesRes.rows,   
+      project_revenue_lines: revenueLinesRes.rows,    
     };
 
     res.json(backup);
@@ -315,7 +321,9 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
   employees = [],
   project_partners = [],         
   profit_distributions = [],    
-  partner_payments = [],        
+  partner_payments = [],      
+  project_expense_lines = [],    
+  project_revenue_lines = [],    
 } = backup;
 
 
@@ -349,7 +357,9 @@ router.post('/restore-full', authenticateToken, async (req, res) => {
    console.log('🗑️ Suppression de TOUTES les données...');
   await client.query('DELETE FROM partner_payments');       
   await client.query('DELETE FROM profit_distributions');   
-  await client.query('DELETE FROM project_partners');       
+  await client.query('DELETE FROM project_partners');   
+  await client.query('DELETE FROM project_revenue_lines');    
+  await client.query('DELETE FROM project_expense_lines');    
   await client.query('DELETE FROM transactions');
   await client.query('DELETE FROM receivables');
   if (includeProjects) {
@@ -484,6 +494,59 @@ if (includeProjects && Array.isArray(backup.projects) && backup.projects.length 
     );
   }
 }
+
+// Restaurer les expense_lines
+if (Array.isArray(project_expense_lines) && project_expense_lines.length > 0) {
+  console.log(`📦 Restauration de ${project_expense_lines.length} expense_lines...`);
+  for (const line of project_expense_lines) {
+    await client.query(
+      `INSERT INTO project_expense_lines
+       (id, project_id, description, category, projected_amount, actual_amount,
+        transaction_date, is_paid, created_at, last_synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        line.id,
+        line.project_id,
+        line.description || '',
+        line.category || 'Autre',
+        line.projected_amount || 0,
+        line.actual_amount || 0,
+        line.transaction_date,
+        line.is_paid || false,
+        line.created_at || new Date(),
+        line.last_synced_at || null,
+      ]
+    );
+  }
+}
+
+// Restaurer les revenue_lines
+if (Array.isArray(project_revenue_lines) && project_revenue_lines.length > 0) {
+  console.log(`📦 Restauration de ${project_revenue_lines.length} revenue_lines...`);
+  for (const line of project_revenue_lines) {
+    await client.query(
+      `INSERT INTO project_revenue_lines
+       (id, project_id, description, category, projected_amount, actual_amount,
+        transaction_date, is_received, created_at, last_synced_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        line.id,
+        line.project_id,
+        line.description || '',
+        line.category || 'Autre',
+        line.projected_amount || 0,
+        line.actual_amount || 0,
+        line.transaction_date,
+        line.is_received || false,
+        line.created_at || new Date(),
+        line.last_synced_at || null,
+      ]
+    );
+  }
+}
+
     // ✅ 5.5️⃣ Restaurer les notes
     if (Array.isArray(backup.notes) && backup.notes.length > 0) {
       console.log(`📝 Restauration de ${backup.notes.length} notes...`);
@@ -676,6 +739,10 @@ await client.query(`SELECT setval('employees_id_seq', (SELECT MAX(id) FROM emplo
 await client.query(`SELECT setval('project_partners_id_seq', (SELECT MAX(id) FROM project_partners))`);
 await client.query(`SELECT setval('profit_distributions_id_seq', (SELECT MAX(id) FROM profit_distributions))`);
 await client.query(`SELECT setval('partner_payments_id_seq', (SELECT MAX(id) FROM partner_payments))`);
+
+await client.query(`SELECT setval('project_expense_lines_id_seq', (SELECT MAX(id) FROM project_expense_lines))`);    // ✅ AJOUTER
+await client.query(`SELECT setval('project_revenue_lines_id_seq', (SELECT MAX(id) FROM project_revenue_lines))`);    // ✅ AJOUTER
+
 
 await client.query('COMMIT');
 
