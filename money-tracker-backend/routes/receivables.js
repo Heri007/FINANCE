@@ -1,4 +1,4 @@
-// routes/receivables.js - VERSION COMPLÈTE + user_id
+// routes/receivables.js - VERSION CORRIGÉE ET OPTIMISÉE
 
 const express = require('express');
 const router = express.Router();
@@ -7,39 +7,39 @@ const authMiddleware = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { getAccountIds } = require('../config/accounts');
 
+// Middleware global d'authentification
 router.use(authMiddleware);
+
+// Middleware de vérification des comptes spéciaux
+router.use((req, res, next) => {
+  const { RECEIVABLES_ACCOUNT_ID, COFFRE_ACCOUNT_ID } = getAccountIds();
+  
+  if (!RECEIVABLES_ACCOUNT_ID || !COFFRE_ACCOUNT_ID) {
+    return res.status(500).json({
+      success: false,
+      error: 'Configuration système incomplète',
+      details: 'Les comptes "Receivables" et "Coffre" doivent exister.',
+      missing: {
+        receivables: !RECEIVABLES_ACCOUNT_ID,
+        coffre: !COFFRE_ACCOUNT_ID
+      }
+    });
+  }
+  
+  next();
+});
 
 // GET tous les receivables ouverts
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // Test 1 : SANS filtre
-    const testAll = await pool.query('SELECT COUNT(*) FROM receivables');
-
-    // Test 2 : Avec filtre user_id
-    const testUserId = await pool.query(
-      'SELECT COUNT(*) FROM receivables WHERE user_id = $1',
-      [userId]
-    );
-
-    // Test 3 : Avec filtre status
-    const testStatus = await pool.query(
-      'SELECT COUNT(*) FROM receivables WHERE user_id = $1 AND status <> \'closed\'',
-      [userId]
-    );
-
-    // Requête finale
     const result = await pool.query(
       `SELECT * FROM receivables
        WHERE user_id = $1 AND status <> 'closed'
        ORDER BY created_at DESC`,
       [userId]
     );
-
-    if (result.rows.length > 0) {
-      console.log('✅ Receivables trouvés:', result.rows.length);
-    }
 
     res.json(result.rows);
   } catch (err) {
@@ -55,35 +55,30 @@ router.post('/', validate('receivableCreate'), async (req, res) => {
     await client.query('BEGIN');
 
     const { 
-  person, 
-  description, 
-  amount, 
-  sourceaccountid,
-  source_account_id  // Accepte aussi snake_case
-} = req.body;
+      person, 
+      description, 
+      amount, 
+      sourceaccountid,
+      source_account_id  
+    } = req.body;
 
-const finalSourceAccountId = sourceaccountid || source_account_id;
+    // Accepter les deux formats (camelCase et snake_case)
+    const finalSourceAccountId = sourceaccountid || source_account_id;
 
-if (!finalSourceAccountId) {
-  return res.status(400).json({ error: 'source_account_id requis' });
-}
-    const userId = req.user.id;
-
-    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
-
-    if (!RECEIVABLES_ACCOUNT_ID) {
+    if (!finalSourceAccountId) {
       await client.query('ROLLBACK');
-      return res.status(500).json({
-        error: 'Compte RECEIVABLES non configuré (voir config/accounts.js)'
-      });
+      return res.status(400).json({ error: 'source_account_id requis' });
     }
+
+    const userId = req.user.id;
+    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
 
     // 1) Créer le receivable
     const insert = await client.query(
       `INSERT INTO receivables (account_id, person, description, amount, status, source_account_id, user_id)
        VALUES ($1, $2, $3, $4, 'open', $5, $6)
        RETURNING *`,
-      [RECEIVABLES_ACCOUNT_ID, person, description || '', amount, source_account_id, userId]
+      [RECEIVABLES_ACCOUNT_ID, person, description || '', amount, finalSourceAccountId, userId]
     );
 
     const receivable = insert.rows[0];
@@ -94,7 +89,7 @@ if (!finalSourceAccountId) {
        (account_id, type, amount, category, description, transaction_date, is_posted, is_planned, user_id)
        VALUES ($1, 'expense', $2, 'Receivables', $3, NOW()::date, true, false, $4)`,
       [
-        source_account_id,
+        finalSourceAccountId,
         amount,
         `Receivable ${person}${description ? ' - ' + description : ''}`,
         userId
@@ -110,9 +105,10 @@ if (!finalSourceAccountId) {
                 ELSE 0 END
          ), 0)
          FROM transactions
-         WHERE account_id = $1 AND user_id = $2 AND (is_posted = true OR is_planned = false)
-       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
-      [source_account_id, userId]
+         WHERE account_id = $1 AND user_id = $2 AND is_posted = true
+       ), updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND user_id = $2`,
+      [finalSourceAccountId, userId]
     );
 
     await client.query('COMMIT');
@@ -142,7 +138,8 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
            amount = COALESCE($2, amount),
            description = COALESCE($3, description),
            updated_at = NOW()
-       WHERE id = $4 AND user_id = $5 RETURNING *`,
+       WHERE id = $4 AND user_id = $5 
+       RETURNING *`,
       [status || null, amount || null, description || null, id, userId]
     );
 
@@ -157,8 +154,10 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
     await client.query(
       `UPDATE accounts SET balance = (
          SELECT COALESCE(SUM(amount), 0)
-         FROM receivables WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
-       ), updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND user_id = $2`,
+         FROM receivables 
+         WHERE account_id = $1 AND user_id = $2 AND status <> 'closed'
+       ), updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1 AND user_id = $2`,
       [accountId, userId]
     );
 
@@ -173,7 +172,7 @@ router.patch('/:id', validate('receivableUpdate'), async (req, res) => {
   }
 });
 
-// ✅ POST /pay (sans body = OK)
+// POST /pay - Marquer un receivable comme payé
 router.post('/:id/pay', async (req, res) => {
   const client = await pool.connect();
   
@@ -196,11 +195,6 @@ router.post('/:id/pay', async (req, res) => {
     
     const rec = rows[0];
     const { COFFRE_ACCOUNT_ID } = getAccountIds();
-    
-    if (!COFFRE_ACCOUNT_ID) {
-      await client.query('ROLLBACK');
-      return res.status(500).json({ error: 'Compte COFFRE non configuré' });
-    }
     
     // 2. Marquer comme payé
     await client.query(

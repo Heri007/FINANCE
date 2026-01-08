@@ -18,7 +18,7 @@ const logger = require('./config/logger');
 const errorHandler = require('./middleware/errorHandler');
 const pool = require('./config/database');
 const { authenticateToken } = require('./middleware/auth');
-const loadAccountIds = require('./config/accounts');
+const { loadAccountIds } = require('./config/accounts');
 
 // Sécurité existante
 const corsOptions = require('./middleware/corsConfig');
@@ -344,9 +344,7 @@ app.use((err, req, res, next) => {
   errorHandler(err, req, res, next);
 });
 
-// =================================================================
-// PHASE 12: DÉMARRAGE SERVEUR (EXISTANT AMÉLIORÉ)
-// =================================================================
+// PHASE 12: DÉMARRAGE SERVEUR (AMÉLIORATION DU LOG)
 const server = app.listen(PORT, () => {
   logger.info('='.repeat(60));
   logger.info('🚀 Money Tracker Backend OPTIMISÉ démarré');
@@ -366,13 +364,30 @@ const server = app.listen(PORT, () => {
       
       try {
         const ids = await loadAccountIds();
-        logger.info(`✅ IDs: RECEIVABLES=${ids.RECEIVABLES_ACCOUNT_ID}, COFFRE=${ids.COFFRE_ACCOUNT_ID}`);
+        
+        if (ids.RECEIVABLES_ACCOUNT_ID && ids.COFFRE_ACCOUNT_ID) {
+          logger.info(`✅ Comptes spéciaux chargés: RECEIVABLES=${ids.RECEIVABLES_ACCOUNT_ID}, COFFRE=${ids.COFFRE_ACCOUNT_ID}`);
+        } else {
+          logger.warn('⚠️  Comptes spéciaux incomplets:');
+          if (!ids.RECEIVABLES_ACCOUNT_ID) {
+            logger.warn('   - RECEIVABLES manquant');
+          }
+          if (!ids.COFFRE_ACCOUNT_ID) {
+            logger.warn('   - COFFRE manquant');
+          }
+          logger.warn('   ℹ️  Les fonctionnalités "Receivables" seront limitées');
+        }
       } catch (e) {
         logger.warn('⚠️  Impossible de charger les IDs de comptes spéciaux');
+        logger.error('Erreur complète:', e); // ← LOG COMPLET DE L'ERREUR
+        logger.debug('Message:', e.message);
+        logger.debug('Stack:', e.stack);
+        logger.warn('   ℹ️  Les fonctionnalités "Receivables" seront limitées');
       }
     }
   });
 });
+
 
 // Gestion propre de l'arrêt
 const gracefulShutdown = async (signal) => {
