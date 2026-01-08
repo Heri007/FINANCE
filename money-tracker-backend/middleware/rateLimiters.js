@@ -1,8 +1,9 @@
-// money-tracker-backend/middleware/rateLimiters.js
-
 const rateLimit = require('express-rate-limit');
 const logger = require('../config/logger');
 
+/**
+ * Handler pour rate limit dépassé
+ */
 const rateLimitHandler = (req, res) => {
   logger.warn({
     message: '⚠️ Rate limit dépassé',
@@ -19,52 +20,62 @@ const rateLimitHandler = (req, res) => {
 };
 
 /**
- * ✅ Rate limiter DÉSACTIVÉ en développement
+ * Créer un rate limiter simple sans Redis
  */
-const generalLimiter = rateLimit({
+const createRateLimiter = (config) => {
+  return rateLimit({
+    ...config,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler
+  });
+};
+
+// Rate limiter général (100 requêtes par 15 minutes)
+const generalLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 100 : 10000, // ✅ 10000 en dev
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-  skip: (req) => process.env.NODE_ENV === 'development', // ✅ Skip en dev
+  max: process.env.NODE_ENV === 'production' ? 100 : 10000,
+  message: {
+    success: false,
+    error: 'Trop de requêtes, veuillez réessayer plus tard.'
+  },
+  skip: (req) => process.env.NODE_ENV === 'development'
 });
 
-/**
- * Auth limiter : Strict même en dev (sécurité)
- */
-const authLimiter = rateLimit({
+// Rate limiter pour l'authentification (5 tentatives par 15 minutes)
+const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 5 : 50, // ✅ 50 en dev
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  handler: (req, res) => {
-    logger.error({
-      message: '🚨 ALERTE: Tentatives de login excessives',
-      ip: req.ip,
-      path: req.path,
-      userAgent: req.get('user-agent')
-    });
-    res.status(429).json({
-      error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.',
-    });
+  max: process.env.NODE_ENV === 'production' ? 5 : 50,
+  message: {
+    success: false,
+    error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.'
+  },
+  skipSuccessfulRequests: true
+});
+
+// Rate limiter pour les imports (3 par heure)
+const importLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 3 : 100,
+  message: {
+    success: false,
+    error: 'Limite d\'imports atteinte. Réessayez dans 1 heure.'
   }
 });
 
-/**
- * Opérations sensibles : Plus permissif en dev
- */
-const sensitiveLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // ✅ 1000 en dev
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
+// Rate limiter pour les modifications (30 par minute)
+const mutationLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 30 : 1000,
+  message: {
+    success: false,
+    error: 'Trop de modifications. Ralentissez un peu.'
+  }
 });
 
 module.exports = {
   generalLimiter,
   authLimiter,
-  sensitiveLimiter
+  importLimiter,
+  mutationLimiter
 };
