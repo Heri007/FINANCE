@@ -1,50 +1,37 @@
 // src/contexts/FinanceContext.jsx
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-
-import { apiRequest, API_BASE } from '../services/api';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { apiRequest } from '../services/api';
 import { accountsService } from '../services/accountsService';
-import { transactionsService } from '../services/transactionsService';
-import { projectsService } from '../services/projectsService';
-import { receivablesService } from '../services/receivablesService';
-
+import transactionsService from '../services/transactionsService';
+import projectsService from '../services/projectsService';
+import { receivablesService} from '../services/receivablesService';
 import { useUser } from './UserContext';
 import { parseJSONSafe } from '../domain/finance/parsers';
 import { buildTransactionSignature as createSignature } from '../domain/finance/signature';
 
 /**
- * Normalise une date au format YYYY-MM-DD (sans timezone)
+ * Normalise une date au format YYYY-MM-DD sans timezone
  * @param {string|Date|null} value - Valeur de date à normaliser
  * @returns {string|null} - Date au format YYYY-MM-DD ou null
  */
 const toYmd = (value) => {
   if (!value) return null;
-
   try {
     // Si c'est déjà une string YYYY-MM-DD, la retourner telle quelle
     if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return value;
     }
-
     // Si c'est une string ISO ou autre format, extraire la partie date
     if (typeof value === 'string') {
       const d = new Date(value);
       if (Number.isNaN(d.getTime())) return null;
       return d.toISOString().split('T')[0];
     }
-
     // Si c'est un objet Date
     if (value instanceof Date) {
       if (Number.isNaN(value.getTime())) return null;
       return value.toISOString().split('T')[0];
     }
-
     return null;
   } catch (error) {
     console.error('Erreur normalisation date:', error, value);
@@ -57,6 +44,9 @@ const FinanceContext = createContext(null);
 export function FinanceProvider({ children }) {
   const { isAuthenticated } = useUser();
 
+  // ============================================================================
+  // ÉTATS
+  // ============================================================================
   const [accounts, setAccounts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -71,44 +61,45 @@ export function FinanceProvider({ children }) {
 
   const [projectExpenseLines, setProjectExpenseLines] = useState([]);
   const [projectRevenueLines, setProjectRevenueLines] = useState([]);
-  const [loading, setLoading] = useState(false);
+
+  // ✅ AJOUT : État global d'erreur
+  const [error, setError] = useState(null);
+  const clearError = useCallback(() => setError(null), []);
+
+  // ============================================================================
+  // REFRESH FUNCTIONS
+  // ============================================================================
 
   const refreshProjectLines = useCallback(async () => {
     if (!isAuthenticated) return;
+    try {
+      const [unpaidExpenses, pendingRevenues] = await Promise.all([
+        apiRequest('projects/expense-lines/unpaid'),
+        apiRequest('projects/revenue-lines/pending'),
+      ]);
 
-    const [unpaidExpenses, pendingRevenues] = await Promise.all([
-      apiRequest('/projects/expense-lines/unpaid'),
-      apiRequest('/projects/revenue-lines/pending'),
-    ]);
-
-    console.log('🧪 RAW unpaidExpenses:', unpaidExpenses);
-    console.log('🧪 RAW pendingRevenues:', pendingRevenues);
-
-    console.log('✅ Project lines chargées:', {
-      unpaidExpenses: unpaidExpenses.length,
-      pendingRevenues: pendingRevenues.length,
-    });
-
-    setProjectExpenseLines(Array.isArray(unpaidExpenses) ? unpaidExpenses : []);
-    setProjectRevenueLines(Array.isArray(pendingRevenues) ? pendingRevenues : []);
+      setProjectExpenseLines(Array.isArray(unpaidExpenses) ? unpaidExpenses : []);
+      setProjectRevenueLines(Array.isArray(pendingRevenues) ? pendingRevenues : []);
+    } catch (err) {
+      console.error('Erreur refresh project lines:', err);
+      setError({ message: 'Erreur lors du chargement des lignes de projet', details: err });
+    }
   }, [isAuthenticated]);
 
-  // ============================================================
-  // REFRESH FUNCTIONS
-  // ============================================================
   const refreshAccounts = useCallback(async () => {
     if (!isAuthenticated) return;
-
     setAccountsLoading(true);
     try {
       const data = await accountsService.getAll();
       setAccounts(Array.isArray(data) ? data : []);
-    } catch (error) {
-      if (error?.status === 401) {
+      setError(null);
+    } catch (err) {
+      if (err?.status === 401) {
         setAccounts([]);
         return;
       }
-      console.error('Erreur chargement comptes:', error);
+      console.error('Erreur chargement comptes:', err);
+      setError({ message: 'Erreur lors du chargement des comptes', details: err });
       setAccounts([]);
     } finally {
       setAccountsLoading(false);
@@ -117,17 +108,18 @@ export function FinanceProvider({ children }) {
 
   const refreshTransactions = useCallback(async () => {
     if (!isAuthenticated) return;
-
     setTransactionsLoading(true);
     try {
       const data = await transactionsService.getAll();
       setTransactions(Array.isArray(data) ? data : []);
-    } catch (error) {
-      if (error?.status === 401) {
+      setError(null);
+    } catch (err) {
+      if (err?.status === 401) {
         setTransactions([]);
         return;
       }
-      console.error('Erreur chargement transactions:', error);
+      console.error('Erreur chargement transactions:', err);
+      setError({ message: 'Erreur lors du chargement des transactions', details: err });
       setTransactions([]);
     } finally {
       setTransactionsLoading(false);
@@ -140,25 +132,26 @@ export function FinanceProvider({ children }) {
     try {
       const data = await projectsService.getAll();
 
-      // ✅ AJOUT: Normaliser les données avant de les stocker
+      // Normaliser les données avant de les stocker
       const normalized = Array.isArray(data)
         ? data.map((project) => ({
             ...project,
-            // Parser expenses/revenues si c'est du JSON string
-            expenses: parseJSONSafe(project.expenses),
-            revenues: parseJSONSafe(project.revenues),
-            expenseLines: project.expenseLines || project.expense_lines || [],
-            revenueLines: project.revenueLines || project.revenue_lines || [],
+            expenses: parseJSONSafe(project.expenses, []),
+            revenues: parseJSONSafe(project.revenues, []),
+            expenseLines: project.expenseLines ?? project.expenselines ?? [],
+            revenueLines: project.revenueLines ?? project.revenuelines ?? [],
           }))
         : [];
 
       setProjects(normalized);
-    } catch (error) {
-      if (error?.status === 401) {
+      setError(null);
+    } catch (err) {
+      if (err?.status === 401) {
         setProjects([]);
         return;
       }
-      console.error('Erreur chargement projets:', error);
+      console.error('Erreur chargement projets:', err);
+      setError({ message: 'Erreur lors du chargement des projets', details: err });
       setProjects([]);
     } finally {
       setProjectsLoading(false);
@@ -167,45 +160,44 @@ export function FinanceProvider({ children }) {
 
   const refreshReceivables = useCallback(async () => {
     if (!isAuthenticated) return;
-
     try {
       const data = await receivablesService.getAll();
       const total = Array.isArray(data)
-        ? data.reduce((sum, r) => sum + Number(r?.amount || 0), 0)
+        ? data.reduce((sum, r) => sum + Number(r?.amount ?? 0), 0)
         : 0;
       setTotalOpenReceivables(total);
-    } catch (error) {
-      if (error?.status === 401) {
+      setError(null);
+    } catch (err) {
+      if (err?.status === 401) {
         setTotalOpenReceivables(0);
         return;
       }
+      console.error('Erreur chargement receivables:', err);
+      setError({ message: 'Erreur lors du chargement des receivables', details: err });
       setTotalOpenReceivables(0);
     }
   }, [isAuthenticated]);
 
-  // ============================================================
+  // ============================================================================
   // INITIAL LOAD
-  // ============================================================
+  // ============================================================================
   useEffect(() => {
-    console.log('🔄 FinanceContext: isAuthenticated =', isAuthenticated);
-
     if (!isAuthenticated) {
-      console.log('❌ FinanceContext: Non authentifié, reset données');
       setAccounts([]);
       setTransactions([]);
       setProjects([]);
       setTotalOpenReceivables(0);
       setProjectExpenseLines([]);
       setProjectRevenueLines([]);
+      setError(null);
       return;
     }
-    console.log('✅ FinanceContext: Authentifié, chargement données...');
 
     refreshAccounts();
     refreshTransactions();
     refreshProjects();
     refreshReceivables();
-    refreshProjectLines(); // ✅ AJOUT
+    refreshProjectLines();
   }, [
     isAuthenticated,
     refreshAccounts,
@@ -215,75 +207,88 @@ export function FinanceProvider({ children }) {
     refreshProjectLines,
   ]);
 
-  // ============================================================
+  // ============================================================================
   // MUTATIONS - ACCOUNTS
-  // ============================================================
+  // ============================================================================
   const createAccount = useCallback(
     async (data) => {
-      const created = await accountsService.create(data);
-      await refreshAccounts();
-      return created;
+      try {
+        const created = await accountsService.create(data);
+        await refreshAccounts();
+        setError(null);
+        return created;
+      } catch (err) {
+        console.error('Erreur createAccount:', err);
+        setError({ message: 'Erreur lors de la création du compte', details: err });
+        throw err;
+      }
     },
     [refreshAccounts]
   );
 
   const updateAccount = useCallback(
     async (id, data) => {
-      const updated = await accountsService.update(id, data);
-      await refreshAccounts();
-      return updated;
+      try {
+        const updated = await accountsService.update(id, data);
+        await refreshAccounts();
+        setError(null);
+        return updated;
+      } catch (err) {
+        console.error('Erreur updateAccount:', err);
+        setError({ message: 'Erreur lors de la mise à jour du compte', details: err });
+        throw err;
+      }
     },
     [refreshAccounts]
   );
 
   const deleteAccount = useCallback(
     async (id) => {
-      await accountsService.delete(id);
-      await refreshAccounts();
+      try {
+        await accountsService.delete(id);
+        await refreshAccounts();
+        setError(null);
+      } catch (err) {
+        console.error('Erreur deleteAccount:', err);
+        setError({ message: 'Erreur lors de la suppression du compte', details: err });
+        throw err;
+      }
     },
     [refreshAccounts]
   );
 
-  // ============================================================
+  // ============================================================================
   // MUTATIONS - TRANSACTIONS
-  // ============================================================
+  // ============================================================================
   const createTransaction = useCallback(
     async (data) => {
       try {
         const payload = {
-          account_id: parseInt(data.accountid || data.accountId || data.account_id, 10),
+          accountid: parseInt(data.accountid ?? data.accountId ?? data.accountid, 10),
           type: data.type,
           amount: parseFloat(data.amount),
-          category: data.category || 'Autre',
-          description: data.description || '',
-          date:
-            data.date ||
-            data.transactiondate ||
-            data.transaction_date ||
-            new Date().toISOString().split('T')[0],
-          is_planned: data.isplanned ?? data.is_planned ?? false,
-          is_posted: data.isposted ?? data.is_posted ?? true,
-          project_id: data.projectid || data.projectId || data.project_id || null,
-          project_line_id: data.projectlineid || data.project_line_id || null,
+          category: data.category ?? 'Autre',
+          description: data.description ?? '',
+          date: data.date ?? data.transactiondate ?? data.transactiondate ?? new Date().toISOString().split('T')[0],
+          isplanned: data.isplanned ?? data.isplanned ?? false,
+          isposted: data.isposted ?? data.isposted ?? true,
+          projectid: data.projectid ?? data.projectId ?? data.projectid ?? null,
+          projectlineid: data.projectlineid ?? data.projectlineid ?? null,
         };
 
-        const response = await apiRequest('/transactions', {
+        const response = await apiRequest('transactions', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
 
-        console.log('✅ Transaction créée:', response);
-
         await refreshTransactions();
         await refreshAccounts();
-
+        setError(null);
         return response;
-      } catch (error) {
-        console.error('❌ Erreur createTransaction:', error);
-        if (error.details) {
-          console.error('📋 Détails validation:', error.details);
-        }
-        throw error;
+      } catch (err) {
+        console.error('Erreur createTransaction:', err);
+        setError({ message: 'Erreur lors de la création de la transaction', details: err });
+        throw err;
       }
     },
     [refreshTransactions, refreshAccounts]
@@ -293,34 +298,31 @@ export function FinanceProvider({ children }) {
     async (id, data) => {
       try {
         const payload = {
-          account_id: parseInt(data.accountid || data.accountId || data.account_id, 10),
+          accountid: parseInt(data.accountid ?? data.accountId ?? data.accountid, 10),
           type: data.type,
           amount: parseFloat(data.amount),
-          category: data.category || 'Autre',
-          description: data.description || '',
-          date:
-            data.date ||
-            data.transactiondate ||
-            data.transaction_date ||
-            new Date().toISOString().split('T')[0],
-          is_planned: data.isplanned ?? data.is_planned ?? false,
-          is_posted: data.isposted ?? data.is_posted ?? true,
-          project_id: data.projectid || data.projectId || data.project_id || null,
-          project_line_id: data.projectlineid || data.project_line_id || null,
+          category: data.category ?? 'Autre',
+          description: data.description ?? '',
+          date: data.date ?? data.transactiondate ?? data.transactiondate ?? new Date().toISOString().split('T')[0],
+          isplanned: data.isplanned ?? data.isplanned ?? false,
+          isposted: data.isposted ?? data.isposted ?? true,
+          projectid: data.projectid ?? data.projectId ?? data.projectid ?? null,
+          projectlineid: data.projectlineid ?? data.projectlineid ?? null,
         };
 
-        const response = await apiRequest(`/transactions/${id}`, {
+        const response = await apiRequest(`transactions/${id}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
 
         await refreshTransactions();
         await refreshAccounts();
-
+        setError(null);
         return response;
-      } catch (error) {
-        console.error('❌ Erreur updateTransaction:', error);
-        throw error;
+      } catch (err) {
+        console.error('Erreur updateTransaction:', err);
+        setError({ message: 'Erreur lors de la mise à jour de la transaction', details: err });
+        throw err;
       }
     },
     [refreshTransactions, refreshAccounts]
@@ -329,35 +331,50 @@ export function FinanceProvider({ children }) {
   const deleteTransaction = useCallback(
     async (id) => {
       try {
-        await apiRequest(`/transactions/${id}`, { method: 'DELETE' });
+        await apiRequest(`transactions/${id}`, { method: 'DELETE' });
         await refreshTransactions();
         await refreshAccounts();
-      } catch (error) {
-        console.error('Erreur deleteTransaction:', error);
-        throw error;
+        setError(null);
+      } catch (err) {
+        console.error('Erreur deleteTransaction:', err);
+        setError({ message: 'Erreur lors de la suppression de la transaction', details: err });
+        throw err;
       }
     },
     [refreshTransactions, refreshAccounts]
   );
 
-  // ============================================================
+  // ============================================================================
   // MUTATIONS - PROJECTS
-  // ============================================================
-
+  // ============================================================================
   const createProject = useCallback(
     async (data) => {
-      const created = await projectsService.create(data);
-      await refreshProjects();
-      return created;
+      try {
+        const created = await projectsService.create(data);
+        await refreshProjects();
+        setError(null);
+        return created;
+      } catch (err) {
+        console.error('Erreur createProject:', err);
+        setError({ message: 'Erreur lors de la création du projet', details: err });
+        throw err;
+      }
     },
     [refreshProjects]
   );
 
   const updateProject = useCallback(
     async (id, data) => {
-      const updated = await projectsService.update(id, data);
-      await refreshProjects();
-      return updated;
+      try {
+        const updated = await projectsService.update(id, data);
+        await refreshProjects();
+        setError(null);
+        return updated;
+      } catch (err) {
+        console.error('Erreur updateProject:', err);
+        setError({ message: 'Erreur lors de la mise à jour du projet', details: err });
+        throw err;
+      }
     },
     [refreshProjects]
   );
@@ -365,11 +382,13 @@ export function FinanceProvider({ children }) {
   const deleteProject = useCallback(
     async (id) => {
       try {
-        await apiRequest(`/projects/${id}`, { method: 'DELETE' });
+        await apiRequest(`projects/${id}`, { method: 'DELETE' });
         await refreshProjects();
-      } catch (error) {
-        console.error('Erreur deleteProject:', error);
-        throw error;
+        setError(null);
+      } catch (err) {
+        console.error('Erreur deleteProject:', err);
+        setError({ message: 'Erreur lors de la suppression du projet', details: err });
+        throw err;
       }
     },
     [refreshProjects]
@@ -378,48 +397,36 @@ export function FinanceProvider({ children }) {
   const completeProject = useCallback(
     async (projectId) => {
       try {
-        console.log('✅ Complétion projet ID:', projectId);
-
-        // Appeler l'endpoint backend
-        const response = await apiRequest(`/projects/${projectId}/complete`, {
+        const response = await apiRequest(`projects/${projectId}/complete`, {
           method: 'POST',
         });
 
-        console.log('✅ Projet complété:', response);
-
-        // Rafraîchir les projets
         await refreshProjects();
-
+        setError(null);
         return { success: true };
-      } catch (error) {
-        console.error('❌ Erreur completeProject:', error);
-        if (error.details) {
-          console.error('📋 Détails validation:', error.details);
-        }
-        throw error;
+      } catch (err) {
+        console.error('Erreur completeProject:', err);
+        setError({ message: 'Erreur lors de la complétion du projet', details: err });
+        throw err;
       }
     },
     [refreshProjects]
   );
 
-  const activateProject = useCallback(
+    const activateProject = useCallback(
     async (projectId) => {
       try {
         const project = projects.find((p) => String(p.id) === String(projectId));
-        if (!project) {
-          throw new Error('Projet introuvable');
-        }
+        if (!project) throw new Error('Projet introuvable');
 
         const parseExpenses = (data) => {
-          // ✅ AJOUT: Gérer si data est déjà un array
           if (Array.isArray(data)) return data;
-
           if (!data || typeof data !== 'string') return [];
           try {
             const parsed = JSON.parse(data);
             return Array.isArray(parsed) ? parsed : [];
           } catch (e) {
-            console.error('Parse expenses failed', e);
+            console.error('Parse expenses failed:', e);
             return [];
           }
         };
@@ -473,73 +480,53 @@ export function FinanceProvider({ children }) {
         await refreshProjects();
         await Promise.all([refreshTransactions(), refreshAccounts()]);
 
-        return { success: true, transactionCount: newTransactions.length };
-      } catch (error) {
-        console.error('Erreur activation projet', error);
-        throw error;
+        setError(null);
+        return {
+          success: true,
+          transactionCount: newTransactions.length,
+        };
+      } catch (err) {
+        console.error('Erreur activation projet:', err);
+        setError({ message: 'Erreur lors de l\'activation du projet', details: err });
+        throw err;
       }
     },
-    [
-      projects,
-      accounts,
-      createTransaction,
-      updateProject,
-      refreshProjects,
-      refreshTransactions,
-      refreshAccounts,
-    ]
+    [projects, accounts, createTransaction, updateProject, refreshProjects, refreshTransactions, refreshAccounts]
   );
 
   const deactivateProject = useCallback(
     async (projectId) => {
       try {
-        console.log('🔴 Désactivation projet ID:', projectId);
-
         const project = projects?.find((p) => p.id === projectId);
-        if (!project) {
-          throw new Error('Projet introuvable');
-        }
+        if (!project) throw new Error('Projet introuvable');
 
-        // ✅ PAYLOAD MINIMAL
         const payload = {
           name: project.name,
-          description: project.description || '',
+          description: project.description ?? '',
           type: project.type,
-          status: 'paused', // ✅ Utiliser "paused"
+          status: 'paused',
           startDate: project.startDate,
-          endDate: project.endDate || null,
+          endDate: project.endDate ?? null,
           totalCost: Number(project.totalCost) || 0,
           totalRevenues: Number(project.totalRevenues) || 0,
           netProfit: Number(project.netProfit) || 0,
           roi: Number(project.roi) || 0,
-          expenses:
-            typeof project.expenses === 'string'
-              ? project.expenses
-              : JSON.stringify(project.expenses || []),
-          revenues:
-            typeof project.revenues === 'string'
-              ? project.revenues
-              : JSON.stringify(project.revenues || []),
-          // ❌ NE PAS inclure: allocation, revenueAllocation
+          expenses: typeof project.expenses === 'string' ? project.expenses : JSON.stringify(project.expenses ?? []),
+          revenues: typeof project.revenues === 'string' ? project.revenues : JSON.stringify(project.revenues ?? []),
         };
 
-        console.log('📤 Payload désactivation:', payload);
-
-        await apiRequest(`/projects/${projectId}`, {
+        await apiRequest(`projects/${projectId}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
 
-        console.log('✅ Projet désactivé (paused), rafraîchissement...');
         await refreshProjects();
-
+        setError(null);
         return { success: true };
-      } catch (error) {
-        console.error('❌ Erreur deactivateProject:', error);
-        if (error.details) {
-          console.error('📋 Détails validation:', error.details);
-        }
-        throw error;
+      } catch (err) {
+        console.error('Erreur deactivateProject:', err);
+        setError({ message: 'Erreur lors de la désactivation du projet', details: err });
+        throw err;
       }
     },
     [projects, refreshProjects]
@@ -548,54 +535,36 @@ export function FinanceProvider({ children }) {
   const reactivateProject = useCallback(
     async (projectId) => {
       try {
-        console.log('🟢 Réactivation projet ID:', projectId);
-
         const project = projects?.find((p) => p.id === projectId);
-        if (!project) {
-          throw new Error('Projet introuvable');
-        }
+        if (!project) throw new Error('Projet introuvable');
 
-        // ✅ PAYLOAD MINIMAL - Ne pas envoyer allocation
         const payload = {
           name: project.name,
-          description: project.description || '',
+          description: project.description ?? '',
           type: project.type,
-          status: 'active', // ✅ Réactiver
+          status: 'active',
           startDate: project.startDate,
-          endDate: project.endDate || null,
+          endDate: project.endDate ?? null,
           totalCost: Number(project.totalCost) || 0,
           totalRevenues: Number(project.totalRevenues) || 0,
           netProfit: Number(project.netProfit) || 0,
           roi: Number(project.roi) || 0,
-          // Formatter expenses et revenues en string JSON
-          expenses:
-            typeof project.expenses === 'string'
-              ? project.expenses
-              : JSON.stringify(project.expenses || []),
-          revenues:
-            typeof project.revenues === 'string'
-              ? project.revenues
-              : JSON.stringify(project.revenues || []),
-          // ❌ NE PAS inclure: allocation, revenueAllocation, etc.
+          expenses: typeof project.expenses === 'string' ? project.expenses : JSON.stringify(project.expenses ?? []),
+          revenues: typeof project.revenues === 'string' ? project.revenues : JSON.stringify(project.revenues ?? []),
         };
 
-        console.log('📤 Payload réactivation:', payload);
-
-        await apiRequest(`/projects/${projectId}`, {
+        await apiRequest(`projects/${projectId}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
 
-        console.log('✅ Projet réactivé, rafraîchissement...');
         await refreshProjects();
-
+        setError(null);
         return { success: true };
-      } catch (error) {
-        console.error('❌ Erreur reactivateProject:', error);
-        if (error.details) {
-          console.error('📋 Détails validation:', error.details);
-        }
-        throw error;
+      } catch (err) {
+        console.error('Erreur reactivateProject:', err);
+        setError({ message: 'Erreur lors de la réactivation du projet', details: err });
+        throw err;
       }
     },
     [projects, refreshProjects]
@@ -603,13 +572,14 @@ export function FinanceProvider({ children }) {
 
   const archiveProject = useCallback(
     async (projectId) => {
-      // ✅ archiveProject = completeProject (même comportement)
       return await completeProject(projectId);
     },
     [completeProject]
   );
 
-  // --- IMPORT BULK TRANSACTIONS ---
+  // ============================================================================
+  // IMPORT BULK TRANSACTIONS
+  // ============================================================================
   const importTransactions = useCallback(
     async (importedTransactions) => {
       if (!Array.isArray(importedTransactions) || importedTransactions.length === 0) {
@@ -617,33 +587,29 @@ export function FinanceProvider({ children }) {
       }
 
       try {
-        console.log('📥 Import CSV:', importedTransactions.length, 'transactions');
-
-        // 1. Récupérer les transactions existantes (déjà en mémoire)
-        const existingTransactions = transactions || [];
-        console.log(`📊 ${existingTransactions.length} transactions en base`);
+        // 1. Récupérer les transactions existantes
+        const existingTransactions = transactions;
 
         // 2. Créer un index des signatures existantes
         const existingSignatures = new Map();
         existingTransactions.forEach((t) => {
           const sig = createSignature({
-            accountId: t.account_id, // ✅ accountId (camelCase)
-            date: t.transaction_date || t.date, // ✅ date (pas transactiondate)
+            accountId: t.accountid,
+            date: t.transactiondate ?? t.date,
             amount: t.amount,
             type: t.type,
             description: t.description,
-            category: t.category || 'Autre', // ✅ Ajouter category
+            category: t.category ?? 'Autre',
           });
           if (sig) {
             existingSignatures.set(sig, {
               id: t.id,
               description: t.description,
               amount: t.amount,
-              date: t.transaction_date || t.date,
+              date: t.transactiondate ?? t.date,
             });
           }
         });
-        console.log(`🔑 ${existingSignatures.size} signatures uniques indexées`);
 
         // 3. Filtrer les transactions à importer
         const newTransactions = [];
@@ -652,12 +618,12 @@ export function FinanceProvider({ children }) {
 
         importedTransactions.forEach((trx, index) => {
           const sig = createSignature({
-            accountId: trx.accountId, // ✅ Déjà OK
-            date: trx.date, // ✅ Déjà OK
+            accountId: trx.accountId,
+            date: trx.date,
             amount: trx.amount,
             type: trx.type,
             description: trx.description,
-            category: trx.category || 'Autre', // ✅ Ajouter category
+            category: trx.category ?? 'Autre',
           });
 
           if (!sig) {
@@ -684,12 +650,6 @@ export function FinanceProvider({ children }) {
           }
         });
 
-        console.log('📊 ANALYSE:');
-        console.log(`  - Total CSV: ${importedTransactions.length}`);
-        console.log(`  - Nouvelles: ${newTransactions.length}`);
-        console.log(`  - Doublons: ${duplicates.length}`);
-        console.log(`  - Invalides: ${invalid.length}`);
-
         // 4. Si aucune nouvelle transaction, arrêter
         if (newTransactions.length === 0) {
           return {
@@ -709,8 +669,8 @@ export function FinanceProvider({ children }) {
           if (!impactByAccount[accId]) {
             const account = accounts.find((a) => a.id === accId);
             impactByAccount[accId] = {
-              name: account?.name || 'Compte inconnu',
-              currentBalance: parseFloat(account?.balance || 0),
+              name: account?.name ?? 'Compte inconnu',
+              currentBalance: parseFloat(account?.balance) || 0,
               income: 0,
               expense: 0,
               count: 0,
@@ -725,67 +685,60 @@ export function FinanceProvider({ children }) {
         });
 
         // 6. Générer le message de confirmation
-        let impactDetails = '\n\n📊 IMPACT SUR LES SOLDES:\n';
+        let impactDetails = '\n\n📊 IMPACT SUR LES SOLDES :\n';
         Object.values(impactByAccount).forEach((acc) => {
           const netImpact = acc.income - acc.expense;
           const newBalance = acc.currentBalance + netImpact;
           const sign = netImpact >= 0 ? '+' : '';
-          impactDetails += `\n${acc.name} (${acc.count} trx):\n`;
-          impactDetails += `  Solde actuel: ${acc.currentBalance.toLocaleString('fr-FR')} Ar\n`;
-          if (acc.income > 0)
-            impactDetails += `  + Revenus: ${acc.income.toLocaleString('fr-FR')} Ar\n`;
-          if (acc.expense > 0)
-            impactDetails += `  - Dépenses: ${acc.expense.toLocaleString('fr-FR')} Ar\n`;
-          impactDetails += `  = Nouveau solde: ${newBalance.toLocaleString('fr-FR')} Ar (${sign}${netImpact.toLocaleString('fr-FR')})\n`;
+
+          impactDetails += `\n• ${acc.name} (${acc.count} trx) :\n`;
+          impactDetails += `  Solde actuel : ${acc.currentBalance.toLocaleString('fr-FR')} Ar\n`;
+          if (acc.income > 0) impactDetails += `  + Revenus : ${acc.income.toLocaleString('fr-FR')} Ar\n`;
+          if (acc.expense > 0) impactDetails += `  - Dépenses : ${acc.expense.toLocaleString('fr-FR')} Ar\n`;
+          impactDetails += `  → Nouveau solde : ${newBalance.toLocaleString('fr-FR')} Ar (${sign}${netImpact.toLocaleString('fr-FR')} Ar)\n`;
         });
 
-        const confirmMsg =
-          `📥 IMPORT CSV - CONFIRMATION\n\n` +
-          `✅ Nouvelles transactions: ${newTransactions.length}\n` +
-          `⚠️  Doublons ignorés: ${duplicates.length}\n` +
-          (invalid.length > 0 ? `❌ Invalides ignorées: ${invalid.length}\n` : '') +
-          impactDetails +
-          `\n\nVoulez-vous importer ces ${newTransactions.length} nouvelles transactions ?`;
+        const confirmMsg = `
+📥 IMPORT CSV - CONFIRMATION
 
-        if (!window.confirm(confirmMsg.trim())) {
+✅ Nouvelles transactions : ${newTransactions.length}
+⚠️  Doublons ignorés : ${duplicates.length}
+${invalid.length > 0 ? `❌ Invalides ignorées : ${invalid.length}\n` : ''}
+${impactDetails}
+
+Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
+`.trim();
+
+        if (!window.confirm(confirmMsg)) {
           return {
             success: false,
             imported: 0,
             duplicates: duplicates.length,
             invalid: invalid.length,
-            message: "Import annulé par l'utilisateur",
+            message: 'Import annulé par l\'utilisateur',
           };
         }
 
         // 7. Importer via l'endpoint bulk
-        console.log(`🚀 Import de ${newTransactions.length} transactions...`);
-
-        // ✅ NOUVEAU CODE (snake_case)
         const payload = newTransactions.map((t) => ({
-          account_id: t.accountId, // ✅ snake_case
+          accountid: t.accountId,
           type: t.type,
           amount: t.amount,
           category: t.category,
           description: t.description,
-          transaction_date: t.date, // ✅ snake_case
-          is_planned: false, // ✅ snake_case
-          is_posted: true, // ✅ snake_case
-          project_id: t.projectId || null, // ✅ snake_case
-          remarks: t.remarks || '',
+          transactiondate: t.date,
+          isplanned: false,
+          isposted: true,
+          projectid: t.projectId ?? null,
+          remarks: t.remarks ?? '',
         }));
 
-        // Utiliser transactionsService pour le bulk import
         const result = await transactionsService.importTransactions(payload);
-        const successCount = Number(result?.imported || 0);
-        const serverDuplicates = Number(result?.duplicates || 0);
-
-        console.log(
-          `✅ Import terminé: ${successCount}/${newTransactions.length} réussies`
-        );
+        const successCount = Number(result?.imported) || 0;
+        const serverDuplicates = Number(result?.duplicates) || 0;
 
         if (successCount > 0) {
           // 8. Recalculer tous les soldes
-          console.log('🔄 Recalcul des soldes...');
           try {
             await apiRequest('accounts/recalculate-all', { method: 'POST' });
           } catch (recalcError) {
@@ -797,6 +750,7 @@ export function FinanceProvider({ children }) {
           await refreshTransactions();
         }
 
+        setError(null);
         return {
           success: true,
           imported: successCount,
@@ -806,36 +760,39 @@ export function FinanceProvider({ children }) {
           message: `${successCount} transactions importées avec succès`,
           details: { duplicates, invalid },
         };
-      } catch (error) {
-        console.error('❌ Erreur importTransactions:', error);
-        throw error;
+      } catch (err) {
+        console.error('Erreur importTransactions:', err);
+        setError({ message: 'Erreur lors de l\'import des transactions', details: err });
+        throw err;
       }
     },
     [transactions, accounts, refreshAccounts, refreshTransactions]
   );
 
-  // ============================================================
-  // SELECTORS / COMPUTED VALUES
-  // ============================================================
+  // ============================================================================
+  // SELECTORS & COMPUTED VALUES
+  // ============================================================================
 
   const visibleTransactions = useMemo(() => {
-    let list = transactions || [];
+    let list = transactions;
     if (projectFilterId) {
-      list = list.filter((t) => String(t.project_id) === String(projectFilterId));
+      list = list.filter((t) => String(t.projectid) === String(projectFilterId));
     }
     if (accountFilterId) {
-      list = list.filter((t) => String(t.account_id) === String(accountFilterId));
+      list = list.filter((t) => String(t.accountid) === String(accountFilterId));
     }
     return list;
   }, [transactions, projectFilterId, accountFilterId]);
 
-  // APRÈS (sans filtre)
   const { income, expense } = useMemo(() => {
-    return (transactions || []).reduce(
+    return transactions.reduce(
       (tot, t) => {
-        const a = parseFloat(t.amount || 0);
-        if (t.type === 'income') tot.income += a;
-        else tot.expense += a;
+        const a = parseFloat(t.amount) || 0;
+        if (t.type === 'income') {
+          tot.income += a;
+        } else {
+          tot.expense += a;
+        }
         return tot;
       },
       { income: 0, expense: 0 }
@@ -843,51 +800,45 @@ export function FinanceProvider({ children }) {
   }, [transactions]);
 
   const accountsWithCorrectReceivables = useMemo(() => {
-    return (accounts || []).map((acc) => {
+    return accounts.map((acc) => {
       if (acc?.name === 'Receivables') {
-        // Solde = total des receivables ouvertes
         return { ...acc, balance: totalOpenReceivables };
       }
       return acc;
     });
   }, [accounts, totalOpenReceivables]);
 
-  // ✅ AJOUT : Calcul du solde total
   const totalBalance = useMemo(() => {
-    return (accountsWithCorrectReceivables || []).reduce(
-      (sum, acc) => sum + parseFloat(acc?.balance || 0),
-      0
-    );
+    return accountsWithCorrectReceivables.reduce((sum, acc) => sum + (parseFloat(acc?.balance) || 0), 0);
   }, [accountsWithCorrectReceivables]);
 
   const activeProjects = useMemo(() => {
-    return (projects || []).filter((p) => {
-      const status = String(p?.status || '').toLowerCase();
-      // ✅ Exclure "paused", "archived", "completed", "cancelled"
+    return projects.filter((p) => {
+      const status = String(p?.status ?? '').toLowerCase();
       return (
         status === 'active' ||
         status === 'actif' ||
         status === 'draft' ||
-        status.startsWith('phase ')
+        status.startsWith('phase')
       );
     });
   }, [projects]);
 
-  const remainingCostSum = useMemo(() => {
+    const remainingCostSum = useMemo(() => {
     return activeProjects.reduce((sum, p) => {
-      const expensesArr = parseJSONSafe(p?.expenses);
+      const expensesArr = parseJSONSafe(p?.expenses, []);
       const futureExpenses = expensesArr.filter(
         (e) => e?.account !== 'Déjà Payé' && e?.account !== 'Payé'
       );
-      const subtotal = futureExpenses.reduce((s, e) => s + parseFloat(e?.amount || 0), 0);
+      const subtotal = futureExpenses.reduce((s, e) => s + (parseFloat(e?.amount) || 0), 0);
       return sum + subtotal;
     }, 0);
   }, [activeProjects]);
 
   const projectsTotalRevenues = useMemo(() => {
     return activeProjects.reduce((sum, p) => {
-      const revArr = parseJSONSafe(p?.revenues);
-      const subtotal = revArr.reduce((s, r) => s + parseFloat(r?.amount || 0), 0);
+      const revArr = parseJSONSafe(p?.revenues, []);
+      const subtotal = revArr.reduce((s, r) => s + (parseFloat(r?.amount) || 0), 0);
       return sum + subtotal;
     }, 0);
   }, [activeProjects]);
@@ -895,29 +846,24 @@ export function FinanceProvider({ children }) {
   const projectsNetImpact = projectsTotalRevenues - remainingCostSum;
 
   const coffreAccount = accountsWithCorrectReceivables.find((a) => a?.name === 'Coffre');
-  const currentCoffreBalance = Number(coffreAccount?.balance || 0);
+  const currentCoffreBalance = Number(coffreAccount?.balance) || 0;
 
   const receivablesForecastCoffre = currentCoffreBalance + totalOpenReceivables;
   const receivablesForecastTotal = totalBalance + totalOpenReceivables;
+
   const projectsForecastCoffre = receivablesForecastCoffre + projectsNetImpact;
   const projectsForecastTotal = receivablesForecastTotal + projectsNetImpact;
 
-  // Prévisions détaillées par projet (à partir des lignes)
-  // ============================================================
-  // PLANNED TRANSACTIONS À PARTIR DES LIGNES PROJET
-  // ============================================================
+  // Prévisions détaillées par projet à partir des lignes (PLANNED TRANSACTIONS)
   const plannedTransactions = useMemo(() => {
     const result = [];
 
-    // 1️⃣ Dépenses non payées (projectExpenseLines)
+    // 1. Dépenses non payées
     projectExpenseLines
-      .filter(
-        (line) =>
-          line.isPaid === false || line.isPaid === null || line.isPaid === undefined
-      )
+      .filter((line) => line.isPaid === false || line.isPaid === null || line.isPaid === undefined)
       .forEach((line) => {
-        const rawDate = line.transactionDate || line.transactiondate || null;
-        const normalizedDate = toYmd(rawDate); // ✅ NORMALISATION
+        const rawDate = line.transactionDate ?? line.transactiondate ?? null;
+        const normalizedDate = toYmd(rawDate);
 
         if (!normalizedDate) {
           console.warn('Ligne projet sans date valide:', line.id, rawDate);
@@ -929,28 +875,20 @@ export function FinanceProvider({ children }) {
           projectname: line.projectName ?? line.projectname,
           type: 'plannedexpense',
           amount: Number(line.projectedAmount ?? line.projectedamount ?? 0),
-          date: normalizedDate, // ✅ Format YYYY-MM-DD garanti
-          account: line.account || 'Coffre',
-          category: line.category || 'Projet - Charge',
-          description: line.description || '',
+          date: normalizedDate,
+          account: line.account ?? 'Coffre',
+          category: line.category ?? 'Projet - Charge',
+          description: line.description ?? '',
           lineid: line.id,
         });
       });
 
-    console.log('projectExpenseLines sample:', projectExpenseLines[0]);
-    console.log('projectRevenueLines sample:', projectRevenueLines[0]);
-
-    // 2️⃣ Revenus non reçus (projectRevenueLines)
+    // 2. Revenus non reçus
     projectRevenueLines
-      .filter(
-        (line) =>
-          line.isReceived === false ||
-          line.isReceived === null ||
-          line.isReceived === undefined
-      )
+      .filter((line) => line.isReceived === false || line.isReceived === null || line.isReceived === undefined)
       .forEach((line) => {
-        const rawDate = line.transactionDate || line.transactiondate || null;
-        const normalizedDate = toYmd(rawDate); // ✅ NORMALISATION
+        const rawDate = line.transactionDate ?? line.transactiondate ?? null;
+        const normalizedDate = toYmd(rawDate);
 
         if (!normalizedDate) {
           console.warn('Ligne projet sans date valide:', line.id, rawDate);
@@ -962,56 +900,28 @@ export function FinanceProvider({ children }) {
           projectname: line.projectName ?? line.projectname,
           type: 'plannedincome',
           amount: Number(line.projectedAmount ?? line.projectedamount ?? 0),
-          date: normalizedDate, // ✅ Format YYYY-MM-DD garanti
-          account: line.account || 'Coffre',
-          category: line.category || 'Projet - Revenu',
-          description: line.description || '',
+          date: normalizedDate,
+          account: line.account ?? 'Coffre',
+          category: line.category ?? 'Projet - Revenu',
+          description: line.description ?? '',
           lineid: line.id,
         });
       });
 
-    console.log('✅ plannedTransactions depuis project lines:', result.length);
-    console.log(
-      '  - Dépenses à payer:',
-      result.filter((r) => r.type === 'plannedexpense').length
-    );
-    console.log(
-      '  - Revenus à recevoir:',
-      result.filter((r) => r.type === 'plannedincome').length
-    );
-
     return result;
   }, [projectExpenseLines, projectRevenueLines]);
-
-  console.log(
-    '🔮 plannedTransactions créées depuis project lines:',
-    plannedTransactions.slice(0, 5).map((tx) => ({
-      id: tx.id,
-      type: tx.type,
-      amount: tx.amount,
-      plannedDate: tx.plannedDate,
-      account: tx.account_name || tx.account,
-    }))
-  );
-
-  console.log(
-    '🔍 plannedTransactions NATIORA+NEMO:',
-    plannedTransactions.filter((tx) => tx.project_id === 24 || tx.project_id === 27)
-  );
 
   const treasuryAlerts = useMemo(() => {
     const warnings = [];
 
-    if (!accounts || !transactions) {
-      return warnings;
-    }
+    if (!accounts || !transactions) return warnings;
 
     accountsWithCorrectReceivables.forEach((acc) => {
       let projectedBalance = parseFloat(acc.balance) || 0;
 
       const plannedTrx = transactions.filter(
         (t) =>
-          String(t.account_id || t.accountid) === String(acc.id) &&
+          String(t.accountid ?? t.accountid) === String(acc.id) &&
           t.isplanned === true &&
           t.isposted === false
       );
@@ -1029,7 +939,7 @@ export function FinanceProvider({ children }) {
           type: 'warning',
           account: acc.name,
           accountId: acc.id,
-          message: `Solde projeté négatif: ${projectedBalance.toFixed(2)} Ar`,
+          message: `Solde projeté négatif : ${projectedBalance.toFixed(2)} Ar`,
           projected: projectedBalance,
           plannedCount: plannedTrx.length,
         });
@@ -1040,9 +950,7 @@ export function FinanceProvider({ children }) {
   }, [accountsWithCorrectReceivables, transactions]);
 
   const transactionStats = useMemo(() => {
-    if (!transactions) {
-      return { income: 0, expense: 0, total: 0 };
-    }
+    if (!transactions) return { income: 0, expense: 0, total: 0 };
 
     const incomeCount = transactions.filter((t) => t.type === 'income').length;
     const expenseCount = transactions.filter((t) => t.type === 'expense').length;
@@ -1054,9 +962,9 @@ export function FinanceProvider({ children }) {
     };
   }, [transactions]);
 
-  // ============================================================
-  // ✅ CONTEXT VALUE - AVEC TOUTES LES MUTATIONS
-  // ============================================================
+  // ============================================================================
+  // CONTEXT VALUE
+  // ============================================================================
   const value = useMemo(
     () => ({
       // State
@@ -1064,7 +972,7 @@ export function FinanceProvider({ children }) {
       transactions,
       projects,
 
-      // Lignes projet + prévisions
+      // Lignes projet & prévisions
       projectExpenseLines,
       projectRevenueLines,
       plannedTransactions,
@@ -1098,24 +1006,28 @@ export function FinanceProvider({ children }) {
       transactionsLoading,
       projectsLoading,
 
+      // ✅ Gestion d'erreur
+      error,
+      clearError,
+
       // Refresh
       refreshAccounts,
       refreshTransactions,
       refreshProjects,
       refreshReceivables,
 
-      // Mutations Accounts
+      // Mutations - Accounts
       createAccount,
       updateAccount,
       deleteAccount,
 
-      // Mutations Transactions
+      // Mutations - Transactions
       createTransaction,
       updateTransaction,
       deleteTransaction,
       importTransactions,
 
-      // Mutations Projects
+      // Mutations - Projects
       createProject,
       updateProject,
       deleteProject,
@@ -1153,6 +1065,8 @@ export function FinanceProvider({ children }) {
       accountsLoading,
       transactionsLoading,
       projectsLoading,
+      error,
+      clearError,
       refreshAccounts,
       refreshTransactions,
       refreshProjects,
@@ -1177,8 +1091,13 @@ export function FinanceProvider({ children }) {
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 }
+
 export function useFinance() {
   const ctx = useContext(FinanceContext);
-  if (!ctx) throw new Error('useFinance doit être utilisé dans un FinanceProvider');
+  if (!ctx) {
+    throw new Error('useFinance doit être utilisé dans un FinanceProvider');
+  }
   return ctx;
 }
+
+

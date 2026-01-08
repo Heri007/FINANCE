@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ComposedChart,
 } from 'recharts';
+import { RechartsWrapper } from './RechartsWrapper';
 
 const FinancialChart = ({ transactions = [] }) => {
   const chartData = useMemo(() => {
@@ -90,8 +91,7 @@ const FinancialChart = ({ transactions = [] }) => {
                       : 'text-rose-900'
                   }`}
                 >
-                  {(payload[0]?.value - payload[1]?.value || 0).toLocaleString('fr-FR')}{' '}
-                  Ar
+                  {(payload[0]?.value - payload[1]?.value || 0).toLocaleString('fr-FR')} Ar
                 </span>
               </div>
             </div>
@@ -103,59 +103,59 @@ const FinancialChart = ({ transactions = [] }) => {
   };
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart
-        data={chartData}
-        margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+    <RechartsWrapper height={400}>
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 10, right: 30, left: 20, bottom: 10 }}
+          style={{ fontSize: '12px', letterSpacing: '0' }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
 
-        {/* ✅ AXES SANS PROPRIÉTÉS PROBLÉMATIQUES */}
-        <XAxis
-          dataKey="date"
-          stroke="#cbd5e1"
-          tick={{ fill: '#64748b' }}
-          tickFormatter={(date) => {
-            const d = new Date(date);
-            return `${d.getDate()}/${d.getMonth() + 1}`;
-          }}
-        />
-        <YAxis
-          stroke="#cbd5e1"
-          tick={{ fill: '#64748b' }}
-          tickFormatter={(value) => {
-            if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-            if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
-            return value;
-          }}
-        />
+          <XAxis
+            dataKey="date"
+            stroke="#cbd5e1"
+            style={{ fontSize: '11px', letterSpacing: '0' }}
+            tickFormatter={(date) => {
+              const d = new Date(date);
+              return `${d.getDate()}/${d.getMonth() + 1}`;
+            }}
+          />
+          <YAxis
+            stroke="#cbd5e1"
+            style={{ fontSize: '11px', letterSpacing: '0' }}
+            tickFormatter={(value) => {
+              if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+              if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+              return value;
+            }}
+          />
 
-        <Tooltip content={<CustomTooltip />} />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ paddingTop: '15px', fontSize: '12px', letterSpacing: '0' }} iconType="line" iconSize={16} />
 
-        <Legend wrapperStyle={{ paddingTop: '15px' }} iconType="line" iconSize={16} />
+          <Line
+            type="monotone"
+            dataKey="income"
+            stroke="#10b981"
+            strokeWidth={3}
+            dot={{ fill: '#10b981', strokeWidth: 2, stroke: '#fff', r: 5 }}
+            activeDot={{ r: 7, fill: '#059669', stroke: '#fff', strokeWidth: 3 }}
+            name="💰 Revenus"
+          />
 
-        {/* ✅ LIGNES SIMPLES SANS GRADIENTS */}
-        <Line
-          type="monotone"
-          dataKey="income"
-          stroke="#10b981"
-          strokeWidth={3}
-          dot={{ fill: '#10b981', strokeWidth: 2, stroke: '#fff', r: 5 }}
-          activeDot={{ r: 7, fill: '#059669', stroke: '#fff', strokeWidth: 3 }}
-          name="💰 Revenus"
-        />
-
-        <Line
-          type="monotone"
-          dataKey="expense"
-          stroke="#f43f5e"
-          strokeWidth={3}
-          dot={{ fill: '#f43f5e', strokeWidth: 2, stroke: '#fff', r: 5 }}
-          activeDot={{ r: 7, fill: '#e11d48', stroke: '#fff', strokeWidth: 3 }}
-          name="💸 Dépenses"
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+          <Line
+            type="monotone"
+            dataKey="expense"
+            stroke="#f43f5e"
+            strokeWidth={3}
+            dot={{ fill: '#f43f5e', strokeWidth: 2, stroke: '#fff', r: 5 }}
+            activeDot={{ r: 7, fill: '#e11d48', stroke: '#fff', strokeWidth: 3 }}
+            name="💸 Dépenses"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </RechartsWrapper>
   );
 };
 
