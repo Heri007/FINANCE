@@ -2,11 +2,12 @@
 // -----------------------------------------------------------------------------
 // Contrôleur des comptes Money Tracker.
 // - CRUD des comptes (liste, création, mise à jour, suppression)
-// - Recalcul du solde d’un compte à partir des transactions
+// - Recalcul du solde d'un compte à partir des transactions
 // - Recalcul de tous les soldes pour remettre la base en cohérence
 // -----------------------------------------------------------------------------
 
 const pool = require('../config/database');
+const { getAccountIds } = require('../config/accounts');
 
 // -----------------------------------------------------------------------------
 // GET /api/accounts
@@ -105,9 +106,9 @@ exports.deleteAccount = async (req, res) => {
 // -----------------------------------------------------------------------------
 // POST /api/accounts/:id/recalculate
 // -----------------------------------------------------------------------------
-// Recalcule le solde d’un compte donné à partir de ses transactions.
+// Recalcule le solde d'un compte donné à partir de ses transactions.
 // Règle métier :
-// - On ne prend en compte que les transactions “postées”
+// - On ne prend en compte que les transactions "postées"
 //   (is_posted = true) OU les transactions non planifiées (is_planned = false).
 // - income  => +amount
 // - expense => -amount
@@ -130,26 +131,41 @@ exports.recalculateBalance = async (req, res) => {
     }
 
     const account = accountCheck.rows[0];
+    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
 
-    // Récupérer les transactions pertinentes du compte
-    const transactionsResult = await pool.query(
-      `SELECT type, amount FROM transactions 
-       WHERE account_id = $1 
-       AND (is_posted = true OR is_planned = false)
-       ORDER BY transaction_date ASC`,
-      [id]
-    );
-
-    // Calcul du nouveau solde
     let newBalance = 0;
-    transactionsResult.rows.forEach(t => {
-      const amount = parseFloat(t.amount);
-      if (t.type === 'income') {
-        newBalance += amount;
-      } else if (t.type === 'expense') {
-        newBalance -= amount;
-      }
-    });
+    let transactionCount = 0;
+
+    // Cas spécial : compte RECEIVABLES = somme des receivables ouverts
+    if (account.id === RECEIVABLES_ACCOUNT_ID) {
+      const receivablesResult = await pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS total
+         FROM receivables
+         WHERE status <> 'closed'`
+      );
+      newBalance = parseFloat(receivablesResult.rows[0].total || 0);
+      console.log(`  ℹ️  Compte RECEIVABLES: solde calculé depuis receivables ouverts`);
+    } else {
+      // Cas normal : somme des transactions
+      const transactionsResult = await pool.query(
+        `SELECT type, amount FROM transactions 
+         WHERE account_id = $1 
+         AND (is_posted = true OR is_planned = false)
+         ORDER BY transaction_date ASC`,
+        [id]
+      );
+
+      transactionCount = transactionsResult.rows.length;
+
+      transactionsResult.rows.forEach(t => {
+        const amount = parseFloat(t.amount);
+        if (t.type === 'income') {
+          newBalance += amount;
+        } else if (t.type === 'expense') {
+          newBalance -= amount;
+        }
+      });
+    }
 
     // Mise à jour du compte
     await pool.query(
@@ -158,7 +174,7 @@ exports.recalculateBalance = async (req, res) => {
     );
 
     console.log(
-      `✅ Solde recalculé: ${account.name} → ${newBalance} Ar (${transactionsResult.rows.length} transactions)`
+      `✅ Solde recalculé: ${account.name} → ${newBalance} Ar (${transactionCount} transactions)`
     );
 
     res.json({
@@ -167,7 +183,7 @@ exports.recalculateBalance = async (req, res) => {
       accountName: account.name,
       oldBalance: parseFloat(account.balance),
       newBalance: newBalance,
-      transactionCount: transactionsResult.rows.length,
+      transactionCount: transactionCount,
     });
   } catch (error) {
     console.error('❌ Erreur recalculateBalance:', error);
@@ -180,7 +196,7 @@ exports.recalculateBalance = async (req, res) => {
 // -----------------------------------------------------------------------------
 // Recalcule le solde de TOUS les comptes en parcourant leurs transactions.
 // Même logique que recalculateBalance, mais appliquée en boucle à chaque compte.
-// Renvoie un tableau récapitulatif avec l’ancien et le nouveau solde.
+// Renvoie un tableau récapitulatif avec l'ancien et le nouveau solde.
 // -----------------------------------------------------------------------------
 exports.recalculateAllBalances = async (req, res) => {
   try {
@@ -190,20 +206,22 @@ exports.recalculateAllBalances = async (req, res) => {
       'SELECT id, name, balance FROM accounts ORDER BY id ASC'
     );
 
+    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
     const results = [];
 
     for (const account of accountsResult.rows) {
       let newBalance = 0;
       let transactionCount = 0;
 
-      if (account.id === 7) {
-        // Compte AVOIR = somme des receivables ouverts
+      if (account.id === RECEIVABLES_ACCOUNT_ID) {
+        // Compte RECEIVABLES = somme des receivables ouverts
         const receivablesResult = await pool.query(
           `SELECT COALESCE(SUM(amount), 0) AS total
            FROM receivables
            WHERE status <> 'closed'`
         );
         newBalance = parseFloat(receivablesResult.rows[0].total || 0);
+        console.log(`  ℹ️  ${account.name}: calculé depuis receivables ouverts`);
       } else {
         const transactionsResult = await pool.query(
           `SELECT type, amount FROM transactions 
@@ -248,4 +266,3 @@ exports.recalculateAllBalances = async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
   }
 };
-

@@ -1,142 +1,96 @@
-// FICHIER: src/contexts/UserContext.jsx
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { API_BASE } from '../services/api';
+// src/contexts/UserContext.jsx
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from 'react';
 
 const UserContext = createContext(null);
 
-export const useUser = () => {
-  const context = useContext(UserContext);
-  if (!context) {
-    throw new Error('useUser doit être utilisé dans un UserProvider');
-  }
-  return context;
-};
+export function UserProvider({ children }) {
+  const [token, setToken] = useState(() => localStorage.getItem('token') || '');
 
-export const UserProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasPin, setHasPin] = useState(false);
-  const [pinStep, setPinStep] = useState('enter');
-  const [firstPin, setFirstPin] = useState('');
-
+  // Sync entre onglets + changements externes (login/logout)
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const storedPin = localStorage.getItem('userPin');
-        
-        setHasPin(!!storedPin);
-        
-        if (token) {
-          try {
-            const response = await fetch(`${API_BASE}/auth/verify-token`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-              const data = await response.json();
-              setIsAuthenticated(data.valid === true);
-            } else {
-              localStorage.removeItem('token');
-              setIsAuthenticated(false);
-            }
-          } catch (error) {
-            console.error('Erreur vérification token:', error);
-            localStorage.removeItem('token');
-            setIsAuthenticated(false);
-          }
-        } else {
-          setIsAuthenticated(false);
-        }
-      } catch (error) {
-        console.error('Erreur vérification auth:', error);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
+    const handleLogout = () => {
+      console.log('🔓 UserContext: Déconnexion détectée');
+      setToken('');
+    };
+
+    // ✅ Écouter les événements de login (depuis authService)
+    const handleLogin = (event) => {
+      const newToken = event.detail?.token || localStorage.getItem('token');
+      if (newToken && newToken !== token) {
+        console.log('🔐 UserContext: Login détecté via événement, token mis à jour');
+        setToken(newToken);
       }
     };
 
-    checkAuth();
+    // ✅ Sync multi-onglets via localStorage
+    const handleStorageChange = (e) => {
+      if (e.key === 'token') {
+        const newToken = e.newValue || '';
+        console.log('💾 UserContext: Token changé via localStorage (autre onglet?)');
+        setToken(newToken);
+      }
+    };
+
+    window.addEventListener('auth:logout', handleLogout);
+    window.addEventListener('auth:login', handleLogin);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('auth:logout', handleLogout);
+      window.removeEventListener('auth:login', handleLogin);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [token]);
+
+  const setAuthToken = useCallback((newToken) => {
+    console.log(
+      '✅ UserContext.setAuthToken appelé avec:',
+      newToken ? 'TOKEN_PRÉSENT' : 'NULL'
+    );
+
+    if (newToken) {
+      localStorage.setItem('token', newToken);
+      setToken(newToken);
+    } else {
+      localStorage.removeItem('token');
+      setToken('');
+    }
   }, []);
 
-  const setupPin = async (pin) => {
-    try {
-      const response = await fetch(`${API_BASE}/auth/setup-pin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin })
-      });
+  const clearAuth = useCallback(() => {
+    console.log('🧹 UserContext.clearAuth: Nettoyage complet');
+    localStorage.removeItem('token');
+    setToken('');
+    window.dispatchEvent(new Event('auth:logout'));
+  }, []);
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erreur lors de la création du PIN');
-      }
+  const value = useMemo(
+    () => ({
+      token,
+      isAuthenticated: Boolean(token),
+      setAuthToken,
+      clearAuth,
+    }),
+    [token, setAuthToken, clearAuth]
+  );
 
-      const data = await response.json();
-      
-      localStorage.setItem('userPin', pin);
-      localStorage.setItem('token', data.token);
-      
-      setHasPin(true);
-      setIsAuthenticated(true);
-      setPinStep('enter');
-      setFirstPin('');
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const login = async (pin) => {
-    try {
-      const response = await fetch(`${API_BASE}/auth/verify-pin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'PIN incorrect');
-      }
-
-      const data = await response.json();
-      
-      localStorage.setItem('token', data.token);
-      setIsAuthenticated(true);
-    } catch (error) {
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (token) {
-        await fetch(`${API_BASE}/auth/logout`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-      }
-    } catch (error) {
-      console.error('Erreur déconnexion:', error);
-    } finally {
-      localStorage.removeItem('token');
-      setIsAuthenticated(false);
-    }
-  };
-
-  const value = {
-    isAuthenticated,
-    isLoading,
-    hasPin,
-    pinStep,
-    firstPin,
-    setPinStep,
-    setFirstPin,
-    setupPin,
-    login,
-    logout,
-  };
+  // ✅ LOG pour debug
+  useEffect(() => {
+    console.log('🔄 UserContext: isAuthenticated =', Boolean(token));
+  }, [token]);
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
-};
+}
+
+export function useUser() {
+  const ctx = useContext(UserContext);
+  if (!ctx) throw new Error('useUser doit être utilisé dans un UserProvider');
+  return ctx;
+}

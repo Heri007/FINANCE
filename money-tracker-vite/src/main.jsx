@@ -1,14 +1,17 @@
-// FICHIER: src/main.jsx
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+// src/main.jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App.jsx';
-import { AppProviders } from './contexts/AppProviders';
+import { UserProvider } from './contexts/UserContext';
+import { FinanceProvider } from './contexts/FinanceContext';
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <AppProviders>
-      <App />
-    </AppProviders>
-  </StrictMode>
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <UserProvider>
+      <FinanceProvider>
+        <App />
+      </FinanceProvider>
+    </UserProvider>
+  </React.StrictMode>
 );

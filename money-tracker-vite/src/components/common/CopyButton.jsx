@@ -2,20 +2,20 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 
-export function CopyButton({ getText, textToCopy }) {
+export function CopyButton({ getText }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
-      // Autoriser soit getText (fonction), soit textToCopy (string)
+      // Autoriser soit getText (fonction), soit getText (string)
       let text = '';
 
       if (typeof getText === 'function') {
         text = getText();
-      } else if (typeof textToCopy === 'string') {
-        text = textToCopy;
+      } else if (typeof getText === 'string') {
+        text = getText;
       } else {
-        console.error('❌ CopyButton: ni getText fonction, ni textToCopy string.');
+        console.error('❌ CopyButton: ni getText fonction, ni getText string.');
         alert('Erreur: impossible de générer le texte à copier');
         return;
       }

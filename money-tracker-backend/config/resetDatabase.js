@@ -25,13 +25,13 @@ async function resetDatabase() {
     // Insérer les comptes par défaut
     await client.query(`
       INSERT INTO accounts (name, type, balance) VALUES
-        ('Argent liquide', 'cash', 0),
-        ('COFFRE', 'savings', 0),
-        ('ORANGE MONEY', 'mobile', 0),
-        ('MVOLA', 'mobile', 0),
-        ('BOA', 'bank', 0),
-        ('AVOIR', 'credit', 0),
-        ('RedotPay USD', 'digital', 0)
+        ('Argent Liquide', 'cash', 0),
+        ('MVola', 'mobile', 0),
+        ('Orange Money', 'mobile', 0),
+        ('Compte BOA', 'bank', 0),
+        ('Coffre', 'cash', 0),
+        ('Receivables', 'receivables', 0),
+        ('Redotpay', 'digital', 0)
     `);
 
     console.log('✅ Comptes créés');

@@ -14,7 +14,9 @@ export function Toast({ message, type = 'success', onClose }) {
   };
 
   return (
-    <div className={`fixed top-4 right-4 ${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 animate-slide-in z-50`}>
+    <div
+      className={`fixed top-4 right-4 ${colors[type]} text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 animate-slide-in z-50`}
+    >
       <span className="font-medium">{message}</span>
       <button onClick={onClose} className="hover:opacity-70 transition-opacity">
         <X size={18} />

@@ -1,18 +1,24 @@
-// ProjectDetailsModal.jsx - VERSION PHASES + RÉELS
-import React, { useMemo } from 'react';
-import { 
-  X, 
-  Copy, 
-  AlertCircle, 
-  TrendingUp, 
-  Calendar, 
-  DollarSign, 
+// src/ProjectDetailsModal.jsx - VERSION CORRIGÉE (AFFICHAGE DONNÉES)
+
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  X,
+  TrendingUp,
+  Calendar,
+  DollarSign,
   PieChart,
-  Anchor,
-  Truck,
-  ShoppingBag
+  CheckCircle,
+  Clock,
+  ArrowRight,
+  Briefcase,
+  Link2,
+  AlertCircle,
+  RefreshCw,
+  Filter,
 } from 'lucide-react';
 import { formatCurrency, formatDate } from './utils/formatters';
+import { API_BASE } from './services/api';
+import { CopyButton } from './components/common/CopyButton';
 
 export function ProjectDetailsModal({
   project,
@@ -21,566 +27,916 @@ export function ProjectDetailsModal({
   onActivateProject,
   onCompleteProject,
   accounts,
-  transactions,
-  totalBalance
+  totalBalance,
 }) {
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // États pour les modales de détails ("Voir tout")
+  const [showPaidDetails, setShowPaidDetails] = useState(false);
+  const [showUnpaidDetails, setShowUnpaidDetails] = useState(false);
+  const [showReceivedDetails, setShowReceivedDetails] = useState(false);
+  const [showPendingDetails, setShowPendingDetails] = useState(false);
+
+  // États pour la Réconciliation
+  const [unlinkedTransactions, setUnlinkedTransactions] = useState([]);
+  const [linkingStats, setLinkingStats] = useState(null);
+  const [selectedTxToLink, setSelectedTxToLink] = useState(null);
+  const [loadingLink, setLoadingLink] = useState(false);
 
   if (!isOpen || !project) return null;
 
-  // --- 1. PARSING ULTRA-ROBUSTE JSON ---
-  const parseJSONSafe = (data, fieldName) => {
-    console.log(`🔍 RAW ${fieldName}:`, data, 'type:', typeof data);
-    
-    if (!data || data === null || data === undefined || data === 'null') {
-      console.warn(`⚠️ ${fieldName} NULL → []`);
-      return [];
-    }
-    
-    try {
-      if (typeof data === 'string') {
-        if (data.trim() === '[]' || data.trim() === '') return [];
-        const parsed = JSON.parse(data);
-        return Array.isArray(parsed) ? parsed : [];
-      }
-      
-      if (typeof data === 'object') {
-        if (Array.isArray(data)) return data;
-        return [data];
-      }
-      
-      return [];
-    } catch (e) {
-      console.error(`❌ Parse ${fieldName} FAILED:`, e, data);
-      return [];
-    }
-  };
+  useEffect(() => {
+    console.log('🔍 DEBUG ProjectDetailsModal:', {
+      projectId: project?.id,
+      projectName: project?.name,
+      expenseLines: project?.expenseLines?.length,
+      revenueLines: project?.revenueLines?.length,
+      expenses: typeof project?.expenses,
+      revenues: typeof project?.revenues,
+    });
+  }, [project]);
 
-  const expenses = useMemo(
-    () => parseJSONSafe(project.expenses, 'expenses'),
-    [project.expenses]
-  );
-  const revenues = useMemo(
-    () => parseJSONSafe(project.revenues, 'revenues'),
-    [project.revenues]
-  );
+  // =======================================================================
+  // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
+  // ======================================================================
+  const normalizeData = useMemo(() => {
+    console.log('🔄 Normalisation projet:', project.name);
 
-  // --- 2. DEBUG LOGS ---
-  console.log('🔍 DEBUG PROJECT:', {
-    name: project.name,
-    expensesCount: expenses.length,
-    firstExpense: expenses[0],
-    sampleExpenses: expenses.slice(0, 3).map(e => ({
-      desc: e.description,
-      phase: e.phase,
-      account: e.account
-    })),
-    totalCostDB: project.total_cost,
-    phasesPresent: [...new Set(expenses.map(e => e.phase).filter(Boolean))]
+    // Fonction pour parser et nettoyer n'importe quelle liste
+    const cleanList = (jsonOrArray, type) => {
+      let list = [];
+
+      if (Array.isArray(jsonOrArray)) {
+        list = jsonOrArray;
+      } else if (typeof jsonOrArray === 'string') {
+        try {
+          list = JSON.parse(jsonOrArray);
+        } catch (e) {
+          console.warn(`❌ Erreur parsing ${type}:`, e);
+          list = [];
+        }
+      }
+
+      return list.map((item) => {
+        const isNormalizedLine = item.id && Number.isInteger(item.id);
+
+        return {
+          id: isNormalizedLine
+            ? item.id
+            : item.id || `temp-${Math.random().toString(36)}`,
+          description: item.description || item.category || 'Sans description',
+          category: item.category || 'Autre',
+          amount: parseFloat(
+            item.amount ||
+              item.projectedAmount ||
+              item.projectedamount ||
+              item.actualAmount ||
+              item.actualamount ||
+              item.montant ||
+              0
+          ),
+          isPaid: !!(item.isPaid || item.ispaid || item.isReceived || item.isreceived), // ✅ PRÉSERVER
+          date: item.date || item.transactionDate || item.transactiondate || new Date(),
+          plannedDate: item.plannedDate || null, // ✅ AJOUTER
+          realDate: item.realDate || null, // ✅ AJOUTER
+          account: item.account || 'Coffre', // ✅ PRÉSERVER
+          phase: item.phase,
+          isRecurring: !!item.isRecurring,
+        };
+      });
+    };
+
+    // ✅ CORRECTION: Prioriser le JSON (qui contient isPaid à jour) sur les lignes DB
+    let expenses = [];
+    let revenues = [];
+
+    // 1. D'ABORD charger depuis JSON (contient isPaid mis à jour)
+    if (project.expenses) {
+      expenses = cleanList(project.expenses, 'expenses');
+      console.log(
+        '📦 expenses depuis JSON:',
+        expenses.length,
+        '| Payées:',
+        expenses.filter((e) => e.isPaid).length
+      );
+    }
+
+    // 2. ENSUITE fusionner avec expenseLines SI elles existent (mais JSON a priorité pour isPaid)
+    if (project.expenseLines && project.expenseLines.length > 0) {
+      const linesFromDB = cleanList(project.expenseLines, 'expenseLines');
+      console.log('📊 expenseLines depuis DB:', linesFromDB.length);
+
+      // Fusionner: Mettre à jour les montants réels depuis DB, mais garder isPaid du JSON
+      linesFromDB.forEach((dbLine) => {
+        const jsonIndex = expenses.findIndex((jsonExp) => {
+          const descMatch =
+            jsonExp.description?.trim().toLowerCase() ===
+            dbLine.description?.trim().toLowerCase();
+          const amountMatch = Math.abs(jsonExp.amount - dbLine.amount) < 0.01;
+          return descMatch && amountMatch;
+        });
+
+        if (jsonIndex >= 0) {
+          // Mettre à jour avec les données DB mais GARDER isPaid du JSON
+          expenses[jsonIndex] = {
+            ...expenses[jsonIndex],
+            id: dbLine.id, // Utiliser l'ID DB
+            actualAmount: dbLine.amount,
+            // isPaid reste celui du JSON! ✅
+          };
+        } else {
+          // Ligne dans DB mais pas dans JSON (rare)
+          console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
+          expenses.push(dbLine);
+        }
+      });
+    }
+
+    // Même logique pour revenues
+    if (project.revenues) {
+      revenues = cleanList(project.revenues, 'revenues');
+      console.log(
+        '📦 revenues depuis JSON:',
+        revenues.length,
+        '| Reçus:',
+        revenues.filter((r) => r.isPaid).length
+      );
+    }
+
+    if (project.revenueLines && project.revenueLines.length > 0) {
+      const linesFromDB = cleanList(project.revenueLines, 'revenueLines');
+      console.log('📊 revenueLines depuis DB:', linesFromDB.length);
+
+      linesFromDB.forEach((dbLine) => {
+        const jsonIndex = revenues.findIndex((jsonRev) => {
+          const descMatch =
+            jsonRev.description?.trim().toLowerCase() ===
+            dbLine.description?.trim().toLowerCase();
+          const amountMatch = Math.abs(jsonRev.amount - dbLine.amount) < 0.01;
+          return descMatch && amountMatch;
+        });
+
+        if (jsonIndex >= 0) {
+          revenues[jsonIndex] = {
+            ...revenues[jsonIndex],
+            id: dbLine.id,
+            actualAmount: dbLine.amount,
+            // isPaid reste celui du JSON! ✅
+          };
+        } else {
+          console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
+          revenues.push(dbLine);
+        }
+      });
+    }
+
+    console.log('✅ Fusionné:', {
+      expenses: expenses.length,
+      expensesPaid: expenses.filter((e) => e.isPaid).length,
+      revenues: revenues.length,
+      revenuesPaid: revenues.filter((r) => r.isPaid).length,
+    });
+
+    return { expenses, revenues };
+  }, [project]);
+
+  const { expenses, revenues } = normalizeData;
+
+  // =======================================================================
+  // 2. CALCULS FINANCIERS
+  // =======================================================================
+
+  const {
+    paidExpenses,
+    unpaidExpenses,
+    totalPaidExpenses,
+    totalUnpaidExpenses,
+    progressExp,
+  } = useMemo(() => {
+    const paid = expenses.filter((e) => e.isPaid);
+    const unpaid = expenses.filter((e) => !e.isPaid);
+    const totalP = paid.reduce((s, e) => s + e.amount, 0);
+    const totalU = unpaid.reduce((s, e) => s + e.amount, 0);
+    const total = totalP + totalU;
+
+    return {
+      paidExpenses: paid,
+      unpaidExpenses: unpaid,
+      totalPaidExpenses: totalP,
+      totalUnpaidExpenses: totalU,
+      progressExp: total > 0 ? ((totalP / total) * 100).toFixed(0) : 0,
+    };
+  }, [expenses]);
+
+  const { receivedRevenues, pendingRevenues, totalReceived, totalPending, progressRev } =
+    useMemo(() => {
+      const received = revenues.filter((r) => r.isPaid); // "isPaid" est générique pour isReceived ici
+      const pending = revenues.filter((r) => !r.isPaid);
+      const totalR = received.reduce((s, e) => s + e.amount, 0);
+      const totalP = pending.reduce((s, e) => s + e.amount, 0);
+      const total = totalR + totalP;
+
+      return {
+        receivedRevenues: received,
+        pendingRevenues: pending,
+        totalReceived: totalR,
+        totalPending: totalP,
+        progressRev: total > 0 ? ((totalR / total) * 100).toFixed(0) : 0,
+      };
+    }, [revenues]);
+
+  // Totaux Globaux
+  const totalBudget = totalPaidExpenses + totalUnpaidExpenses;
+  const totalRevenuePrev = totalReceived + totalPending;
+  const netProfit = totalRevenuePrev - totalBudget;
+  const roi = totalBudget > 0 ? ((netProfit / totalBudget) * 100).toFixed(1) : 0;
+
+  // Après le calcul des totaux dans normalizeData
+  console.log('💰 TOTAUX CALCULÉS:', {
+    totalPaidExpenses,
+    totalUnpaidExpenses,
+    totalReceived,
+    totalPending,
+    netProfit,
+    roi,
   });
 
-  // --- 3. CALCULS TOTAUX PRÉVISIONNELS ---
-  const occurrences = parseInt(
-    project.occurrences_count || project.occurrencesCount || 1
-  );
-  const isRecurrent = project.type === 'recurrent';
-
-  const calculatedTotalCost = expenses.reduce((sum, item) => {
-    const amount = parseFloat(item.amount || 0);
-    const multiplier = isRecurrent && item.isRecurring ? occurrences : 1;
-    return sum + amount * multiplier;
-  }, 0);
-
-  const calculatedTotalRev = revenues.reduce((sum, item) => {
-    const amount = parseFloat(item.amount || 0);
-    const multiplier = isRecurrent && item.isRecurring ? occurrences : 1;
-    return sum + amount * multiplier;
-  }, 0);
-
-  const totalCost =
-    calculatedTotalCost > 0
-      ? calculatedTotalCost
-      : parseFloat(project.total_cost || project.totalCost || 0);
-  const totalRevenues =
-    calculatedTotalRev > 0
-      ? calculatedTotalRev
-      : parseFloat(project.total_revenues || project.totalRevenues || 0);
-  const netProfit = totalRevenues - totalCost;
-  const roi = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
-
-  // --- 5. TRANSACTIONS RÉELLES LIÉES AU PROJET ---
-  const projectTransactions = (transactions || []).filter(
-    t => t.project_id === project.id
-  );
-
-  console.log(
-    '🔎 PROJECT TX',
-    project.id,
-    projectTransactions.map(t => ({
-      id: t.id,
-      category: t.category,
-      amount: t.amount,
-      project_id: t.project_id
-    }))
-  );
-
-  const realExpenses = projectTransactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-
-  const realRevenues = projectTransactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-
-  const realProfit = realRevenues - realExpenses;
-  const realRoi = realExpenses > 0 ? (realProfit / realExpenses) * 100 : 0;
-
-  // --- 8. MÉTRIQUES DB + SOLDE FINAL ---
-const rawNetProfitDb = project.net_profit ?? project.netProfit ?? 0;
-const netProfitDb = Number(rawNetProfitDb) || 0;
-
-const dbRoi =
-  project.roi != null
-    ? Number(project.roi)
-    : project.roi_value != null
-    ? Number(project.roi_value)
-    : null;
-
-const safeTotalBalance = Number(totalBalance) || 0;
-
-const finalTotalIfCompleted = safeTotalBalance + netProfitDb;
-
-
-  // --- 6. GROUPPING PHASES INTELLIGENT ---
-  const phaseIcons = {
-    investissement: <Anchor className="w-4 h-4" />,
-    logistique: <Truck className="w-4 h-4" />,
-    ventes: <ShoppingBag className="w-4 h-4" />
-  };
-
-  const phaseLabels = {
-    investissement: '💰 Investissement',
-    logistique: '🚚 Logistique',
-    ventes: '📈 Ventes'
-  };
-
-  const statusLabels = {
-    payé: { label: '✓ Payé', color: 'emerald' },
-    futur: { label: '⏳ Futur', color: 'blue' },
-    planifié: { label: '📋 Planifié', color: 'orange' }
-  };
-
-  const expensesByPhaseStatus = expenses.reduce((acc, exp) => {
-    const phase = exp.phase || 'investissement';
-    const status =
-      exp.account === 'Déjà Payé'
-        ? 'payé'
-        : exp.account === 'Futur'
-        ? 'futur'
-        : 'planifié';
-    const key = `${phase}-${status}`;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(exp);
-    return acc;
-  }, {});
-
-  const phaseOrder = [
-    'investissement-payé',
-    'investissement-planifié',
-    'logistique-futur',
-    'logistique-payé',
-    'ventes-futur',
-    'ventes-payé'
-  ];
-
-  // --- 7. DATES & STATUT ---
+  // Dates
   const startDate = project.start_date || project.startDate;
   const endDate = project.end_date || project.endDate;
+  const dateDisplay = endDate
+    ? `${formatDate(startDate)} → ${formatDate(endDate)}`
+    : `Depuis ${formatDate(startDate)}`;
 
-  const formatDateSafe = dateStr => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? '' : formatDate(dateStr);
+  const finalTotalIfCompleted = (parseFloat(totalBalance) || 0) + netProfit;
+
+  // ✅ CALCULS SPÉCIFIQUES COFFRE
+  const coffreAccount = accounts.find(
+    (a) =>
+      a.name.toLowerCase().trim() === 'coffre' || a.name.toLowerCase().includes('coffre')
+  );
+  const coffreBalance = parseFloat(coffreAccount?.balance || 0);
+  const coffreProjected = coffreBalance + netProfit;
+
+  // =======================================================================
+  // 3. LOGIQUE LIAISON (LINKING)
+  // =======================================================================
+
+  useEffect(() => {
+    if (activeTab === 'linking') {
+      loadUnlinkedTransactions();
+      loadLinkingStats();
+    }
+  }, [activeTab]);
+
+  const loadUnlinkedTransactions = async () => {
+    setLoadingLink(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/transaction-linking/unlinked?projectId=${project.id}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      const data = await res.json();
+      if (data.success) setUnlinkedTransactions(data.data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingLink(false);
+    }
   };
 
-  const dateDisplay = formatDateSafe(endDate)
-    ? `${formatDateSafe(startDate)} → ${formatDateSafe(endDate)}`
-    : `Depuis ${formatDateSafe(startDate)}`;
-
-  const getStatusLabel = status => {
-    const labels = {
-      active: 'En cours',
-      completed: 'Terminé',
-      draft: 'Brouillon',
-      'Phase logistique Activée': 'Logistique OK',
-      'Phase ventes Activée': 'Ventes OK'
-    };
-    return labels[status] || status || 'Brouillon';
+  const loadLinkingStats = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/transaction-linking/stats/${project.id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      const data = await res.json();
+      if (data.success) setLinkingStats(data.data);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
+  const handleLink = async (lineId) => {
+    if (!selectedTxToLink) return alert("Sélectionnez une transaction à gauche d'abord");
+    try {
+      const res = await fetch(`${API_BASE}/transaction-linking/link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ transactionId: selectedTxToLink.transaction_id, lineId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Lié avec succès !');
+        setSelectedTxToLink(null);
+        loadUnlinkedTransactions();
+        loadLinkingStats();
+      } else {
+        alert('Erreur: ' + data.error);
+      }
+    } catch (e) {
+      alert('Erreur réseau');
+    }
+  };
 
-const handleCopyToClipboard = () => {
-  let text = `📋 ${project.name}\n`;
-  text += `💰 Coût prévu: ${formatCurrency(totalCost)}\n`;
-  text += `📈 Revenus prévus: ${formatCurrency(totalRevenues)}\n`;
-  text += `💎 Profit prévu: ${formatCurrency(
-    netProfit
-  )} (ROI: ${roi.toFixed(1)}%)\n`;
-  text += `💸 Dépenses réelles: ${formatCurrency(realExpenses)}\n`;
-  text += `💰 Revenus réels: ${formatCurrency(realRevenues)}\n`;
-  text += `📊 Phases: ${Object.keys(expensesByPhaseStatus).length}\n`;
-  text += `💼 Solde total comptes: ${formatCurrency(safeTotalBalance)}\n`;
-  text += `💼 Solde total si projet fini: ${formatCurrency(finalTotalIfCompleted)}`;
-  navigator.clipboard.writeText(text).then(() => alert('Copié !'));
-};
+  // Juste avant le return
+  console.log('🎯 RENDU Modal avec:', {
+    expensesCount: expenses?.length,
+    revenuesCount: revenues?.length,
+    paidExpenses: paidExpenses?.length,
+    unpaidExpenses: unpaidExpenses?.length,
+    receivedRevenues: receivedRevenues?.length,
+    pendingRevenues: pendingRevenues?.length,
+  });
 
+  const generateCopyText = () => {
+    return `
+📋 PROJET: ${project.name}
+Type: ${project.type || 'N/A'}
+Statut: ${project.status || 'actif'}
+
+📅 DATES:
+Début: ${project.startDate ? new Date(project.startDate).toLocaleDateString('fr-FR') : 'N/A'}
+Fin: ${project.endDate ? new Date(project.endDate).toLocaleDateString('fr-FR') : 'Non définie'}
+
+💰 RÉSUMÉ FINANCIER:
+Budget total: ${formatCurrency(totalBudget)}
+Revenus prévus: ${formatCurrency(totalRevenuePrev)}
+Profit net: ${formatCurrency(netProfit)}
+ROI: ${project.roi || 0}%
+
+📊 DÉTAILS:
+${
+  project.metadata
+    ? `
+Métadonnées:
+${Object.entries(
+  typeof project.metadata === 'string' ? JSON.parse(project.metadata) : project.metadata
+)
+  .map(([key, value]) => `  ${key}: ${value}`)
+  .join('\n')}
+`
+    : ''
+}
+
+💸 CHARGES (${project.expenses?.length || 0}):
+${
+  (project.expenses || [])
+    .map(
+      (exp) =>
+        `- ${exp.description}: ${formatCurrency(exp.amount)} [${exp.category}]${exp.isPaid ? ' ✅ Payé' : ' ⏳ Non payé'}`
+    )
+    .join('\n') || 'Aucune charge'
+}
+
+💵 REVENUS (${project.revenues?.length || 0}):
+${
+  (project.revenues || [])
+    .map(
+      (rev) =>
+        `- ${rev.description}: ${formatCurrency(rev.amount)} [${rev.category}]${rev.isPaid ? ' ✅ Reçu' : ' ⏳ Non reçu'}`
+    )
+    .join('\n') || 'Aucun revenu'
+}
+
+⏰ Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+  `.trim();
+  };
+
+  // =======================================================================
+  // 4. RENDER
+  // =======================================================================
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
-        {/* HEADER */}
-        <div className="p-6 border-b flex justify-between items-start bg-gradient-to-r from-gray-50 to-slate-50 rounded-t-2xl">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-1">
-              {project.name}
-            </h2>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <span
-                className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
-                  isRecurrent
-                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                    : 'bg-blue-50 text-blue-700 border-blue-200'
-                }`}
-              >
-                {isRecurrent ? `Récurrent (${project.frequency})` : 'Ponctuel'}
-              </span>
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  project.status === 'completed'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : project.status === 'active'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}
-              >
-                {getStatusLabel(project.status)}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-200 rounded-full transition-all"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* BODY */}
-        <div className="p-6 overflow-y-auto space-y-6">
-          {/* BUDGET / PAYÉ / EN COURS */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-gradient-to-br from-red-50 to-red-100 border border-red-200 relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="text-sm text-red-600 mb-1 font-medium flex items-center gap-1">
-                  <DollarSign className="w-4 h-4" />
-                  Budget prévu
-                </div>
-                <div className="text-2xl font-bold text-red-700">
-                  {formatCurrency(totalCost)}
-                </div>
-                {expenses.length === 0 && totalCost === 0 && (
-                  <p className="text-xs text-red-400 mt-1">
-                    ⚠️ Aucune dépense
-                  </p>
-                )}
-              </div>
-              <TrendingUp className="absolute -right-8 -bottom-8 w-24 h-24 text-red-100 opacity-50" />
-            </div>
-
-            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
-              <div className="text-sm text-blue-600 mb-1 font-medium">
-                Transactions réelles validées
-              </div>
-              <div className="text-xs text-gray-500">Dépenses en cours</div>
-              <div className="text-lg font-bold text-blue-800">
-                {formatCurrency(realExpenses)}
-              </div>
-              <div className="text-xs text-gray-500 mt-2">Recettes en cours</div>
-              <div className="text-lg font-bold text-blue-800">
-                {formatCurrency(realRevenues)}
+    <>
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div
+          className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col"
+          style={{ maxHeight: 'calc(100vh - 2rem)', minHeight: '500px' }}
+        >
+          {/* HEADER */}
+          <div className="p-6 border-b flex justify-between items-start bg-gradient-to-r from-gray-50 to-slate-50 rounded-t-2xl">
+            {' '}
+            <div>
+              <h2 className="text-xl font-bold text-gray-800 mb-1">{project.name}</h2>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 text-xs font-medium">
+                  {project.type || 'PROJET'}
+                </span>
+                <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium">
+                  {project.status === 'active' ? 'En cours' : project.status}
+                </span>
               </div>
             </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-200 rounded-full transition-all"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
           </div>
 
-          {/* COÛT RÉEL / DÉTAIL PRÉVISIONNEL + SOLDE COMPTES */}
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-white border border-gray-200">
-              <div className="text-sm text-gray-600 mb-1 font-medium">
-                Coût prévu vs réel (transactions)
-              </div>
-              <div className="flex justify-between items-end">
-                <div>
-                  <div className="text-xs text-gray-400 uppercase">Prévu</div>
-                  <div className="text-lg font-bold text-gray-800">
-                    {formatCurrency(totalCost)}
-                  </div>
-                  <div className="mt-3 text-xs text-gray-600 space-y-1">
-                    <div>
-                      Coût prévu (DB):{' '}
-                      <strong>{formatCurrency(project.total_cost || project.totalCost)}</strong>
-                    </div>
-                    <div>
-                      Revenus prévus (DB):{' '}
-                      <strong>{formatCurrency(
-                        project.total_revenues || project.totalRevenues
-                      )}</strong>
-                    </div>
-                    <div>
-                      Profit net prévu (DB): <strong>{formatCurrency(netProfitDb)}</strong>
-                    </div>
-                    <div>
-  ROI estimé (DB):{' '}
-  {dbRoi != null ? (
-    <strong className="text-red-600">
-      {dbRoi.toFixed(1)}%
-    </strong>
-  ) : (
-    '–'
-  )}
-</div>
-                    <div>
-  Solde total comptes:{' '}
-  <strong>{formatCurrency(safeTotalBalance)}</strong>
-</div>
-                    <div>
-  Solde total si projet fini:{' '}
-  <strong>{formatCurrency(finalTotalIfCompleted)}</strong>
-</div>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400 uppercase">
-                    Dépensé (réel)
-                  </div>
-                  <div
-                    className={`text-lg font-bold ${
-                      realExpenses > totalCost
-                        ? 'text-red-600'
-                        : 'text-emerald-600'
-                    }`}
-                  >
-                    {formatCurrency(realExpenses)}
-                  </div>
-                  {totalCost > 0 && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      {((realExpenses / totalCost) * 100).toFixed(1)}% du budget
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-white border border-gray-200">
-              <div className="text-sm text-gray-600 mb-1 font-medium">
-                Profit / ROI réels (transactions)
-              </div>
-              <div className="flex justify-between items-end">
-                <div>
-                  <div className="text-xs text-gray-400 uppercase">
-                    Profit réel
-                  </div>
-                  <div
-                    className={`text-lg font-bold ${
-                      realProfit >= 0 ? 'text-emerald-600' : 'text-red-600'
-                    }`}
-                  >
-                    {realProfit >= 0 ? '+' : ''}
-                    {formatCurrency(realProfit)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400 uppercase">
-                    ROI réel
-                  </div>
-                  <div
-                    className={`text-lg font-bold ${
-                      realRoi >= 0 ? 'text-blue-600' : 'text-orange-600'
-                    }`}
-                  >
-                    {realExpenses > 0 ? `${realRoi.toFixed(1)}%` : 'N/A'}
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* TABS */}
+          <div className="flex px-6 border-b border-gray-100 bg-white sticky top-0">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition ${activeTab === 'overview' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              Vue d'ensemble
+            </button>
+            <button
+              onClick={() => setActiveTab('linking')}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition flex items-center gap-2 ${activeTab === 'linking' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              <Link2 size={14} />
+              Réconciliation
+            </button>
           </div>
 
-          {/* PROFIT & ROI PRÉVISIONNELS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-blue-50 border border-gray-200">
-              <div className="text-sm text-gray-600 mb-1">Profit Net prévu</div>
-              <div
-                className={`text-xl font-bold ${
-                  netProfit >= 0 ? 'text-emerald-600' : 'text-red-600'
-                }`}
-              >
-                {netProfit >= 0 ? '+' : ''}
-                {formatCurrency(netProfit)}
-              </div>
-            </div>
-            <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-gray-200">
-              <div className="text-sm text-gray-600 mb-1">ROI estimé</div>
-              <div
-                className={`text-xl font-bold ${
-                  roi >= 0 ? 'text-blue-600' : 'text-orange-600'
-                }`}
-              >
-                {roi.toFixed(1)}%
-              </div>
-            </div>
-          </div>
-
-          {/* INFO */}
-          <div className="bg-gradient-to-r from-slate-50 to-gray-50 p-4 rounded-xl text-sm space-y-2 border">
-            <div className="flex items-start gap-2">
-              <Calendar className="w-4 h-4 mt-0.5 text-gray-400 flex-shrink-0" />
-              <div>
-                <div className="font-medium text-gray-800">Période</div>
-                <div className="text-gray-600">{dateDisplay}</div>
-              </div>
-            </div>
-            {project.description && (
-              <div className="flex items-start gap-2">
-                <div className="w-4 h-4 mt-0.5 text-gray-400 flex-shrink-0">
-                  📝
-                </div>
-                <div>
-                  <div className="font-medium text-gray-800">Description</div>
-                  <div className="text-gray-600">{project.description}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* PHASES / DÉPENSES */}
-          <div>
-            <h3 className="text-sm font-bold text-gray-800 mb-3 uppercase tracking-wider flex items-center gap-2">
-              <PieChart className="w-4 h-4" />
-              Phases & Dépenses
-              <span className="text-xs text-gray-500 font-normal ml-auto">
-                {expenses.length} lignes
-              </span>
-            </h3>
-
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {phaseOrder.map(phaseKey => {
-                const phaseExpenses = expensesByPhaseStatus[phaseKey] || [];
-                if (phaseExpenses.length === 0) return null;
-
-                const [phase, status] = phaseKey.split('-');
-                const phaseLabel =
-                  phaseLabels[phase] ||
-                  phase.charAt(0).toUpperCase() + phase.slice(1);
-                const statusInfo = statusLabels[status];
-
-                return (
-                  <div
-                    key={phaseKey}
-                    className={`p-4 rounded-xl border ${
-                      status === 'payé'
-                        ? 'bg-emerald-50 border-emerald-200 shadow-sm'
-                        : 'bg-blue-50 border-blue-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {phaseIcons[phase]}
-                        <span className="font-semibold text-sm">
-                          {phaseLabel}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                            status === 'payé'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                              : 'bg-blue-100 text-blue-800 border-blue-200'
-                          }`}
-                        >
-                          {statusInfo.label}
-                        </span>
+          {/* BODY CORRIGÉ : Structure flex à deux niveaux */}
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-gray-50/30">
+              {/* --- VUE GÉNÉRALE --- */}
+              {activeTab === 'overview' && (
+                <>
+                  {/* KPIs */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl bg-red-50 border border-red-200">
+                      <div className="text-sm text-red-600 mb-1 font-medium flex items-center gap-1">
+                        <DollarSign className="w-4 h-4" /> Budget Prévu
                       </div>
-                      <div className="font-bold text-lg text-gray-900">
-                        {formatCurrency(
-                          phaseExpenses.reduce(
-                            (sum, e) => sum + parseFloat(e.amount || 0),
-                            0
-                          )
-                        )}
+                      <div className="text-2xl font-bold text-red-700">
+                        {formatCurrency(totalBudget)}
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-green-50 border border-green-200">
+                      <div className="text-sm text-green-600 mb-1 font-medium flex items-center gap-1">
+                        <TrendingUp className="w-4 h-4" /> Revenus Prévus
+                      </div>
+                      <div className="text-2xl font-bold text-green-700">
+                        {formatCurrency(totalRevenuePrev)}
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-xl bg-indigo-50 border border-indigo-200">
+                      <div className="text-sm text-indigo-600 mb-1 font-medium">
+                        Profit Net
+                      </div>
+                      <div className="text-2xl font-bold text-indigo-700">
+                        {formatCurrency(netProfit)}
+                      </div>
+                      <div className="text-xs text-indigo-500 mt-1">ROI: {roi}%</div>
+                    </div>
+                  </div>
+
+                  {/* SOLDES & TRÉSORERIE */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* VUE GLOBALE (Tous comptes) */}
+                    <div className="p-4 rounded-xl bg-white border border-gray-200 shadow-sm">
+                      <div className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
+                        <Briefcase className="w-3 h-3" /> Patrimoine Global
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-end border-b border-gray-100 pb-2">
+                          <span className="text-sm text-gray-600">Actuel</span>
+                          <span className="font-bold text-gray-800">
+                            {formatCurrency(parseFloat(totalBalance))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm text-gray-600">Après Projet</span>
+                          <span
+                            className={`font-bold ${netProfit >= 0 ? 'text-indigo-600' : 'text-red-600'}`}
+                          >
+                            {formatCurrency(finalTotalIfCompleted)}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-1 max-h-24 overflow-y-auto">
-                      {phaseExpenses.map((exp, i) => (
+                    {/* VUE COFFRE (Cash) - CE QUE VOUS AVEZ DEMANDÉ */}
+                    <div className="p-4 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 shadow-sm">
+                      <div className="text-xs font-bold text-amber-700 uppercase mb-3 flex items-center gap-2">
+                        <DollarSign className="w-3 h-3" /> Trésorerie Coffre
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-end border-b border-amber-200/50 pb-2">
+                          <span className="text-sm text-amber-800">
+                            Solde Coffre Actuel
+                          </span>
+                          <span className="font-bold text-amber-900 text-lg">
+                            {formatCurrency(coffreBalance)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-end">
+                          <span className="text-sm text-amber-800">
+                            Coffre Fin de Projet
+                          </span>
+                          <span
+                            className={`font-bold text-lg ${coffreProjected >= 0 ? 'text-emerald-700' : 'text-red-600'}`}
+                          >
+                            {formatCurrency(coffreProjected)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DÉPENSES */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wider flex items-center gap-2">
+                      <PieChart className="w-4 h-4 text-red-500" /> Dépenses (
+                      {progressExp}%)
+                      {/* DEBUG */}
+                      <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
+                        {expenses.length} total / {paidExpenses.length} payées
+                      </span>
+                    </h3>
+                    {/* DEBUG VISIBLE */}
+                    <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div className="text-xs font-bold text-yellow-800 mb-1">
+                        DEBUG : Dépenses normalisées
+                      </div>
+                      <div className="text-sm text-yellow-700">
+                        Total: {expenses.length} | Payées: {paidExpenses.length} | À
+                        payer: {unpaidExpenses.length}
+                      </div>
+                      {expenses.slice(0, 2).map((e, i) => (
                         <div
                           key={i}
-                          className="flex justify-between items-center p-2 text-xs bg-white/60 rounded-lg hover:bg-white transition-all"
+                          className="text-xs mt-1 pl-2 border-l-2 border-yellow-400"
                         >
-                          <span className="truncate font-medium text-gray-800">
-                            {exp.description || exp.category}
-                          </span>
-                          <span className="font-mono text-sm font-bold text-gray-900">
-                            {formatCurrency(exp.amount)}
-                          </span>
+                          {e.description}: {e.amount} Ar (
+                          {e.isPaid ? '✅ payé' : '⏳ à payer'})
                         </div>
                       ))}
                     </div>
-                  </div>
-                );
-              })}
 
-              {expenses.length === 0 && (
-                <div className="text-center p-8 border-2 border-dashed border-gray-200 rounded-xl text-gray-400">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">Aucune dépense détaillée</p>
-                  <p className="text-xs mt-1 opacity-75">
-                    Vérifiez ProjectPlannerModal → PLG 3 Phases
-                  </p>
+                    <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
+                      <div
+                        className="bg-red-500 h-2 rounded-full"
+                        style={{ width: `${progressExp}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Colonne Payés */}
+                      <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                        <div className="flex justify-between text-xs font-bold text-red-700 mb-2">
+                          <span>PAYÉES</span>
+                          <span>{paidExpenses.length}</span>
+                        </div>
+                        <div className="text-lg font-bold text-red-800">
+                          {formatCurrency(totalPaidExpenses)}
+                        </div>
+
+                        {/* Liste aperçu */}
+                        <div className="mt-2 space-y-1">
+                          {paidExpenses.slice(0, 3).map((e, i) => (
+                            <div
+                              key={i}
+                              className="text-xs flex justify-between text-red-600 bg-white/50 p-1 rounded"
+                            >
+                              <span className="truncate w-32">{e.description}</span>
+                              <span>{formatCurrency(e.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {paidExpenses.length > 3 && (
+                          <button
+                            onClick={() => setShowPaidDetails(true)}
+                            className="text-xs text-red-600 underline mt-2 w-full text-center"
+                          >
+                            Voir tout
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Colonne À Payer */}
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div className="flex justify-between text-xs font-bold text-gray-600 mb-2">
+                          <span>À PAYER</span>
+                          <span>{unpaidExpenses.length}</span>
+                        </div>
+                        <div className="text-lg font-bold text-gray-700">
+                          {formatCurrency(totalUnpaidExpenses)}
+                        </div>
+
+                        {/* Liste aperçu */}
+                        <div className="mt-2 space-y-1">
+                          {unpaidExpenses.slice(0, 3).map((e, i) => (
+                            <div
+                              key={i}
+                              className="text-xs flex justify-between text-gray-500 bg-white p-1 rounded border border-gray-100"
+                            >
+                              <span className="truncate w-32">{e.description}</span>
+                              <span>{formatCurrency(e.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {unpaidExpenses.length > 3 && (
+                          <button
+                            onClick={() => setShowUnpaidDetails(true)}
+                            className="text-xs text-gray-500 underline mt-2 w-full text-center"
+                          >
+                            Voir tout
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* REVENUS */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                    <h3 className="text-sm font-bold text-gray-800 mb-4 uppercase tracking-wider flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-green-500" /> Revenus (
+                      {progressRev}%)
+                    </h3>
+
+                    <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
+                      <div
+                        className="bg-green-500 h-2 rounded-full"
+                        style={{ width: `${progressRev}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Colonne Encaissés */}
+                      <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                        <div className="flex justify-between text-xs font-bold text-green-700 mb-2">
+                          <span>ENCAISSÉS</span>
+                          <span>{receivedRevenues.length}</span>
+                        </div>
+                        <div className="text-lg font-bold text-green-800">
+                          {formatCurrency(totalReceived)}
+                        </div>
+
+                        <div className="mt-2 space-y-1">
+                          {receivedRevenues.slice(0, 3).map((r, i) => (
+                            <div
+                              key={i}
+                              className="text-xs flex justify-between text-green-600 bg-white/50 p-1 rounded"
+                            >
+                              <span className="truncate w-32">{r.description}</span>
+                              <span>{formatCurrency(r.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {receivedRevenues.length > 3 && (
+                          <button
+                            onClick={() => setShowReceivedDetails(true)}
+                            className="text-xs text-green-600 underline mt-2 w-full text-center"
+                          >
+                            Voir tout
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Colonne À Recevoir */}
+                      <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                        <div className="flex justify-between text-xs font-bold text-blue-600 mb-2">
+                          <span>À RECEVOIR</span>
+                          <span>{pendingRevenues.length}</span>
+                        </div>
+                        <div className="text-lg font-bold text-blue-700">
+                          {formatCurrency(totalPending)}
+                        </div>
+
+                        <div className="mt-2 space-y-1">
+                          {pendingRevenues.slice(0, 3).map((r, i) => (
+                            <div
+                              key={i}
+                              className="text-xs flex justify-between text-blue-500 bg-white/50 p-1 rounded"
+                            >
+                              <span className="truncate w-32">{r.description}</span>
+                              <span>{formatCurrency(r.amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {pendingRevenues.length > 3 && (
+                          <button
+                            onClick={() => setShowPendingDetails(true)}
+                            className="text-xs text-blue-500 underline mt-2 w-full text-center"
+                          >
+                            Voir tout
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div className="bg-gray-50 p-4 rounded-xl text-sm space-y-2 border border-gray-200">
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Calendar className="w-4 h-4" />
+                      <span>{dateDisplay}</span>
+                    </div>
+                    {project.description && (
+                      <p className="text-gray-500 text-xs italic border-t pt-2 mt-2">
+                        {project.description}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* --- ONGLET LIAISONS --- */}
+              {activeTab === 'linking' && (
+                <div className="flex flex-col h-[500px]">
+                  <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200 mb-4 flex justify-between items-center">
+                    <div className="text-sm text-yellow-800 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Sélectionnez une transaction à gauche, puis une ligne à droite.
+                    </div>
+                    <button
+                      onClick={() => {
+                        loadUnlinkedTransactions();
+                        loadLinkingStats();
+                      }}
+                      className="p-1 hover:bg-yellow-200 rounded"
+                    >
+                      <RefreshCw
+                        size={14}
+                        className={loadingLink ? 'animate-spin' : ''}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
+                    {/* Gauche: Transactions */}
+                    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden flex flex-col">
+                      <div className="p-2 bg-gray-50 font-bold text-xs uppercase border-b">
+                        Transactions Bancaires ({unlinkedTransactions.length})
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {unlinkedTransactions.map((tx) => (
+                          <div
+                            key={tx.transaction_id}
+                            onClick={() => setSelectedTxToLink(tx)}
+                            className={`p-3 rounded border cursor-pointer transition-all ${
+                              selectedTxToLink?.transaction_id === tx.transaction_id
+                                ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="font-bold text-xs text-gray-800">
+                              {tx.transaction_description}
+                            </div>
+                            <div className="flex justify-between mt-1">
+                              <span
+                                className={`text-sm font-bold ${tx.type === 'expense' ? 'text-red-600' : 'text-green-600'}`}
+                              >
+                                {formatCurrency(tx.amount)}
+                              </span>
+                              <span className="text-[10px] text-gray-400">
+                                {new Date(tx.transaction_date).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Droite: Lignes Budget */}
+                    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden flex flex-col">
+                      <div className="p-2 bg-gray-50 font-bold text-xs uppercase border-b">
+                        Lignes Budget
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {/* Afficher Dépenses OU Revenus selon la transaction sélectionnée */}
+                        {(() => {
+                          const targetList =
+                            selectedTxToLink?.type === 'income' ? revenues : expenses;
+
+                          return targetList.map((line, idx) => {
+                            const isMatch =
+                              selectedTxToLink &&
+                              Math.abs(
+                                line.amount - parseFloat(selectedTxToLink.amount)
+                              ) <
+                                line.amount * 0.1;
+                            return (
+                              <div
+                                key={idx}
+                                className={`p-3 rounded border ${isMatch ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <span className="text-xs font-medium text-gray-800">
+                                    {line.description}
+                                  </span>
+                                  {selectedTxToLink && !line.isPaid && (
+                                    <button
+                                      onClick={() => handleLink(line.id)}
+                                      className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] rounded shadow hover:bg-indigo-700"
+                                    >
+                                      Lier
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="text-right text-xs text-gray-500 mt-1">
+                                  Prévu: <strong>{formatCurrency(line.amount)}</strong>
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
           </div>
-        </div>
+          {/* FOOTER */}
+          <div className="p-4 border-t bg-gray-50 rounded-b-2xl flex justify-end gap-3">
+            <CopyButton getText={generateCopyText} size="default" className="px-4 py-2" />
 
-        {/* FOOTER */}
-        <div className="p-4 border-t bg-gradient-to-r from-gray-50 to-slate-50 rounded-b-2xl flex gap-3 justify-end items-center">
-          <button
-            onClick={handleCopyToClipboard}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-white border border-gray-200 rounded-xl hover:shadow-sm hover:bg-gray-50 transition-all"
-          >
-            <Copy className="w-4 h-4" />
-            Copier Résumé
-          </button>
-
-          {onActivateProject && project.status !== 'active' && (
             <button
-              onClick={() => onActivateProject(project.id)}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
             >
-              🚀 Activer Projet
+              Fermer
             </button>
-          )}
+          </div>
+        </div>
+      </div>
 
-          {onCompleteProject && project.status === 'active' && (
-  <button
-    onClick={() => onCompleteProject(project.id)}
-    className="px-6 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
-  >
-    ✅ Terminer
-  </button>
-  )}
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
-          >
-            Fermer
+      {/* --- SOUS-MODALS --- */}
+      {showPaidDetails && (
+        <DetailListModal
+          title="Dépenses Payées"
+          items={paidExpenses}
+          onClose={() => setShowPaidDetails(false)}
+          color="emerald"
+        />
+      )}
+      {showUnpaidDetails && (
+        <DetailListModal
+          title="Dépenses À Régler"
+          items={unpaidExpenses}
+          onClose={() => setShowUnpaidDetails(false)}
+          color="gray"
+        />
+      )}
+      {showReceivedDetails && (
+        <DetailListModal
+          title="Revenus Encaissés"
+          items={receivedRevenues}
+          onClose={() => setShowReceivedDetails(false)}
+          color="green"
+        />
+      )}
+      {showPendingDetails && (
+        <DetailListModal
+          title="Revenus À Recevoir"
+          items={pendingRevenues}
+          onClose={() => setShowPendingDetails(false)}
+          color="blue"
+        />
+      )}
+    </>
+  );
+}
+
+// Sous-composant pour les listes détaillées
+function DetailListModal({ title, items, onClose, color }) {
+  const colors = {
+    emerald: 'text-emerald-800 bg-emerald-50 border-emerald-200',
+    gray: 'text-gray-800 bg-gray-50 border-gray-200',
+    green: 'text-green-800 bg-green-50 border-green-200',
+    blue: 'text-blue-800 bg-blue-50 border-blue-200',
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+        <div
+          className={`p-4 border-b font-bold text-lg flex justify-between items-center ${colors[color]}`}
+        >
+          {title}
+          <button onClick={onClose}>
+            <X className="w-5 h-5" />
           </button>
+        </div>
+        <div className="p-4 overflow-y-auto space-y-2 flex-1">
+          {items.map((item, i) => (
+            <div
+              key={i}
+              className="p-3 border rounded-lg hover:bg-gray-50 flex justify-between items-center"
+            >
+              <div>
+                <div className="font-semibold text-sm">{item.description}</div>
+                <div className="text-xs text-gray-500">
+                  {item.date ? new Date(item.date).toLocaleDateString() : '-'}
+                </div>
+              </div>
+              <div className="font-bold text-gray-800">{formatCurrency(item.amount)}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

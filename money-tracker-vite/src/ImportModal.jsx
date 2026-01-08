@@ -1,7 +1,8 @@
-// src/components/ImportModal.jsx - VERSION AVEC SIGNATURE LOCALE ANTI-DOUBLONS
+// src/components/ImportModal.jsx - VERSION AUTOMATIQUE AVEC LAST_IMPORT_DATE
 
 import React, { useState } from 'react';
 import Papa from 'papaparse';
+import { buildTransactionSignature } from './domain/finance/signature';
 
 const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -11,28 +12,8 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
   if (!isOpen) return null;
 
   const addLog = (msg, type = 'info') => {
-    setLogs(prev => [...prev, { msg, type, time: new Date().toLocaleTimeString() }]);
+    setLogs((prev) => [...prev, { msg, type, time: new Date().toLocaleTimeString() }]);
     console.log(msg);
-  };
-
-  // 🔐 même logique de nettoyage que côté backend (importController.createSig)
-  const createLocalSig = (t) => {
-    const clean = (str) =>
-      (str || '')
-        .trim()
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\s+/g, ' ')
-        .replace(/[.,;:!?@#$%^&*()]/g, '')
-        .substring(0, 40);
-
-    const date = t.date; // déjà normalisée YYYY-MM-DD
-    const amount = Math.abs(parseFloat(t.amount)).toFixed(2);
-    const desc = clean(t.description);
-    const cat = clean(t.category);
-
-    return `${t.accountId}|${date}|${amount}|${t.type}|${desc}|${cat}`;
   };
 
   const handleFileChange = (e) => {
@@ -48,7 +29,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
     setIsImporting(true);
     setLogs([]);
-    addLog('📁 Début de l\'analyse des fichiers CSV...');
+    addLog("📁 Début de l'analyse des fichiers CSV...");
     addLog(`🏦 Comptes disponibles: ${accounts.length}`);
 
     const EXPLICIT_MAPPING = {
@@ -61,18 +42,16 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
       compte_boa: 4,
       compteboa: 4,
       coffre: 5,
-      avoir: 7,
-      redotpay: 6
+      receivables: 7,
+      redotpay: 6,
     };
-
-    // ⚠️ Idéalement: injecter CUTOFF_DATE par compte depuis le backend
-    const CUTOFF_DATE = '2025-12-09';
 
     // 1) Mapping fichiers → comptes
     const fileMappings = {};
 
-    selectedFiles.forEach(file => {
-      const fileName = file.name.toLowerCase()
+    selectedFiles.forEach((file) => {
+      const fileName = file.name
+        .toLowerCase()
         .replace(/-/g, '_')
         .replace(/\s+/g, '_')
         .replace('.csv', '')
@@ -84,25 +63,42 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
       const explicitId = EXPLICIT_MAPPING[fileName];
       if (explicitId) {
-        const account = accounts.find(a => a.id === explicitId);
+        const account = accounts.find((a) => a.id === explicitId);
         if (account) {
           fileMappings[file.name] = explicitId;
-          addLog(`✅ ${file.name} → ${account.name} (ID ${explicitId})`, 'success');
+
+          // ✅ Afficher last_import_date si disponible
+          const lastImport = account.last_import_date
+            ? ` (Dernier import: ${account.last_import_date})`
+            : '';
+
+          addLog(
+            `✅ ${file.name} → ${account.name} (ID ${explicitId})${lastImport}`,
+            'success'
+          );
           return;
         }
       }
 
-      const matchedAccount = accounts.find(acc => {
-        const accName = acc.name.toLowerCase()
+      const matchedAccount = accounts.find((acc) => {
+        const accName = acc.name
+          .toLowerCase()
           .replace(/[-\s]/g, '_')
           .replace(/[éèê]/g, 'e')
           .replace(/[àâ]/g, 'a');
-        return accName.includes(fileName) || fileName.includes(accName) || accName === fileName;
+        return (
+          accName.includes(fileName) || fileName.includes(accName) || accName === fileName
+        );
       });
 
       if (matchedAccount) {
         fileMappings[file.name] = matchedAccount.id;
-        addLog(`✅ ${file.name} → ${matchedAccount.name} (auto-détecté)`, 'success');
+
+        const lastImport = matchedAccount.last_import_date
+          ? ` (Dernier import: ${matchedAccount.last_import_date})`
+          : '';
+
+        addLog(`✅ ${file.name} → ${matchedAccount.name}${lastImport}`, 'success');
       } else {
         addLog(`⚠️ ${file.name} → Aucun compte correspondant`, 'warning');
       }
@@ -137,22 +133,22 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
             const firstRow = results.data[0];
             const allKeys = Object.keys(firstRow);
 
-            const dateKey = allKeys.find(key => {
+            const dateKey = allKeys.find((key) => {
               const k = key.toUpperCase().replace(/-/g, '');
               return k.includes('TRANDATE') || k.includes('DATE');
             });
 
-            const quantityKey = allKeys.find(key => {
+            const quantityKey = allKeys.find((key) => {
               const k = key.toUpperCase().replace(/-/g, '');
               return k.includes('QUANTIT') || k.includes('AMOUNT');
             });
 
-            const descriptionKey = allKeys.find(key => {
+            const descriptionKey = allKeys.find((key) => {
               const k = key.toUpperCase().replace(/-/g, '');
               return k.includes('PAYEE') || k.includes('DESC');
             });
 
-            const categoryKey = allKeys.find(key => {
+            const categoryKey = allKeys.find((key) => {
               const k = key.toUpperCase().replace(/-/g, '');
               return k.includes('CATEG') || k.includes('CATEGORY');
             });
@@ -163,7 +159,9 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
               return;
             }
 
-            addLog(`   📊 Colonnes: DATE=${dateKey}, MONTANT=${quantityKey}, DESC=${descriptionKey || 'N/A'}`);
+            addLog(
+              `   📊 Colonnes: DATE=${dateKey}, MONTANT=${quantityKey}, DESC=${descriptionKey || 'N/A'}`
+            );
 
             const transactions = results.data
               .map((row) => {
@@ -172,7 +170,8 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
                 const description = row[descriptionKey] || 'Import CSV';
                 const category = row[categoryKey] || 'Autre';
 
-                const cleanAmountStr = rawAmount.toString()
+                const cleanAmountStr = rawAmount
+                  .toString()
                   .replace(/\s/g, '')
                   .replace(/,/g, '.');
                 let amount = parseFloat(cleanAmountStr);
@@ -205,10 +204,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
                   return null;
                 }
 
-                // Filtre date de coupure
-                if (cleanDate <= CUTOFF_DATE) {
-                  return null;
-                }
+                // ✅ Le filtrage par date se fait maintenant côté backend avec last_import_date
 
                 return {
                   accountId: targetAccountId,
@@ -217,7 +213,7 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
                   amount,
                   type,
                   date: cleanDate,
-                  remarks: row['REMARQUES'] || row['REMARQUE'] || ''
+                  remarks: row['REMARQUES'] || row['REMARQUE'] || '',
                 };
               })
               .filter(Boolean);
@@ -229,14 +225,14 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
           error: (err) => {
             addLog(`❌ ${file.name}: ${err.message}`, 'error');
             resolve();
-          }
+          },
         });
       });
     }
 
     if (allTransactions.length === 0) {
       addLog('⚠️ Aucune transaction valide trouvée', 'warning');
-      alert('Aucune transaction valide trouvée dans les fichiers (ou toutes avant la date de coupure)');
+      alert('Aucune transaction valide trouvée dans les fichiers');
       setIsImporting(false);
       return;
     }
@@ -253,10 +249,10 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
 
     addLog(`📊 Total extrait: ${allTransactions.length} transactions`);
     addLog(`🧹 Après dédoublonnage local: ${uniqueTransactions.length} transactions`);
-    addLog('🔄 Vérification des doublons côté serveur en cours...');
+    addLog('🔄 Envoi au serveur en cours...');
 
     try {
-      await onImport(uniqueTransactions); // le backend élimine aussi ce qui est déjà en base
+      await onImport(uniqueTransactions);
       addLog('✅ Import terminé avec succès !', 'success');
 
       setTimeout(() => {
@@ -270,10 +266,19 @@ const ImportModal = ({ isOpen, onClose, accounts, onImport }) => {
     }
   };
 
-// transactions bulk creation is handled via onImport(...) inside handleImport,
-// so we must not perform await calls during render; keep rendering the component.
-return (
-    <div 
+  const createLocalSig = (t) => {
+    return buildTransactionSignature({
+      accountId: t.accountId,
+      date: t.date,
+      amount: t.amount,
+      type: t.type,
+      description: t.description,
+      category: t.category || 'Autre',
+    });
+  };
+
+  return (
+    <div
       style={{
         position: 'fixed',
         top: 0,
@@ -284,11 +289,11 @@ return (
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 1000
+        zIndex: 1000,
       }}
       onClick={onClose}
     >
-      <div 
+      <div
         style={{
           background: 'white',
           borderRadius: '12px',
@@ -297,27 +302,29 @@ return (
           width: '90%',
           maxHeight: '85vh',
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-          paddingBottom: '15px',
-          borderBottom: '2px solid #e0e0e0'
-        }}>
-          <h2 style={{ margin: 0 }}>Import CSV Incrémental</h2>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '20px',
+            paddingBottom: '15px',
+            borderBottom: '2px solid #e0e0e0',
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Import CSV Automatique</h2>
           <button
             style={{
               background: 'none',
               border: 'none',
               fontSize: '24px',
               cursor: 'pointer',
-              color: '#666'
+              color: '#666',
             }}
             onClick={onClose}
           >
@@ -327,18 +334,19 @@ return (
 
         {/* File Selection */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{
-            display: 'block',
-            padding: '15px',
-            background: '#f5f5f5',
-            border: '2px dashed #ccc',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            textAlign: 'center',
-            transition: 'all 0.3s'
-          }}
-          onMouseEnter={(e) => e.target.style.background = '#e8f5e9'}
-          onMouseLeave={(e) => e.target.style.background = '#f5f5f5'}
+          <label
+            style={{
+              display: 'block',
+              padding: '15px',
+              background: '#f5f5f5',
+              border: '2px dashed #ccc',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              textAlign: 'center',
+              transition: 'all 0.3s',
+            }}
+            onMouseEnter={(e) => (e.target.style.background = '#e8f5e9')}
+            onMouseLeave={(e) => (e.target.style.background = '#f5f5f5')}
           >
             <input
               type="file"
@@ -349,26 +357,32 @@ return (
               disabled={isImporting}
             />
             <span style={{ fontSize: '16px', color: '#333' }}>
-              {selectedFiles.length === 0 
+              {selectedFiles.length === 0
                 ? '📁 Cliquez pour sélectionner des fichiers CSV'
-                : `📁 ${selectedFiles.length} fichier(s) sélectionné(s)`
-              }
+                : `📁 ${selectedFiles.length} fichier(s) sélectionné(s)`}
             </span>
           </label>
         </div>
 
         {/* Selected Files List */}
         {selectedFiles.length > 0 && !isImporting && (
-          <div style={{
-            marginBottom: '20px',
-            padding: '15px',
-            background: '#f9f9f9',
-            borderRadius: '8px'
-          }}>
-            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>Fichiers sélectionnés :</h3>
+          <div
+            style={{
+              marginBottom: '20px',
+              padding: '15px',
+              background: '#f9f9f9',
+              borderRadius: '8px',
+            }}
+          >
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>
+              Fichiers sélectionnés :
+            </h3>
             <ul style={{ margin: 0, paddingLeft: '20px' }}>
               {selectedFiles.map((file, index) => (
-                <li key={index} style={{ padding: '5px 0', fontSize: '14px', color: '#555' }}>
+                <li
+                  key={index}
+                  style={{ padding: '5px 0', fontSize: '14px', color: '#555' }}
+                >
                   {file.name}
                 </li>
               ))}
@@ -378,24 +392,36 @@ return (
 
         {/* Logs Area */}
         {logs.length > 0 && (
-          <div style={{
-            flex: 1,
-            marginBottom: '20px',
-            padding: '15px',
-            background: '#f5f5f5',
-            borderRadius: '8px',
-            overflowY: 'auto',
-            fontFamily: 'monospace',
-            fontSize: '13px',
-            maxHeight: '300px'
-          }}>
+          <div
+            style={{
+              flex: 1,
+              marginBottom: '20px',
+              padding: '15px',
+              background: '#f5f5f5',
+              borderRadius: '8px',
+              overflowY: 'auto',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              maxHeight: '300px',
+            }}
+          >
             {logs.map((log, index) => (
-              <div key={index} style={{
-                padding: '4px 0',
-                color: log.type === 'error' ? '#d32f2f' :
-                       log.type === 'warning' ? '#f57c00' :
-                       log.type === 'success' ? '#388e3c' : '#333'
-              }}>
+              <div
+                key={index}
+                style={{
+                  padding: '4px 0',
+                  color:
+                    log.type === 'error'
+                      ? '#d32f2f'
+                      : log.type === 'warning'
+                        ? '#f57c00'
+                        : log.type === 'success'
+                          ? '#388e3c'
+                          : log.type === 'transfer'
+                            ? '#0288d1'
+                            : '#333',
+                }}
+              >
                 <span style={{ color: '#999', marginRight: '8px' }}>{log.time}</span>
                 {log.msg}
               </div>
@@ -405,20 +431,30 @@ return (
 
         {/* Instructions */}
         {!isImporting && logs.length === 0 && (
-          <div style={{
-            background: '#e3f2fd',
-            padding: '15px',
-            borderRadius: '8px',
-            fontSize: '14px',
-            marginBottom: '20px'
-          }}>
+          <div
+            style={{
+              background: '#e3f2fd',
+              padding: '15px',
+              borderRadius: '8px',
+              fontSize: '14px',
+              marginBottom: '20px',
+            }}
+          >
             <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>📋 Instructions</h3>
             <ul style={{ margin: 0, paddingLeft: '20px' }}>
               <li>Le nom du fichier doit correspondre au nom d'un compte</li>
-              <li>Colonnes détectées automatiquement: DATE, MONTANT, DESCRIPTION, CATÉGORIE</li>
-              <li><strong>Les doublons sont ignorés automatiquement</strong></li>
-              <li>Seules les nouvelles transactions seront importées</li>
-              <li>Les lignes antérieures ou égales au 2025‑12‑03 sont ignorées (évite les doublons avec le backup)</li>
+              <li>
+                Colonnes détectées automatiquement: DATE, MONTANT, DESCRIPTION, CATÉGORIE
+              </li>
+              <li>
+                <strong>Les doublons sont ignorés automatiquement</strong>
+              </li>
+              <li>
+                <strong>
+                  Seules les transactions postérieures au dernier import sont acceptées
+                </strong>
+              </li>
+              <li>Le système met à jour automatiquement la date du dernier import</li>
             </ul>
           </div>
         )}
@@ -429,25 +465,28 @@ return (
             style={{
               flex: 1,
               padding: '12px',
-              background: (isImporting || selectedFiles.length === 0) ? '#ccc' : '#4CAF50',
+              background: isImporting || selectedFiles.length === 0 ? '#ccc' : '#4CAF50',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
-              cursor: (isImporting || selectedFiles.length === 0) ? 'not-allowed' : 'pointer',
+              cursor:
+                isImporting || selectedFiles.length === 0 ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               fontWeight: 'bold',
-              transition: 'all 0.3s'
+              transition: 'all 0.3s',
             }}
             onClick={handleImport}
             disabled={selectedFiles.length === 0 || isImporting}
             onMouseEnter={(e) => {
-              if (!isImporting && selectedFiles.length > 0) e.target.style.background = '#45a049';
+              if (!isImporting && selectedFiles.length > 0)
+                e.target.style.background = '#45a049';
             }}
             onMouseLeave={(e) => {
-              if (!isImporting && selectedFiles.length > 0) e.target.style.background = '#4CAF50';
+              if (!isImporting && selectedFiles.length > 0)
+                e.target.style.background = '#4CAF50';
             }}
           >
-            {isImporting ? '⏳ Import en cours...' : '🚀 Lancer l\'import'}
+            {isImporting ? '⏳ Import en cours...' : "🚀 Lancer l'import"}
           </button>
 
           <button
@@ -458,7 +497,7 @@ return (
               borderRadius: '8px',
               cursor: 'pointer',
               fontSize: '16px',
-              transition: 'all 0.3s'
+              transition: 'all 0.3s',
             }}
             onClick={onClose}
             disabled={isImporting}

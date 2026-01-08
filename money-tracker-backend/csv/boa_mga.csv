@@ -2,3 +2,5 @@ PAYEE_ITEM_DESC,CATÉGORIE,QUANTITÉ,STATUT,TRAN_DATE,REMARQUES
 "Fêtes A/Bao","Quotidienne",-191730.00,"C","2025-11-23","",
 "Transfert vers Argent liquide","Transfer (Outward)",-300000.00,"C","2025-11-25","",
 "Transfert vers Argent liquide","Transfer (Outward)",-100000.00,"C","2025-12-03","",
+"Frais Pack MID (BOA)","Frais Pack MID (BOA)",-25100.00,"C","2025-12-05","",
+"Transfert vers Argent liquide","Transfer (Outward)",-10000.00,"C","2025-12-07","",

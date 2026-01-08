@@ -1,245 +1,238 @@
-// scripts/smart-csv-import.js - VERSION COMPLÈTE FINALE
-const pool = require('../config/database');
 const fs = require('fs');
-const csv = require('csv-parser');
 const path = require('path');
+const pool = require('../config/database');
 
-// ✅ Chemin vers le dossier CSV
-const CSV_FOLDER = path.join(__dirname, '..', 'csv');
-
-// ✅ Fonction pour créer une signature unique
-function createSignature(accountId, date, amount, description) {
-  let cleanDate;
-  if (date instanceof Date) {
-    cleanDate = date.toISOString().split('T')[0];
-  } else if (typeof date === 'string') {
-    cleanDate = date.split('T')[0].split(' ')[0];
-  } else {
-    return null;
-  }
+// Parser CSV
+function parseCSVLine(line) {
+  const values = [];
+  let current = '';
+  let inQuotes = false;
   
-  const cleanAmount = Math.abs(parseFloat(amount)).toFixed(2);
-  const cleanDesc = (description || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/[.,;:!?@#$%^&*()]/g, '')
-    .trim()
-    .substring(0, 40);
-  
-  return `${accountId}|${cleanDate}|${cleanAmount}|${cleanDesc}`;
-}
-
-// ✅ Fonction pour parser une date
-function parseDate(dateStr) {
-  if (!dateStr) return null;
-  
-  if (dateStr.includes('-')) {
-    return dateStr.split(' ')[0].substring(0, 10);
-  }
-  
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split(' ')[0].split('/');
-    if (parts.length === 3) {
-      let [day, month, year] = parts;
-      if (year.length === 2) year = '20' + year;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      values.push(current.trim());
+      current = '';
+    } else {
+      current += char;
     }
   }
+  if (current) values.push(current.trim());
   
-  return null;
+  if (values.length < 5) return null;
+  
+  const description = values[0];
+  const category = values[1];
+  const amount = parseFloat(values[2]);
+  const status = values[3];
+  const date = values[4];
+  
+  if (!date || isNaN(amount)) return null;
+  
+  return { description, category, amount, status, date };
 }
 
-async function smartCsvImport() {
-  console.log('\n' + '═'.repeat(100));
-  console.log('📥 IMPORT CSV INTELLIGENT AVEC DÉTECTION DE DOUBLONS');
-  console.log('═'.repeat(100));
-  console.log(`\n📁 Dossier CSV: ${CSV_FOLDER}`);
-
-  if (!fs.existsSync(CSV_FOLDER)) {
-    console.error(`\n❌ ERREUR: Le dossier ${CSV_FOLDER} n'existe pas !`);
-    console.log('\n💡 Créez le dossier: mkdir csv\n');
-    process.exit(1);
-  }
-
+async function smartImportV2() {
+  const client = await pool.connect();
+  
   try {
-    console.log('\n📊 Récupération des transactions existantes...');
-    const existingResult = await pool.query(`
-      SELECT account_id, type, amount, description, transaction_date
-      FROM transactions
-      WHERE is_posted = true
-    `);
+    console.log('\n' + '═'.repeat(80));
+    console.log('🔍 IMPORT INTELLIGENT V2 (avec détection contrainte DB)');
+    console.log('═'.repeat(80) + '\n');
 
-    const existingSignatures = new Set();
-    existingResult.rows.forEach(t => {
-      const sig = createSignature(t.account_id, t.transaction_date, t.amount, t.description);
-      if (sig) existingSignatures.add(sig);
-    });
-
-    console.log(`✅ ${existingSignatures.size} signatures existantes indexées\n`);
-
-    const csvFiles = [
+    const csvConfigs = [
       { file: 'argent_liquide_mga.csv', accountId: 1, accountName: 'Argent Liquide' },
       { file: 'mvola_mga.csv', accountId: 2, accountName: 'MVola' },
-      { file: 'boa_mga.csv', accountId: 4, accountName: 'Compte BOA' }
+      { file: 'orange_money_mga.csv', accountId: 3, accountName: 'Orange Money' },
+      { file: 'boa_mga.csv', accountId: 4, accountName: 'BOA' },
     ];
 
-    let totalNew = 0, totalDuplicates = 0, totalErrors = 0;
+    let totalImported = 0;
+    let totalSkipped = 0;
 
-    for (const csvInfo of csvFiles) {
-      console.log('─'.repeat(100));
-      console.log(`\n📄 ${csvInfo.file} → ${csvInfo.accountName}`);
+    for (const config of csvConfigs) {
+      console.log(`\n${'─'.repeat(80)}`);
+      console.log(`📄 ${config.accountName}`);
+      console.log('─'.repeat(80) + '\n');
 
-      const fullPath = path.join(CSV_FOLDER, csvInfo.file);
+      await client.query('BEGIN');
 
-      if (!fs.existsSync(fullPath)) {
-        console.log(`   ⚠️  Fichier introuvable`);
-        continue;
-      }
-
-      const transactions = [];
-      await new Promise((resolve, reject) => {
-        fs.createReadStream(fullPath)
-          .pipe(csv())
-          .on('data', (row) => transactions.push(row))
-          .on('end', resolve)
-          .on('error', reject);
-      });
-
-      console.log(`   📊 ${transactions.length} lignes`);
-
-      const newTransactions = [];
-      const duplicates = [];
-      let invalidCount = 0;
-
-      for (const trx of transactions) {
-        const rawAmount = trx['QUANTITÉ'] || trx['QUANTITE'] || '0';
-        const amount = parseFloat(rawAmount.replace(',', '.'));
-        const date = parseDate(trx['TRAN_DATE']);
-        const description = (trx['PAYEE_ITEM_DESC'] || 'Import CSV').trim();
-        const category = (trx['CATÉGORIE'] || trx['CATEGORIE'] || 'Autre').trim();
-
-        if (!date || isNaN(amount)) {
-          invalidCount++;
+      try {
+        // 1. Lire CSV
+        const csvPath = path.join(__dirname, '../csv/', config.file);
+        if (!fs.existsSync(csvPath)) {
+          console.log(`  ⚠️  Fichier introuvable: ${config.file}`);
+          await client.query('ROLLBACK');
           continue;
         }
 
-        const type = amount < 0 ? 'expense' : 'income';
-        const absAmount = Math.abs(amount);
-        const sig = createSignature(csvInfo.accountId, date, absAmount, description);
+        const content = fs.readFileSync(csvPath, 'utf-8');
+        const lines = content.split('\n').filter(l => l.trim());
 
-        if (!sig) {
-          invalidCount++;
-          continue;
+        const csvTransactions = [];
+        
+        for (const line of lines) {
+          if (line.includes('PAYEE_ITEM_DESC') || line.includes('------')) continue;
+          const parsed = parseCSVLine(line);
+          if (parsed) csvTransactions.push(parsed);
         }
 
-        if (existingSignatures.has(sig)) {
-          duplicates.push({ date, description, amount: absAmount });
-        } else {
-          newTransactions.push({
-            accountId: csvInfo.accountId,
-            type,
-            amount: absAmount,
-            date,
+        console.log(`📊 CSV: ${csvTransactions.length} transactions`);
+
+        // 2. Récupérer les transactions existantes
+        const dbResult = await client.query(`
+          SELECT 
+            transaction_date,
+            amount,
             description,
+            type,
             category
-          });
+          FROM transactions
+          WHERE account_id = $1
+        `, [config.accountId]);
+
+        console.log(`🏦 DB: ${dbResult.rows.length} transactions existantes`);
+
+        // 3. ✅ Créer un Set avec EXACTEMENT les mêmes champs que la contrainte
+        const existingSignatures = new Set();
+        
+        dbResult.rows.forEach(t => {
+          const date = t.transaction_date.toISOString().split('T')[0];
+          const amount = parseFloat(t.amount).toFixed(2);
+          const type = t.type;
+          const description = t.description;
+          
+          // Signature complète : account_id + date + amount + description + type
+          const sig = `${config.accountId}|${date}|${amount}|${description}|${type}`;
           existingSignatures.add(sig);
-        }
-      }
-
-      console.log(`   ✅ ${newTransactions.length} nouvelles`);
-      console.log(`   ⚠️  ${duplicates.length} doublons`);
-      if (invalidCount > 0) console.log(`   ❌ ${invalidCount} invalides`);
-
-      if (duplicates.length > 0 && duplicates.length <= 3) {
-        console.log(`\n   🔍 Exemples de doublons:`);
-        duplicates.slice(0, 3).forEach(d => {
-          console.log(`      - ${d.date}: ${d.description.substring(0, 40)} (${d.amount} Ar)`);
         });
-      }
 
-      if (newTransactions.length > 0 && newTransactions.length <= 5) {
-        console.log(`\n   📝 Nouvelles à importer:`);
-        newTransactions.slice(0, 5).forEach(t => {
-          const sign = t.type === 'income' ? '+' : '-';
-          console.log(`      - ${t.date}: ${t.description.substring(0, 40)} ${sign}${t.amount} Ar`);
-        });
-      }
+        // 4. Filtrer les nouvelles avec la MÊME logique
+        const newTransactions = [];
+        const skipped = [];
 
-      totalNew += newTransactions.length;
-      totalDuplicates += duplicates.length;
-      totalErrors += invalidCount;
-
-      if (newTransactions.length > 0) {
-        console.log(`\n   📤 Import de ${newTransactions.length} transactions...`);
-        let successCount = 0;
-
-        for (const trx of newTransactions) {
-          try {
-            await pool.query(`
-              INSERT INTO transactions 
-                (account_id, type, amount, category, description, transaction_date, is_posted, is_planned)
-              VALUES ($1, $2, $3, $4, $5, $6, true, false)
-            `, [trx.accountId, trx.type, trx.amount, trx.category, trx.description, trx.date]);
-            successCount++;
-          } catch (err) {
-            console.error(`      ❌ ${trx.description.substring(0, 30)}: ${err.message}`);
-            totalErrors++;
+        csvTransactions.forEach(csvTx => {
+          const type = csvTx.amount > 0 ? 'income' : 'expense';
+          const amount = Math.abs(csvTx.amount).toFixed(2);
+          
+          // Même signature que la contrainte DB
+          const sig = `${config.accountId}|${csvTx.date}|${amount}|${csvTx.description}|${type}`;
+          
+          if (existingSignatures.has(sig)) {
+            skipped.push(csvTx);
+          } else {
+            newTransactions.push(csvTx);
+            // Ajouter au Set pour éviter les doublons dans le CSV lui-même
+            existingSignatures.add(sig);
           }
+        });
+
+        console.log(`✅ Nouvelles: ${newTransactions.length}`);
+        console.log(`⚠️  Ignorées (déjà en base): ${skipped.length}\n`);
+
+        // 5. Importer les nouvelles
+        if (newTransactions.length > 0) {
+          console.log('🚀 Import en cours...\n');
+
+          let imported = 0;
+          let errors = 0;
+
+          for (const tx of newTransactions) {
+            const type = tx.amount > 0 ? 'income' : 'expense';
+            const amount = Math.abs(tx.amount);
+
+            try {
+              await client.query(`
+                INSERT INTO transactions (
+                  account_id,
+                  type,
+                  amount,
+                  category,
+                  description,
+                  transaction_date,
+                  is_planned,
+                  is_posted,
+                  created_at,
+                  updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, false, true, NOW(), NOW())
+              `, [
+                config.accountId,
+                type,
+                amount,
+                tx.category || 'Autre',
+                tx.description,
+                tx.date
+              ]);
+
+              imported++;
+            } catch (err) {
+              if (errors === 0) {
+                console.error(`\n❌ ERREUR INATTENDUE (ne devrait pas arriver):`);
+                console.error(`   Code: ${err.code}`);
+                console.error(`   Message: ${err.message}`);
+                console.error(`   Transaction: ${tx.date} | ${tx.amount} | ${tx.description}`);
+                console.error(`   Type: ${type}`);
+                console.error('');
+              }
+              errors++;
+            }
+          }
+
+          console.log(`✅ ${imported} transactions importées`);
+          if (errors > 0) {
+            console.log(`❌ ${errors} erreurs (contrainte DB)\n`);
+          }
+
+          totalImported += imported;
+        } else {
+          console.log('ℹ️  Aucune nouvelle transaction à importer\n');
         }
 
-        console.log(`   ✅ ${successCount}/${newTransactions.length} importées`);
-      } else {
-        console.log(`   ℹ️  Rien à importer`);
+        totalSkipped += skipped.length;
+
+        // 6. Recalculer le solde
+        await client.query(`
+          UPDATE accounts 
+          SET balance = (
+            SELECT COALESCE(SUM(
+              CASE WHEN type = 'income' THEN amount ELSE -amount END
+            ), 0)
+            FROM transactions
+            WHERE account_id = $1
+          )
+          WHERE id = $1
+        `, [config.accountId]);
+
+        const newBalance = await client.query(
+          'SELECT balance FROM accounts WHERE id = $1',
+          [config.accountId]
+        );
+
+        console.log(`💰 Nouveau solde: ${parseFloat(newBalance.rows[0].balance).toLocaleString('fr-FR')} Ar`);
+
+        await client.query('COMMIT');
+
+      } catch (accountError) {
+        await client.query('ROLLBACK');
+        console.error(`\n❌ Erreur pour ${config.accountName}:`, accountError.message);
       }
-      console.log('');
     }
 
-    console.log('═'.repeat(100));
-    console.log('🔄 RECALCUL DES SOLDES...\n');
-
-    const accounts = await pool.query('SELECT id, name FROM accounts ORDER BY id');
-
-    for (const acc of accounts.rows) {
-      const result = await pool.query(`
-        SELECT 
-          COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) as balance,
-          COUNT(*) as count
-        FROM transactions
-        WHERE account_id = $1 AND is_posted = true
-      `, [acc.id]);
-
-      const balance = parseFloat(result.rows[0].balance);
-      const count = parseInt(result.rows[0].count);
-
-      await pool.query('UPDATE accounts SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [balance, acc.id]);
-
-      const status = balance >= 0 ? '✅' : '❌';
-      console.log(`   ${status} ${acc.name}: ${balance.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} Ar (${count} trx)`);
-    }
-
-    console.log('\n' + '═'.repeat(100));
-    console.log('📊 RÉSUMÉ');
-    console.log('═'.repeat(100));
-    console.log(`\n   ✅ Nouvelles: ${totalNew}`);
-    console.log(`   ⚠️  Doublons: ${totalDuplicates}`);
-    if (totalErrors > 0) console.log(`   ❌ Erreurs: ${totalErrors}`);
-    
-    console.log(totalNew > 0 
-      ? `\n   ✅ Import réussi !` 
-      : `\n   ℹ️  Base déjà à jour.`
-    );
-    
-    console.log('\n' + '═'.repeat(100) + '\n');
+    console.log('\n' + '═'.repeat(80));
+    console.log('📊 RÉSUMÉ GLOBAL');
+    console.log('═'.repeat(80) + '\n');
+    console.log(`✅ Total importé: ${totalImported} nouvelles transactions`);
+    console.log(`⚠️  Total ignoré: ${totalSkipped} doublons`);
+    console.log('\n✅ Import terminé !\n');
 
   } catch (error) {
-    console.error('\n❌ Erreur:', error.message);
-    console.error(error.stack);
+    console.error('❌ Erreur globale:', error);
   } finally {
+    client.release();
     await pool.end();
   }
 }
 
-smartCsvImport();
+smartImportV2();

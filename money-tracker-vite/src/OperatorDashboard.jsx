@@ -1,17 +1,27 @@
 // OperatorDashboard.jsx - VERSION COMPLÃˆTE CORRIGÃ‰E
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  X, Settings, CheckSquare, Clock, Target, FileText, 
-  Plus, Edit, Trash2, Play, Pause, AlertCircle, TrendingUp 
-} from 'lucide-react';
+import { X, Settings, CheckSquare, Clock, Target, FileText, Plus, Edit, Trash2, Play, Pause, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, differenceInDays, parseISO, isWithinInterval, isSameDay, addDays } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import operatorService from './services/operatorService';
-import {CopyButton} from './components/common/CopyButton';
+import { CopyButton } from './components/common/CopyButton';
+import { api } from './services/api'; // adapte le chemin
+import GanttTimelineModal from './components/operator/GanttTimelineModal';
+
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) + ' Ar';
 };
 
-export function OperatorDashboard({ onClose, projects = [], transactions = [], accounts = [] }) {
+export function OperatorDashboard({ 
+  onClose, 
+  projects = [], 
+  transactions = [], 
+  accounts = [],
+  onProjectUpdated, // ✅ Ajouter pour rafraîchir les projets
+  refreshProjects   // ✅ Ajouter pour rafraîchir les projets
+}) {
+
   const [sops, setSops] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +29,8 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [selectedSOP, setSelectedSOP] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+ const [showGanttTimeline, setShowGanttTimeline] = useState(false);
+
 
   // Charger les donnÃ©es au montage
   useEffect(() => {
@@ -65,6 +77,21 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
     }
   };
 
+  const handleUpdateProject = async (projectId, updates) => {
+  try {
+    await api.put(`/operator/projects/${projectId}`, updates);
+
+    // Recharger les projets
+    await loadProjects();
+    
+    return true;
+  } catch (error) {
+    console.error('Erreur de mise à jour:', error);
+    alert(`Erreur lors de la mise à jour du projet: ${error.message}`);
+    return false;
+  }
+};
+
   // CRUD SOPs
   const handleCreateSOP = async (sopData) => {
     try {
@@ -108,7 +135,6 @@ export function OperatorDashboard({ onClose, projects = [], transactions = [], a
     alert(`Erreur lors de la mise à jour de la SOP: ${error.message}`);
   }
 };
-
 
   const handleDeleteSOP = async (id) => {
     if (!confirm('Êtes-vous sûr de vouloir supprimer cette SOP ?')) return;
@@ -265,33 +291,297 @@ const projectStats = useMemo(() => {
       }));
   }, [transactions, projects]);
 
-  // Texte à copier
-const generateCopyText = () => {
-  const now = new Date().toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
+// ✅ CORRECT - Ajouter le calcul
+const stepGroups = useMemo(() => {
+  if (!projects.expenses && !projects.revenues) return [];
+  
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(projects.expenses);
+  const revenues = parseData(projects.revenues);
+  
+  return [
+    {
+      phase: 'expenses',
+      label: 'Dépenses',
+      items: expenses.map(exp => ({
+        id: exp.id || Math.random(),
+        code: exp.code,
+        label: exp.label,
+        amount: parseFloat(exp.amount || 0),
+        type: 'expense',
+        isDone: exp.isPaid || false
+      }))
+    },
+    {
+      phase: 'revenues',
+      label: 'Revenus',
+      items: revenues.map(rev => ({
+        id: rev.id || Math.random(),
+        code: rev.code,
+        label: rev.label,
+        amount: parseFloat(rev.amount || 0),
+        type: 'revenue',
+        isDone: rev.isReceived || false
+      }))
+    }
+  ].filter(g => g.items.length > 0);
+}, [projects]);
+
+  const generateCopyText = () => {
+  const now = new Date().toLocaleDateString('fr-FR', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
   });
+  
+  let text = '';
+  
+  // ═══════════════════════════════════════════════════════════
+  // 📊 EN-TÊTE
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += '📊 OPERATOR DASHBOARD - RAPPORT COMPLET\n';
+  text += '═'.repeat(60) + '\n';
+  text += `📅 Date: ${now}\n`;
+  text += `⏰ Généré à: ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '\n';
 
-  let text = '📊 OPERATOR DASHBOARD\n';
-  text += `\n📅 Date: ${now}\n`;
-  text += '\n🎯 INDICATEURS\n';
-  text += `• SOPs: Total ${stats.totalSOPs} | Actives ${stats.activeSOPs}\n`;
-  text += `• Tâches: En Cours ${stats.pendingTasks}\n`;
-  text += `• SOPs à Revoir: ${stats.overdueSOPs}\n`;
-  text += `• Projets Actifs: ${projectStats.active}\n`;
+  // ═══════════════════════════════════════════════════════════
+  // 🎯 INDICATEURS CLÉS
+  // ═══════════════════════════════════════════════════════════
+  text += '🎯 INDICATEURS CLÉS\n';
+  text += '─'.repeat(60) + '\n';
+  text += `📋 SOPs Total: ${stats.totalSOPs} | Actives: ${stats.activeSOPs}\n`;
+  text += `✅ Tâches En Cours: ${stats.pendingTasks}\n`;
+  text += `🚀 Projets Actifs: ${projectStats.active}\n`;
+  text += `⚠️  SOPs à Revoir: ${stats.overdueSOPs}\n`;
+  text += '\n';
 
+  // ═══════════════════════════════════════════════════════════
+  // 💰 SYNTHÈSE FINANCIÈRE
+  // ═══════════════════════════════════════════════════════════
   if (projectStats.active > 0) {
-    text += '\n💰 PROJETS ACTIFS\n';
-    text += `• Investi: ${formatCurrency(projectStats.totalCost)}\n`;
-    text += `• CA prévu: ${formatCurrency(projectStats.totalRevenues)}\n`;
-    text += `• ROI moyen: ${projectStats.roi.toFixed(1)}%\n`;
+    text += '💰 SYNTHÈSE FINANCIÈRE\n';
+    text += '─'.repeat(60) + '\n';
+    text += `💸 Investi Total: ${formatCurrency(projectStats.totalCost)}\n`;
+    text += `💵 CA Prévu: ${formatCurrency(projectStats.totalRevenues)}\n`;
+    text += `📈 ROI Moyen: ${projectStats.roi.toFixed(1)}%\n`;
+    text += `💎 Bénéfice Estimé: ${formatCurrency(projectStats.totalRevenues - projectStats.totalCost)}\n`;
+    text += '\n';
   }
 
-  text += `\n⚡ Généré par Money Tracker | ${new Date().toLocaleTimeString('fr-FR')}`;
+  // ═══════════════════════════════════════════════════════════
+  // 📋 DÉTAILS DES SOPs
+  // ═══════════════════════════════════════════════════════════
+  if (sops.length > 0) {
+    text += '📋 STANDARD OPERATING PROCEDURES (SOPs)\n';
+    text += '─'.repeat(60) + '\n';
+    
+    sops.forEach((sop, index) => {
+      text += `\n${index + 1}. ${sop.title}\n`;
+      text += `   📝 Description: ${sop.description || 'N/A'}\n`;
+      text += `   👤 Responsable: ${sop.owner || 'Non assigné'}\n`;
+      text += `   📂 Catégorie: ${sop.category || 'Général'}\n`;
+      text += `   ⏱️  Durée moy.: ${sop.avg_time || sop.avgtime || 0} jours\n`;
+      text += `   🎯 Statut: ${
+        sop.status === 'active' ? '🟢 Active' : 
+        sop.status === 'draft' ? '🟡 Brouillon' : 
+        '⚫ Archivée'
+      }\n`;
+      
+      // Étapes
+      if (sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0) {
+        text += `   📌 Étapes (${sop.steps.length}):\n`;
+        sop.steps.forEach((step, idx) => {
+          text += `      ${idx + 1}) ${step.title}${step.duration ? ' (' + step.duration + ')' : ''}\n`;
+        });
+      }
+      
+      // Checklist
+      if (sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0) {
+        const completed = sop.checklist.filter(i => i.checked).length;
+        text += `   ✅ Checklist: ${completed}/${sop.checklist.length} complétée\n`;
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ TÂCHES OPÉRATIONNELLES
+  // ═══════════════════════════════════════════════════════════
+  if (tasks.length > 0) {
+    text += '✅ TÂCHES OPÉRATIONNELLES\n';
+    text += '─'.repeat(60) + '\n';
+    
+    // Grouper par statut
+    const tasksByStatus = {
+      todo: tasks.filter(t => t.status === 'todo'),
+      'in-progress': tasks.filter(t => t.status === 'in-progress'),
+      done: tasks.filter(t => t.status === 'done')
+    };
+    
+    Object.entries(tasksByStatus).forEach(([status, taskList]) => {
+      if (taskList.length > 0) {
+        const statusLabel = 
+          status === 'todo' ? '📝 À FAIRE' :
+          status === 'in-progress' ? '⚙️  EN COURS' :
+          '✅ TERMINÉES';
+        
+        text += `\n${statusLabel} (${taskList.length})\n`;
+        
+        taskList.forEach((task, index) => {
+          text += `  ${index + 1}. ${task.title}\n`;
+          if (task.description) {
+            text += `     💬 ${task.description}\n`;
+          }
+          text += `     👤 Assigné: ${task.assigned_to || task.assignedto || 'Non assigné'}\n`;
+          text += `     📅 Échéance: ${task.due_date || task.duedate || 'Non définie'}\n`;
+          text += `     ⚡ Priorité: ${
+            task.priority === 'critical' ? '🔴 Critique' :
+            task.priority === 'high' ? '🟠 Haute' :
+            task.priority === 'medium' ? '🟡 Moyenne' :
+            '🟢 Faible'
+          }\n`;
+        });
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🚀 PROJETS ACTIFS - DÉTAILS COMPLETS
+  // ═══════════════════════════════════════════════════════════
+if (projectStats.active > 0) {
+  text += `\n🚀 PROJETS ACTIFS - DÉTAILS COMPLETS\n`;
+  text += `${'─'.repeat(60)}\n`;
+  
+  projectStats.activeProjects.forEach((project, index) => {
+    const investedAmount = calculateInvestedAmount(project);
+    const totalBudget = parseFloat(project.totalCost || project.totalcost || 0);
+    const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+    const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+    const costs = parseFloat(project.totalcost || project.totalCost || 0);
+    const roi = costs > 0 ? ((revenues - costs) / costs) * 100 : 0;
+    const profit = revenues - costs;
+
+    text += `\n${index + 1}. 📦 ${project.name}\n`;
+    text += `   ${'-'.repeat(55)}\n`;
+    
+    if (project.description) {
+      text += `   📝 Description: ${project.description}\n`;
+    }
+    
+    text += `   📅 Créé le: ${project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : 'N/A'}\n`;
+    text += `   💰 Budget Total: ${formatCurrency(totalBudget)}\n`;
+    text += `   💸 Investi (Payé): ${formatCurrency(investedAmount)}\n`;
+    text += `   📊 Progression: ${progress.toFixed(1)}% payé\n`;
+    text += `   💵 Revenus Prévus: ${formatCurrency(revenues)}\n`;
+    text += `   📈 ROI: ${roi >= 0 ? '🟢' : '🔴'} ${roi.toFixed(1)}%\n`;
+    text += `   💎 Bénéfice Net: ${profit >= 0 ? '🟢' : '🔴'} ${formatCurrency(profit)}\n`;
+
+    // Parser expenses et revenues (JSONB)
+    const parseData = (data) => {
+      if (!data) return [];
+      if (typeof data === 'string') {
+        try { return JSON.parse(data); } 
+        catch { return []; }
+      }
+      return Array.isArray(data) ? data : [];
+    };
+
+    const expenses = parseData(project.expenses);
+    const projectRevenues = parseData(project.revenues);
+
+    // DÉPENSES (CORRIGÉ)
+    if (expenses.length > 0) {
+      text += `\n   💳 DÉPENSES (${expenses.length}):\n`;
+      expenses.forEach((exp, idx) => {
+        const status = exp.isPaid ? '✅ Payé' : '⏳ À payer';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Dépense';
+        
+        if (exp.description && exp.description.trim() !== '') {
+          label = exp.description.trim();
+        } else if (exp.label && exp.label.trim() !== '') {
+          label = exp.label.trim();
+        } else if (exp.code && exp.code.trim() !== '') {
+          label = exp.code.trim();
+        } else if (exp.category && exp.category.trim() !== '') {
+          label = exp.category.trim();
+        } else if (exp.phase && exp.phase.trim() !== '') {
+          label = `Dépense ${exp.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(exp.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // REVENUS (CORRIGÉ)
+    if (projectRevenues.length > 0) {
+      text += `\n   💰 REVENUS (${projectRevenues.length}):\n`;
+      projectRevenues.forEach((rev, idx) => {
+        const status = rev.isReceived ? '✅ Reçu' : '⏳ En attente';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Revenu';
+        
+        if (rev.description && rev.description.trim() !== '') {
+          label = rev.description.trim();
+        } else if (rev.label && rev.label.trim() !== '') {
+          label = rev.label.trim();
+        } else if (rev.code && rev.code.trim() !== '') {
+          label = rev.code.trim();
+        } else if (rev.category && rev.category.trim() !== '') {
+          label = rev.category.trim();
+        } else if (rev.phase && rev.phase.trim() !== '') {
+          label = `Revenu ${rev.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(rev.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // TRANSACTIONS RÉCENTES (si disponibles)
+    if (transactions) {
+      const projectTransactions = transactions.filter(t => t.projectid === project.id);
+      if (projectTransactions.length > 0) {
+        text += `\n   💳 TRANSACTIONS RÉCENTES (${projectTransactions.length}):\n`;
+        projectTransactions.slice(0, 5).forEach((t) => {
+          const symbol = t.type === 'income' ? '+' : '-';
+          const icon = t.type === 'income' ? '💰' : '💸';
+          const desc = t.description ? ` - ${t.description.substring(0, 30)}` : '';
+          const date = t.transactiondate ? new Date(t.transactiondate).toLocaleDateString('fr-FR') : '';
+          text += `      ${icon} ${symbol}${formatCurrency(parseFloat(t.amount || 0))}${desc} ${date}\n`;
+        });
+        if (projectTransactions.length > 5) {
+          text += `      ... et ${projectTransactions.length - 5} autres\n`;
+        }
+      }
+    }
+
+    text += '\n';
+  });
+}
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔚 FOOTER
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += `⚡ Généré par Money Tracker • ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '═'.repeat(60) + '\n';
+
   return text;
 };
+
 
   if (loading) {
     return (
@@ -305,6 +595,29 @@ const generateCopyText = () => {
       </div>
     );
   }
+
+  // Fonction pour calculer le montant réellement investi (payé)
+const calculateInvestedAmount = (project) => {
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(project.expenses);
+  
+  // Somme des dépenses avec isPaid: true
+  const invested = expenses.reduce((sum, exp) => {
+    if (exp.isPaid) {
+      return sum + (parseFloat(exp.amount) || 0);
+    }
+    return sum;
+  }, 0);
+  
+  return invested;
+};
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -321,7 +634,29 @@ const generateCopyText = () => {
               <p className="text-purple-100 mt-1">Execution • SOPs • Tâches • Projets Actifs</p>
             </div>
             <div className="flex items-center gap-3">
-              <CopyButton textToCopy={generateCopyText()} />
+
+                {/* Bouton Gantt Timeline */}
+        <li>
+          <button
+  type="button"
+  onClick={() => {
+    console.log("🎯 CLIC sur bouton Gantt Timeline");
+    setShowGanttTimeline(true); // ✅ Ouvrir le modal
+  }}
+  className={[
+    "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all shadow-md",
+    showGanttTimeline
+      ? "bg-green-600 text-white shadow-lg"
+      : "bg-green-600 text-white hover:bg-green-800"
+  ].join(" ")}
+>
+  <Calendar size={18} />
+  Gantt Timeline
+</button>
+
+        </li>
+              
+              <CopyButton getText={generateCopyText} />
               <button
                 onClick={onClose}
                 className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-lg transition"
@@ -385,12 +720,12 @@ const generateCopyText = () => {
                 {sops.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg">
                     <FileText size={48} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-500">Aucune SOP crÃ©Ã©e</p>
+                    <p className="text-gray-500">Aucune SOP crée</p>
                     <button 
                       onClick={() => setShowSOPModal(true)}
                       className="mt-3 text-purple-600 hover:text-purple-700 font-semibold"
                     >
-                      CrÃ©er votre premiÃ¨re SOP
+                      Créer votre première SOP
                     </button>
                   </div>
                 ) : (
@@ -474,7 +809,7 @@ const generateCopyText = () => {
                   className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition flex items-center gap-2 text-sm"
                 >
                   <Plus size={16} />
-                  Nouvelle TÃ¢che
+                  Nouvelle Tâche
                 </button>
               </div>
 
@@ -482,12 +817,12 @@ const generateCopyText = () => {
                 {tasks.length === 0 ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg">
                     <CheckSquare size={48} className="mx-auto text-gray-300 mb-2" />
-                    <p className="text-gray-500">Aucune tÃ¢che crÃ©Ã©e</p>
+                    <p className="text-gray-500">Aucune tâche crée</p>
                     <button 
                       onClick={() => setShowTaskModal(true)}
                       className="mt-3 text-pink-600 hover:text-pink-700 font-semibold"
                     >
-                      CrÃ©er votre premiÃ¨re tÃ¢che
+                      Créer votre première tâche
                     </button>
                   </div>
                 ) : (
@@ -574,217 +909,173 @@ const generateCopyText = () => {
             </div>
           </div>
 
-          {/* Liste Projets Actifs */}
-          <div className="space-y-4 max-h-[350px] overflow-y-auto">
-            {projectStats.active === 0 ? (
-              <div className="text-center py-12 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200">
-                <TrendingUp size={64} className="mx-auto text-blue-300 mb-4" />
-                <h4 className="text-xl font-bold text-gray-700 mb-2">Aucun projet actif</h4>
-                <p className="text-gray-500 mb-6">Activez un projet depuis le Planificateur</p>
-              </div>
-            ) : (
-              projectStats.activeProjects.map(project => {
-                const stepGroups = buildProjectSteps(project);
+{/* Liste Projets Actifs */}
+<div className="space-y-4 max-h-[350px] overflow-y-auto">
+  {projectStats.active === 0 ? (
+    <div className="text-center py-12...">...</div>
+  ) : (
+    projectStats.activeProjects.map((project) => {
+  const investedAmount = calculateInvestedAmount(project);
+  const totalBudget = parseFloat(project.totalcost || 0);
+  const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
 
-                return (
-                  <div
-                    key={project.id}
-                    className="group border border-gray-200 rounded-xl p-6 hover:shadow-xl hover:border-blue-300 transition-all bg-white"
-                  >
-                    {/* En-tête projet */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1 mr-4">
-                        <h4 className="font-bold text-xl text-gray-900 mb-1 line-clamp-1 group-hover:text-blue-700">
-                          {project.name}
-                        </h4>
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
-                            💰 Actif
-                          </span>
-                          <span className="text-sm font-medium text-gray-700">
-  {formatCurrency(parseFloat(project.totalcost) || 0)}
-</span>
-                          <span className="text-xs text-gray-500">
-                            {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
-                          </span>
-                        </div>
-                        {project.description && (
-                          <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
-                        )}
-                      </div>
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
 
-                      {/* ROI rapide */}
-                      <div className="w-28 text-right">
-                        <div className={`text-2xl font-bold ${
-                          ((project.totalrevenues || project.totalRevenues || 0) - 
-                           (project.totalcost || project.totalCost || 0)) >= 0 
-                            ? 'text-emerald-600' 
-                            : 'text-red-600'
-                        }`}>
-                          {project.totalrevenues
-  ? (
-      (parseFloat(project.totalrevenues) / 
-      Math.max(parseFloat(project.totalcost) || 1, 1)) * 100
-    ).toFixed(0)
-  : 0}%
-                        </div>
-                      </div>
-                    </div>
+  const expenses = parseData(project.expenses);
+  const revenues = parseData(project.revenues);
 
-                    {/* Suivi par étapes (codes) */}
-                    {stepGroups.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        {stepGroups.map(group => (
-                          <div key={group.phase} className="mb-2">
-                            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                              {group.label}
-                            </div>
-                            <div className="space-y-1">
-                              {group.items.map(step => (
-                                <div
-                                  key={step.id}
-                                  className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-2 py-1"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-2 h-2 rounded-full ${
-                                      step.type === 'expense' ? 'bg-red-400' : 'bg-emerald-400'
-                                    }`}></span>
-                                    <span className="truncate max-w-[180px]">
-                                      {step.code ? step.code : step.label}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[11px] font-medium text-gray-600">
-                                      {formatCurrency(step.amount)}
-                                    </span>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                                      step.isDone 
-                                        ? 'bg-emerald-100 text-emerald-700' 
-                                        : 'bg-yellow-100 text-yellow-700'
-                                    }`}>
-                                      {step.isDone ? '✅ Fait' : 'À faire'}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+  const allSteps = [
+    ...expenses.map(e => ({ ...e, type: 'expense', phase: e.phase || 'general' })),
+    ...revenues.map(r => ({ ...r, type: 'revenue', phase: r.phase || 'general' }))
+  ];
 
-                                        {/* Aperçu transactions projet */}
-                    {projectTransactions.filter(t => t.projectid === project.id).length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex flex-wrap gap-2">
-                          {projectTransactions
-                            .filter(t => t.projectid === project.id)
-                            .slice(0, 3)
-                            .map((t, idx) => (
-                              <span
-                                key={idx}
-                                className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded-full"
-                              >
-                                {t.type === 'income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount))}
-                              </span>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+  const phases = [...new Set(allSteps.map(s => s.phase))];
+  const stepGroups = phases.map(phase => ({
+    phase,
+    label: phase.charAt(0).toUpperCase() + phase.slice(1),
+    items: allSteps.filter(s => s.phase === phase)
+  }));
+
+  return (
+    <div key={project.id} className="group border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50">
+      {/* En-tête projet */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 mr-4">
+          <h4 className="font-bold text-xl text-gray-900 mb-2">{project.name}</h4>
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+              Actif
+            </span>
+            
+            <span className="text-sm font-medium text-gray-700">
+              {formatCurrency(investedAmount)}
+            </span>
+            
+            {/* ✅ CORRECTION : Affichage correct du pourcentage payé */}
+            <span className="text-xs text-gray-500">
+              {progress.toFixed(1)}% payé
+            </span>
+            
+            <span className="text-xs text-gray-500">
+              {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
+            </span>
+          </div>
+          
+          {project.description && (
+            <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
+          )}
+        </div>
+        
+        {/* ✅ CORRECTION : Calcul ROI correct */}
+        <div className="w-32 text-right flex-shrink-0">
+          <div className="text-xs text-gray-500 mb-1">ROI</div>
+          <div className={`text-2xl font-bold ${
+            ((parseFloat(project.totalrevenues || 0) - parseFloat(project.totalcost || 0)) > 0)
+              ? 'text-emerald-600'
+              : 'text-red-600'
+          }`}>
+            {(() => {
+              const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+  const costs = parseFloat(project.totalcost || project.totalCost || 0);
+  
+  if (costs === 0) return revenues > 0 ? '∞' : '0';
+  
+  const roi = ((revenues - costs) / costs) * 100;
+  return roi.toFixed(0);
+            })()}%
+          </div>
+          
+          {/* ✅ AJOUT : Bénéfice net */}
+          <div className="text-xs text-gray-500 mt-1">
+            {formatCurrency(
+              (parseFloat(project.totalrevenues || 0)) - 
+              (parseFloat(project.totalcost || 0))
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Best Practices */}
-          <div className="mt-8 p-8 rounded-2xl border-t-2 border-purple-200 bg-gradient-to-r from-purple-50/50 to-pink-50/50">
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8">
-              <h3 className="text-2xl font-black text-gray-900 mb-8 flex items-center gap-3">
-                <Target size={32} className="text-purple-600 shrink-0" />
-                Best Practices Operator
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* 1. Documenter */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-purple-200 hover:border-purple-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">💰</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-purple-700">
-                      Documenter avant automatiser
+      {/* Suivi par étapes */}
+      {stepGroups.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {stepGroups.map(group => (
+            <div key={group.phase} className="mb-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                {group.label}
+              </div>
+              <div className="space-y-1">
+                {group.items.map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-2 py-1"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        step.type === 'expense' ? 'bg-red-400' : 'bg-emerald-400'
+                      }`}></span>
+                      <span className="truncate max-w-[180px]">
+                        {step.description || step.code || step.label || 'Sans nom'}
+                      </span>
                     </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Ne jamais automatiser un processus mal défini
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[11px] font-medium text-gray-600">
+                        {formatCurrency(step.amount || 0)}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
+                        step.isPaid || step.isReceived
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {step.isPaid || step.isReceived ? '✅ Fait' : '⏳ À faire'}
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* 2. Revue hebdo */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-pink-200 hover:border-pink-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📈</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-pink-700">
-                      Revue hebdo stand-up
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      15 min pour faire le point sur l'exécution
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Rétro bi-mensuelle */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-indigo-200 hover:border-indigo-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📝</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-indigo-700">
-                      Rétro bi-mensuelle
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Qu'est-ce qui fonctionne ? Qu'est-ce qui coince ?
-                    </div>
-                  </div>
-                </div>
-
-                {/* 4. SOP 1 page */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-emerald-200 hover:border-emerald-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">📄</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-emerald-700">
-                      Une SOP = 1 page max
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      But • Entrées • Étapes • Checkpoints • Responsables
-                    </div>
-                  </div>
-                </div>
-
-                {/* 5. 3 outils max */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-blue-200 hover:border-blue-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">🛠️</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-blue-700">
-                      Standardiser 3 outils max
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Éviter la multiplication des plateformes
-                    </div>
-                  </div>
-                </div>
-
-                {/* 6. Mesurer */}
-                <div className="group flex items-start gap-4 p-6 bg-white/70 hover:bg-white hover:shadow-lg rounded-xl border border-yellow-200 hover:border-yellow-300 transition-all duration-300 hover:-translate-y-1">
-                  <div className="text-3xl flex-shrink-0 mt-1">✅</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-xl text-gray-900 mb-2 group-hover:text-yellow-700">
-                      Mesurer pour améliorer
-                    </div>
-                    <div className="text-gray-700 leading-relaxed">
-                      Temps, qualité, coûts - Track everything
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aperçu transactions projet */}
+      {transactions && transactions.filter(t => t.projectid === project.id).length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 mb-2">Dernières transactions</div>
+          <div className="flex flex-wrap gap-2">
+            {projectTransactions
+              .filter(t => t.projectid === project.id)
+              .slice(0, 3)
+              .map((t, idx) => (
+                <span
+                  key={t.id || idx}
+                  className={`px-2 py-1 text-xs rounded-full font-medium ${
+                    t.type === 'income' 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {t.type === 'income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount || 0))}
+                </span>
+              ))}
+            {projectTransactions.filter(t => t.projectid === project.id).length > 3 && (
+              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                +{projectTransactions.filter(t => t.projectid === project.id).length - 3} autre(s)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})
+
+            )}
           </div>
         </div>
 
@@ -827,106 +1118,181 @@ const generateCopyText = () => {
           sops={sops}
         />
       )}
+
+  {/* ✅ GANTT TIMELINE MODAL CORRIGÉ */}
+      {showGanttTimeline && (
+        <GanttTimelineModal
+          isOpen={showGanttTimeline}
+          onClose={() => {
+            console.log("🔴 Fermeture Gantt Timeline");
+            setShowGanttTimeline(false);
+          }}
+          projects={projects}
+          onUpdateProject={async (id, updates) => {
+            console.log("📝 Mise à jour projet:", id, updates);
+            try {
+              await projectsService.update(id, updates);
+              if (onProjectUpdated) onProjectUpdated();
+            } catch (error) {
+              console.error("❌ Erreur:", error);
+              alert("Erreur: " + error.message);
+            }
+          }}
+          onRefresh={async () => {
+            console.log("🔄 Rafraîchissement");
+            if (refreshProjects) await refreshProjects();
+          }}
+        />
+)}
     </div>
   );
 }
 
 // ============================================
-// COMPOSANTS MODALS
+// COMPOSANT MODAL SOP CORRIGÉ (Avec Sauvegarde Checklist)
 // ============================================
 
 function SOPDetailsModal({ sop, onClose, onUpdate }) {
+  
+  // ✅ Fonction qui gère le clic et sauvegarde
+  const handleCheck = (index) => {
+    // 1. On copie la checklist pour ne pas modifier l'état directement
+    const updatedChecklist = sop.checklist.map((item, i) => {
+      if (i === index) {
+        // On inverse l'état (true <-> false)
+        return { ...item, checked: !item.checked }; 
+      }
+      return item;
+    });
+
+    // 2. On appelle la fonction de mise à jour du parent
+    // Cela va déclencher l'appel API (operatorService.updateSOP)
+    console.log("💾 Sauvegarde checklist...", updatedChecklist);
+    onUpdate(sop.id, { checklist: updatedChecklist });
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="text-xl font-bold">{sop.title}</h3>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 shadow-2xl">
+        
+        {/* En-tête */}
+        <div className="flex justify-between items-start mb-4 border-b pb-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">{sop.title}</h3>
+            <p className="text-sm text-gray-500 mt-1">{sop.description}</p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-full transition"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <p className="text-gray-600 mb-4">{sop.description}</p>
+        <div className="space-y-6 text-sm">
+          
+          {/* Infos Générales */}
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Responsable</span>
+              <span className="font-medium text-gray-900">{sop.owner || "Non assigné"}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Durée moy.</span>
+              <span className="font-medium text-gray-900">{sop.avg_time || sop.avgtime || 0} jours</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Statut</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold mt-1 ${
+                sop.status === 'active' ? 'bg-green-100 text-green-700' :
+                sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-200 text-gray-700'
+              }`}>
+                {sop.status === 'active' ? 'Active' : sop.status === 'draft' ? 'Brouillon' : 'Archivée'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Catégorie</span>
+              <span className="font-medium text-gray-900">{sop.category || "Général"}</span>
+            </div>
+          </div>
 
-        <div className="space-y-4 text-sm">
-          <div>
-            <strong>Responsable:</strong> {sop.owner}
-          </div>
-          <div>
-            <strong>DurÃ©e moyenne:</strong> {sop.avg_time || sop.avgtime} jours
-          </div>
-          <div>
-            <strong>Statut:</strong>{' '}
-            <span className={`px-2 py-1 rounded text-xs font-semibold ${
-              sop.status === 'active' ? 'bg-green-100 text-green-700' :
-              sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
-              'bg-gray-100 text-gray-700'
-            }`}>
-              {sop.status}
-            </span>
-          </div>
-          <div>
-            <strong>CatÃ©gorie:</strong> {sop.category}
-          </div>
-
-          {/* âœ… Ã‰TAPES - CORRECTION ICI */}
+          {/* Étapes */}
           {sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0 && (
             <div>
-              <strong className="block mb-2">Étapes ({sop.steps.length}):</strong>
-              <div className="space-y-2">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-purple-100 text-purple-700 w-6 h-6 rounded flex items-center justify-center text-xs">1</span>
+                Étapes ({sop.steps.length})
+              </h4>
+              <div className="space-y-3 pl-2">
                 {sop.steps.map((step, index) => (
-                  <div key={index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="bg-purple-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold">
-                        {step.order || index + 1}
-                      </span>
-                      <strong className="text-gray-900">{step.title}</strong>
-                    </div>
-                    <p className="text-gray-600 text-xs ml-8">{step.description}</p>
-                    <span className="text-xs text-gray-500 ml-8">â±ï¸ {step.duration}</span>
+                  <div key={index} className="relative pl-6 border-l-2 border-gray-200 pb-2 last:pb-0">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-gray-200 border-2 border-white"></div>
+                    <strong className="text-gray-900 block">{step.title}</strong>
+                    <p className="text-gray-600 text-xs mt-1">{step.description}</p>
+                    {step.duration && (
+                      <span className="text-xs text-purple-600 font-medium mt-1 block">⏱️ {step.duration}</span>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* âœ… CHECKLIST - CORRECTION ICI */}
+          {/* ✅ CHECKLIST INTERACTIVE CORRIGÉE ✅ */}
           {sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0 && (
-            <div>
-              <strong className="block mb-2">Checklist ({sop.checklist.length}):</strong>
-              <div className="space-y-1">
+            <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-yellow-100 text-yellow-700 w-6 h-6 rounded flex items-center justify-center text-xs">2</span>
+                Checklist de Validation ({sop.checklist.filter(i => i.checked).length}/{sop.checklist.length})
+              </h4>
+              
+              <div className="space-y-2">
                 {sop.checklist.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
+                  <label 
+                    key={index} 
+                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none ${
+                      item.checked 
+                        ? 'bg-green-50 border-green-200' 
+                        : 'bg-white border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
                     <input
                       type="checkbox"
-                      id={`check-${index}`}
-                      className="w-4 h-4"
+                      // 👇 C'est ici que la magie opère
+                      checked={item.checked || false} 
+                      onChange={() => handleCheck(index)}
+                      className="mt-1 w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
                     />
-                    <label htmlFor={`check-${index}`} className="text-gray-700">
-                      {item.item}
-                      {item.required && <span className="text-red-500 ml-1">*</span>}
-                    </label>
-                  </div>
+                    <div className="flex-1">
+                      <span className={`text-sm font-medium transition-all ${item.checked ? 'text-green-800 line-through opacity-60' : 'text-gray-800'}`}>
+                        {item.item}
+                      </span>
+                      {item.required && !item.checked && (
+                        <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                          Requis
+                        </span>
+                      )}
+                    </div>
+                  </label>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        <button
-          onClick={onClose}
-          className="mt-6 w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700"
-        >
-          Fermer
-        </button>
+        <div className="mt-6 pt-4 border-t flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition"
+          >
+            Fermer
+          </button>
+        </div>
       </div>
     </div>
   );
 }
-
 function SOPCreateModal({ onClose, onCreate }) {
   const [formData, setFormData] = useState({
     title: '',
@@ -1024,7 +1390,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
       <div className="bg-white rounded-xl max-w-lg w-full p-6">
-        <h3 className="text-xl font-bold mb-4">Nouvelle TÃ¢che</h3>
+        <h3 className="text-xl font-bold mb-4">Nouvelle Tâche</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="text"
@@ -1046,10 +1412,10 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
             onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
             className="w-full border rounded-lg px-3 py-2"
           >
-            <option value="low">PrioritÃ© Faible</option>
-            <option value="medium">PrioritÃ© Moyenne</option>
-            <option value="high">PrioritÃ© Haute</option>
-            <option value="critical">PrioritÃ© Critique</option>
+            <option value="low">Priorité Faible</option>
+            <option value="medium">Priorité Moyenne</option>
+            <option value="high">Priorité Haute</option>
+            <option value="critical">Priorité Critique</option>
           </select>
           <input
             type="date"
@@ -1072,7 +1438,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
           >
             <option value="todo">À faire</option>
             <option value="in-progress">En cours</option>
-            <option value="done">TerminÃ©</option>
+            <option value="done">Terminer</option>
           </select>
           <select
             value={formData.sop_id || ''}
@@ -1082,7 +1448,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
             })}
             className="w-full border rounded-lg px-3 py-2"
           >
-            <option value="">Aucune SOP liÃ©e</option>
+            <option value="">Aucune SOP liée</option>
             {sops.map(sop => (
               <option key={sop.id} value={sop.id}>
                 {sop.title}
@@ -1094,7 +1460,7 @@ function TaskCreateModal({ onClose, onCreate, sops = [] }) {
               type="submit"
               className="flex-1 bg-pink-600 text-white py-2 rounded-lg hover:bg-pink-700"
             >
-              CrÃ©er
+              Créer
             </button>
             <button
               type="button"

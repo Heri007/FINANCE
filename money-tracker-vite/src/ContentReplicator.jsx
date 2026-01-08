@@ -1,9 +1,22 @@
 // ContentReplicator.jsx - VERSION COMPLÈTE AVEC BOUTON COPIER
 import React, { useState } from 'react';
-import { 
-  X, Copy, Share2, Calendar, TrendingUp, Download,
-  Video, FileText, Image, MessageSquare, Instagram,
-  Twitter, Linkedin, Facebook, Youtube, Plus
+import {
+  X,
+  Copy,
+  Share2,
+  Calendar,
+  TrendingUp,
+  Download,
+  Video,
+  FileText,
+  Image,
+  MessageSquare,
+  Instagram,
+  Twitter,
+  Linkedin,
+  Facebook,
+  Youtube,
+  Plus,
 } from 'lucide-react';
 import { CopyButton } from './components/common/CopyButton';
 
@@ -12,40 +25,40 @@ const platformIcons = {
   linkedin: Linkedin,
   facebook: Facebook,
   instagram: Instagram,
-  youtube: Youtube
+  youtube: Youtube,
 };
 
 const defaultMasterContent = [
   {
     id: 1,
-    title: "Comment gérer son cashflow en startup",
-    type: "video",
-    duration: "12 min",
-    createdDate: "2025-01-15",
+    title: 'Comment gérer son cashflow en startup',
+    type: 'video',
+    duration: '12 min',
+    createdDate: '2025-01-15',
     reach: 15420,
     engagement: 8.5,
     derivatives: [
-      { platform: "youtube", type: "Long-form", status: "published", reach: 8500 },
-      { platform: "instagram", type: "Reels (3)", status: "published", reach: 3200 },
-      { platform: "linkedin", type: "Article", status: "published", reach: 2100 },
-      { platform: "twitter", type: "Thread", status: "published", reach: 1620 }
-    ]
+      { platform: 'youtube', type: 'Long-form', status: 'published', reach: 8500 },
+      { platform: 'instagram', type: 'Reels (3)', status: 'published', reach: 3200 },
+      { platform: 'linkedin', type: 'Article', status: 'published', reach: 2100 },
+      { platform: 'twitter', type: 'Thread', status: 'published', reach: 1620 },
+    ],
   },
   {
     id: 2,
-    title: "Les 7 métriques financières à suivre",
-    type: "article",
-    duration: "8 min lecture",
-    createdDate: "2025-01-10",
+    title: 'Les 7 métriques financières à suivre',
+    type: 'article',
+    duration: '8 min lecture',
+    createdDate: '2025-01-10',
     reach: 8900,
     engagement: 12.3,
     derivatives: [
-      { platform: "linkedin", type: "Carrousel", status: "published", reach: 4200 },
-      { platform: "twitter", type: "Thread", status: "published", reach: 2800 },
-      { platform: "instagram", type: "Posts (7)", status: "scheduled", reach: 0 },
-      { platform: "facebook", type: "Post", status: "draft", reach: 0 }
-    ]
-  }
+      { platform: 'linkedin', type: 'Carrousel', status: 'published', reach: 4200 },
+      { platform: 'twitter', type: 'Thread', status: 'published', reach: 2800 },
+      { platform: 'instagram', type: 'Posts (7)', status: 'scheduled', reach: 0 },
+      { platform: 'facebook', type: 'Post', status: 'draft', reach: 0 },
+    ],
+  },
 ];
 
 export function ContentReplicator({ onClose }) {
@@ -57,16 +70,18 @@ export function ContentReplicator({ onClose }) {
     masterPieces: masterContent.length,
     derivatives: masterContent.reduce((sum, c) => sum + c.derivatives.length, 0),
     totalReach: masterContent.reduce((sum, c) => sum + c.reach, 0),
-    avgEngagement: (masterContent.reduce((sum, c) => sum + c.engagement, 0) / masterContent.length).toFixed(1)
+    avgEngagement: (
+      masterContent.reduce((sum, c) => sum + c.engagement, 0) / masterContent.length
+    ).toFixed(1),
   };
 
   // ✅ Fonction pour générer le texte à copier
   const generateCopyText = () => {
-    const now = new Date().toLocaleDateString('fr-FR', { 
-      weekday: 'long', 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
+    const now = new Date().toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
     });
 
     let text = `🎯 CONTENT REPLICATOR\n`;
@@ -95,10 +110,14 @@ export function ContentReplicator({ onClose }) {
       text += `   Reach: ${content.reach.toLocaleString()} | Engagement: ${content.engagement}%\n`;
       text += `   Déclinaisons: ${content.derivatives.length}\n`;
       text += `\n   Détail des déclinaisons:\n`;
-      
-      content.derivatives.forEach(derivative => {
-        const statusEmoji = derivative.status === 'published' ? '✅' : 
-                           derivative.status === 'scheduled' ? '⏰' : '📝';
+
+      content.derivatives.forEach((derivative) => {
+        const statusEmoji =
+          derivative.status === 'published'
+            ? '✅'
+            : derivative.status === 'scheduled'
+              ? '⏰'
+              : '📝';
         text += `   ${statusEmoji} ${derivative.platform.toUpperCase()} - ${derivative.type}\n`;
         if (derivative.reach > 0) {
           text += `      Reach: ${derivative.reach.toLocaleString()} vues\n`;
@@ -111,8 +130,8 @@ export function ContentReplicator({ onClose }) {
 
     // Performance par plateforme
     const platformStats = {};
-    masterContent.forEach(content => {
-      content.derivatives.forEach(d => {
+    masterContent.forEach((content) => {
+      content.derivatives.forEach((d) => {
         if (!platformStats[d.platform]) {
           platformStats[d.platform] = { count: 0, reach: 0, published: 0 };
         }
@@ -177,13 +196,18 @@ export function ContentReplicator({ onClose }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold">🎯 Content Replicator</h2>
-              <p className="text-pink-100 text-sm mt-1">Attention is leverage • Multiply reach</p>
+              <p className="text-pink-100 text-sm mt-1">
+                Attention is leverage • Multiply reach
+              </p>
             </div>
             <div className="flex items-center gap-3">
               {/* ✅ Bouton Copier */}
-              <CopyButton textToCopy={generateCopyText()} />
-              
-              <button onClick={onClose} className="p-2 hover:bg-white/20 rounded-lg transition">
+              <CopyButton getText={generateCopyText} />
+
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-white/20 rounded-lg transition"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -215,7 +239,9 @@ export function ContentReplicator({ onClose }) {
                 <span className="text-sm opacity-90">Reach Total</span>
                 <TrendingUp className="w-5 h-5" />
               </div>
-              <p className="text-3xl font-bold">{totalStats.totalReach.toLocaleString()}</p>
+              <p className="text-3xl font-bold">
+                {totalStats.totalReach.toLocaleString()}
+              </p>
             </div>
 
             <div className="bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl p-5 text-white">
@@ -231,7 +257,7 @@ export function ContentReplicator({ onClose }) {
           <div className="bg-white border rounded-xl p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-gray-900">Contenus Maîtres</h3>
-              <button 
+              <button
                 onClick={() => setShowNewContent(true)}
                 className="bg-pink-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-pink-700 transition flex items-center space-x-2"
               >
@@ -241,32 +267,43 @@ export function ContentReplicator({ onClose }) {
             </div>
 
             <div className="space-y-4">
-              {masterContent.map(content => (
-                <div 
+              {masterContent.map((content) => (
+                <div
                   key={content.id}
                   className="border rounded-xl p-5 hover:shadow-lg transition"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
-                        <div className={`p-2 rounded-lg ${
-                          content.type === 'video' 
-                            ? 'bg-red-100 text-red-600' 
-                            : 'bg-blue-100 text-blue-600'
-                        }`}>
-                          {content.type === 'video' ? <Video className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                        <div
+                          className={`p-2 rounded-lg ${
+                            content.type === 'video'
+                              ? 'bg-red-100 text-red-600'
+                              : 'bg-blue-100 text-blue-600'
+                          }`}
+                        >
+                          {content.type === 'video' ? (
+                            <Video className="w-5 h-5" />
+                          ) : (
+                            <FileText className="w-5 h-5" />
+                          )}
                         </div>
                         <div>
-                          <h4 className="font-bold text-lg text-gray-900">{content.title}</h4>
+                          <h4 className="font-bold text-lg text-gray-900">
+                            {content.title}
+                          </h4>
                           <p className="text-sm text-gray-500">
-                            {content.type === 'video' ? '🎥' : '📄'} {content.duration} • 
-                            Créé le {new Date(content.createdDate).toLocaleDateString('fr-FR')}
+                            {content.type === 'video' ? '🎥' : '📄'} {content.duration} •
+                            Créé le{' '}
+                            {new Date(content.createdDate).toLocaleDateString('fr-FR')}
                           </p>
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-2xl font-bold text-indigo-600">{content.reach.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-indigo-600">
+                        {content.reach.toLocaleString()}
+                      </p>
                       <p className="text-xs text-gray-500">reach total</p>
                     </div>
                   </div>
@@ -275,11 +312,15 @@ export function ContentReplicator({ onClose }) {
                   <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Déclinaisons</p>
-                      <p className="text-lg font-bold text-gray-900">{content.derivatives.length}</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {content.derivatives.length}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Engagement</p>
-                      <p className="text-lg font-bold text-emerald-600">{content.engagement}%</p>
+                      <p className="text-lg font-bold text-emerald-600">
+                        {content.engagement}%
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Taux réutilisation</p>
@@ -291,33 +332,51 @@ export function ContentReplicator({ onClose }) {
 
                   {/* Déclinaisons */}
                   <div>
-                    <h5 className="text-sm font-semibold text-gray-700 mb-3">Déclinaisons par plateforme</h5>
+                    <h5 className="text-sm font-semibold text-gray-700 mb-3">
+                      Déclinaisons par plateforme
+                    </h5>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                       {content.derivatives.map((derivative, idx) => {
                         const PlatformIcon = platformIcons[derivative.platform] || Share2;
                         return (
-                          <div 
+                          <div
                             key={idx}
                             className="flex items-center space-x-3 p-3 bg-white border rounded-lg hover:shadow-md transition"
                           >
-                            <div className={`p-2 rounded-lg ${
-                              derivative.platform === 'youtube' ? 'bg-red-100 text-red-600' :
-                              derivative.platform === 'linkedin' ? 'bg-blue-100 text-blue-600' :
-                              derivative.platform === 'twitter' ? 'bg-sky-100 text-sky-600' :
-                              derivative.platform === 'instagram' ? 'bg-pink-100 text-pink-600' :
-                              'bg-indigo-100 text-indigo-600'
-                            }`}>
+                            <div
+                              className={`p-2 rounded-lg ${
+                                derivative.platform === 'youtube'
+                                  ? 'bg-red-100 text-red-600'
+                                  : derivative.platform === 'linkedin'
+                                    ? 'bg-blue-100 text-blue-600'
+                                    : derivative.platform === 'twitter'
+                                      ? 'bg-sky-100 text-sky-600'
+                                      : derivative.platform === 'instagram'
+                                        ? 'bg-pink-100 text-pink-600'
+                                        : 'bg-indigo-100 text-indigo-600'
+                              }`}
+                            >
                               <PlatformIcon className="w-4 h-4" />
                             </div>
                             <div className="flex-1">
-                              <p className="text-xs font-semibold text-gray-900">{derivative.type}</p>
-                              <p className="text-xs text-gray-500">{derivative.reach > 0 ? `${derivative.reach.toLocaleString()} vues` : derivative.status}</p>
+                              <p className="text-xs font-semibold text-gray-900">
+                                {derivative.type}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {derivative.reach > 0
+                                  ? `${derivative.reach.toLocaleString()} vues`
+                                  : derivative.status}
+                              </p>
                             </div>
-                            <div className={`w-2 h-2 rounded-full ${
-                              derivative.status === 'published' ? 'bg-emerald-500' :
-                              derivative.status === 'scheduled' ? 'bg-orange-500' :
-                              'bg-gray-300'
-                            }`} />
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                derivative.status === 'published'
+                                  ? 'bg-emerald-500'
+                                  : derivative.status === 'scheduled'
+                                    ? 'bg-orange-500'
+                                    : 'bg-gray-300'
+                              }`}
+                            />
                           </div>
                         );
                       })}
@@ -326,7 +385,7 @@ export function ContentReplicator({ onClose }) {
 
                   {/* Actions */}
                   <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                    <button 
+                    <button
                       onClick={() => setSelectedContent(content)}
                       className="text-sm text-indigo-600 font-semibold hover:text-indigo-800 transition"
                     >
@@ -344,41 +403,67 @@ export function ContentReplicator({ onClose }) {
 
           {/* Workflow SOP */}
           <div className="bg-gradient-to-r from-pink-50 to-purple-50 border border-pink-200 rounded-xl p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">📋 Workflow de Réplication (SOP)</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">
+              📋 Workflow de Réplication (SOP)
+            </h3>
             <div className="space-y-3">
               <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">1</div>
+                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                  1
+                </div>
                 <div>
                   <h4 className="font-semibold text-gray-900">Créer le contenu maître</h4>
-                  <p className="text-sm text-gray-600">Vidéo 10-12 min ou article long-form (1500+ mots) avec CTA clair</p>
+                  <p className="text-sm text-gray-600">
+                    Vidéo 10-12 min ou article long-form (1500+ mots) avec CTA clair
+                  </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">2</div>
+                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                  2
+                </div>
                 <div>
                   <h4 className="font-semibold text-gray-900">Découper & Extraire</h4>
-                  <p className="text-sm text-gray-600">5-10 clips courts, 6-10 citations, 1 thread, 1 PDF, carrousel Instagram</p>
+                  <p className="text-sm text-gray-600">
+                    5-10 clips courts, 6-10 citations, 1 thread, 1 PDF, carrousel
+                    Instagram
+                  </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">3</div>
+                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                  3
+                </div>
                 <div>
                   <h4 className="font-semibold text-gray-900">Planifier la diffusion</h4>
-                  <p className="text-sm text-gray-600">Calendrier de 6 semaines : S1 long-form + clips, S2 thread + carrousel, S3 ré-up</p>
+                  <p className="text-sm text-gray-600">
+                    Calendrier de 6 semaines : S1 long-form + clips, S2 thread +
+                    carrousel, S3 ré-up
+                  </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">4</div>
+                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                  4
+                </div>
                 <div>
-                  <h4 className="font-semibold text-gray-900">Automatiser la publication</h4>
-                  <p className="text-sm text-gray-600">Buffer / Hootsuite pour planification cross-platform</p>
+                  <h4 className="font-semibold text-gray-900">
+                    Automatiser la publication
+                  </h4>
+                  <p className="text-sm text-gray-600">
+                    Buffer / Hootsuite pour planification cross-platform
+                  </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">5</div>
+                <div className="flex-shrink-0 w-8 h-8 bg-pink-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                  5
+                </div>
                 <div>
                   <h4 className="font-semibold text-gray-900">Mesurer & Itérer</h4>
-                  <p className="text-sm text-gray-600">Quel format converti le mieux ? Reproduire ce qui fonctionne</p>
+                  <p className="text-sm text-gray-600">
+                    Quel format converti le mieux ? Reproduire ce qui fonctionne
+                  </p>
                 </div>
               </div>
             </div>
@@ -389,16 +474,24 @@ export function ContentReplicator({ onClose }) {
             <h3 className="text-xl font-bold text-gray-900 mb-4">📊 KPIs à tracker</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
-                <h4 className="font-semibold text-gray-900 mb-2">Reach par contenu maître</h4>
-                <p className="text-sm text-gray-600">Objectif : 10,000+ impressions totales</p>
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Reach par contenu maître
+                </h4>
+                <p className="text-sm text-gray-600">
+                  Objectif : 10,000+ impressions totales
+                </p>
               </div>
               <div className="p-4 bg-gradient-to-br from-pink-50 to-rose-50 rounded-lg border border-pink-200">
                 <h4 className="font-semibold text-gray-900 mb-2">Coût par lead</h4>
                 <p className="text-sm text-gray-600">Mesurer ROI du contenu répliqué</p>
               </div>
               <div className="p-4 bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg border border-emerald-200">
-                <h4 className="font-semibold text-gray-900 mb-2">Taux de réutilisation</h4>
-                <p className="text-sm text-gray-600">Formats produits / contenu maître (objectif: 8-10)</p>
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Taux de réutilisation
+                </h4>
+                <p className="text-sm text-gray-600">
+                  Formats produits / contenu maître (objectif: 8-10)
+                </p>
               </div>
             </div>
           </div>
@@ -411,7 +504,10 @@ export function ContentReplicator({ onClose }) {
           <div className="bg-white rounded-xl max-w-3xl w-full p-6 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-2xl font-bold">{selectedContent.title}</h3>
-              <button onClick={() => setSelectedContent(null)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setSelectedContent(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -419,7 +515,9 @@ export function ContentReplicator({ onClose }) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500 mb-1">Type</p>
-                  <p className="font-bold text-gray-900">{selectedContent.type === 'video' ? 'Vidéo' : 'Article'}</p>
+                  <p className="font-bold text-gray-900">
+                    {selectedContent.type === 'video' ? 'Vidéo' : 'Article'}
+                  </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500 mb-1">Durée</p>
@@ -427,21 +525,34 @@ export function ContentReplicator({ onClose }) {
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500 mb-1">Reach Total</p>
-                  <p className="font-bold text-indigo-600">{selectedContent.reach.toLocaleString()}</p>
+                  <p className="font-bold text-indigo-600">
+                    {selectedContent.reach.toLocaleString()}
+                  </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <p className="text-sm text-gray-500 mb-1">Engagement</p>
-                  <p className="font-bold text-emerald-600">{selectedContent.engagement}%</p>
+                  <p className="font-bold text-emerald-600">
+                    {selectedContent.engagement}%
+                  </p>
                 </div>
               </div>
-              
+
               <div>
-                <h4 className="font-bold text-gray-900 mb-3">Performance par plateforme</h4>
+                <h4 className="font-bold text-gray-900 mb-3">
+                  Performance par plateforme
+                </h4>
                 <div className="space-y-2">
                   {selectedContent.derivatives.map((d, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium text-gray-900">{d.platform} - {d.type}</span>
-                      <span className="text-gray-600">{d.reach > 0 ? `${d.reach.toLocaleString()} vues` : d.status}</span>
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <span className="font-medium text-gray-900">
+                        {d.platform} - {d.type}
+                      </span>
+                      <span className="text-gray-600">
+                        {d.reach > 0 ? `${d.reach.toLocaleString()} vues` : d.status}
+                      </span>
                     </div>
                   ))}
                 </div>

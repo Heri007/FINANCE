@@ -5,19 +5,16 @@ const notesService = require('../services/notesService');
 const { authenticateToken } = require('../middleware/auth');
 
 // GET /api/notes - Toutes les notes OU la dernière
+// GET /api/notes - Toutes les notes
 router.get('/', authenticateToken, async (req, res, next) => {
   try {
     const result = await notesService.getAll();
-    if (result.rows.length === 0) {
-      const note = await notesService.getOrCreate();
-      res.json([note]); // Retourne comme tableau
-    } else {
-      res.json(result.rows);
-    }
+    res.json(result.rows); // ✅ Retourne directement (peut être vide [])
   } catch (err) {
     next(err);
   }
 });
+
 
 // PUT /api/notes/:id - Update note
 router.put('/:id', authenticateToken, async (req, res, next) => {

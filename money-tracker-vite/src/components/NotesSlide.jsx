@@ -1,239 +1,257 @@
-// src/components/NotesSlide.jsx - CORRIGÉ POUR NOTE EXISTANTE
+// src/components/NotesSlide.jsx
 import React, { useState, useEffect } from 'react';
-import { Save, Trash2, Clock, Plus, List } from 'lucide-react';
-import { API_BASE } from '../services/api';
+import { Save, Trash2, Clock, Plus, ChevronLeft, FileText, X } from 'lucide-react';
+import { apiRequest } from '../services/api';
 
-export default function NotesSlide() {
-  const [currentNote, setCurrentNote] = useState({ id: null, content: '' });
+export default function NotesSlide({ isOpen, onClose }) {
+  // Si pas ouvert, ne rien rendre
+  if (!isOpen) return null;
+
+  const [view, setView] = useState('list');
   const [notesList, setNotesList] = useState([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
-  const [saveStatus, setSaveStatus] = useState('');
+  const [currentNote, setCurrentNote] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showList, setShowList] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('');
 
-  // ✅ CHARGER LA NOTE EXISTANTE (ou liste)
   useEffect(() => {
-    const fetchNotes = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/notes`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          
-          // ✅ SI 1 SEULE NOTE (cas actuel) - l'afficher directement
-          if (data.id && !Array.isArray(data)) {
-            setCurrentNote(data);
-            setNotesList([data]);
-            setSaveStatus('✅ Note chargée');
-          } 
-          // ✅ SI LISTE DE NOTES
-          else if (Array.isArray(data)) {
-            setNotesList(data);
-            if (data.length > 0) {
-              setCurrentNote(data[0]);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Erreur chargement notes:', error);
-        setSaveStatus('❌ Erreur chargement');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchNotes();
-  }, []);
-
-  // Auto-sauvegarde 5s
-  useEffect(() => {
-    if (currentNote.content && currentNote.id) {
-      const timer = setTimeout(() => saveNote(), 5000);
-      return () => clearTimeout(timer);
+    if (isOpen) {
+      fetchNotes();
     }
-  }, [currentNote.content, currentNote.id]);
+  }, [isOpen]);
 
-  const saveNote = async () => {
-    if (!currentNote.id) return;
-    
+  const fetchNotes = async () => {
+    try {
+      console.log('🔍 Fetching notes...');
+      const data = await apiRequest('/notes');
+      console.log('📝 Notes received:', data.length);
+      const list = Array.isArray(data) ? data : data.id ? [data] : [];
+      list.sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at)
+      );
+      setNotesList(list);
+    } catch (error) {
+      console.error('❌ Erreur chargement:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openNote = (note) => {
+    setCurrentNote({ ...note });
+    setSaveStatus('Prêt');
+    setView('edit');
+  };
+
+  const createNote = async () => {
+    try {
+      setLoading(true);
+      const newNote = await apiRequest('/notes', {
+        method: 'POST',
+        body: JSON.stringify({ content: '' }),
+      });
+      setNotesList((prev) => [newNote, ...prev]);
+      openNote(newNote);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveCurrentNote = async () => {
+    if (!currentNote || !currentNote.id) return;
     setIsSaving(true);
     setSaveStatus('Sauvegarde...');
-
     try {
-      const response = await fetch(`${API_BASE}/notes/${currentNote.id}`, {
+      const updated = await apiRequest(`/notes/${currentNote.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ content: currentNote.content })
+        body: JSON.stringify({ content: currentNote.content || '' }),
       });
-
-      if (response.ok) {
-        const note = await response.json();
-        setLastSaved(note.updated_at);
-        setSaveStatus('✅ Sauvegardé');
-        setTimeout(() => setSaveStatus(''), 2000);
-      } else {
-        setSaveStatus('❌ Erreur serveur');
-      }
+      setSaveStatus('✅ Sauvegardé');
+      setNotesList((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      setTimeout(() => setSaveStatus(''), 2000);
     } catch (error) {
-      console.error('Erreur sauvegarde:', error);
-      setSaveStatus('❌ Erreur réseau');
+      console.error(error);
+      setSaveStatus('❌ Erreur');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const createNewNote = async () => {
+  useEffect(() => {
+    if (view === 'edit' && currentNote?.id) {
+      const timer = setTimeout(saveCurrentNote, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [currentNote?.content]); // eslint-disable-line
+
+  const deleteNote = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm('Supprimer cette note ?')) return;
     try {
-      const response = await fetch(`${API_BASE}/notes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const newNote = await response.json();
-      
-      setCurrentNote(newNote);
-      setNotesList([newNote, ...notesList]);
-      setSaveStatus('🆕 Nouvelle note');
-      setShowList(false);
+      await apiRequest(`/notes/${id}`, { method: 'DELETE' });
+      setNotesList((prev) => prev.filter((n) => n.id !== id));
+      if (view === 'edit' && currentNote?.id === id) {
+        setView('list');
+        setCurrentNote(null);
+      }
     } catch (error) {
-      console.error('Erreur création:', error);
+      // Si 404, la note n'existe déjà plus (OK)
+      if (error?.status === 404) {
+        console.log('⚠️ Note déjà supprimée');
+        setNotesList((prev) => prev.filter((n) => n.id !== id));
+        if (view === 'edit' && currentNote?.id === id) {
+          setView('list');
+          setCurrentNote(null);
+        }
+      } else {
+        console.error('❌ Erreur suppression:', error);
+        alert('Erreur lors de la suppression de la note');
+      }
     }
   };
 
-  const loadNote = (note) => {
-    setCurrentNote(note);
-    setShowList(false);
-    setSaveStatus(`Chargée: ${new Date(note.updated_at).toLocaleDateString('fr-FR')}`);
-  };
-
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleString('fr-FR');
-  };
-
-  if (loading) {
+  // Vue liste
+  if (view === 'list') {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-500">
-        <div>Chargement des notes...</div>
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        <div
+          className="flex flex-col h-[600px] max-w-4xl w-full bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-blue-50">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-indigo-600" />
+              <h2 className="text-lg font-semibold text-gray-800">Notes de travail</h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={createNote}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full bg-indigo-600 text-white hover:bg-indigo-700 transition"
+              >
+                <Plus className="w-4 h-4" />
+                Nouvelle note
+              </button>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {loading && (
+              <div className="p-6 text-center text-gray-500">Chargement des notes...</div>
+            )}
+
+            {!loading && notesList.length === 0 && (
+              <div className="p-6 text-center text-gray-500">
+                Aucune note pour le moment.
+                <br />
+                Cliquez sur &quot;Nouvelle note&quot; pour commencer.
+              </div>
+            )}
+
+            <ul className="divide-y divide-gray-100">
+              {notesList.map((note) => (
+                <li
+                  key={note.id}
+                  onClick={() => openNote(note)}
+                  className="px-6 py-4 hover:bg-blue-300 cursor-pointer flex items-start justify-between gap-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-extrabold text-gray-900 truncate">
+                        {note.content
+                          ? note.content.split('\n')[0].substring(0, 80)
+                          : 'Nouvelle note...'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        {new Date(note.updated_at || note.created_at).toLocaleString(
+                          'fr-FR'
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => deleteNote(e, note.id)}
+                    className="p-2 rounded-full hover:bg-red-50 text-red-500 hover:text-red-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
       </div>
     );
   }
 
+  // Vue édition
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-xl shadow-lg">
-      {/* Header */}
-      <div className="mb-6 pb-4 border-b-2 border-slate-200">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-            📝 Bloc-Notes
-            <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium">
-              {notesList.length} note{notesList.length > 1 ? 's' : ''}
-            </span>
-          </h2>
-          <div className="flex gap-2">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col h-[600px] max-w-4xl w-full bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-indigo-50 to-blue-50">
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowList(!showList)}
-              className="p-2 hover:bg-slate-200 rounded-lg transition-all"
-              title="Voir toutes les notes"
+              onClick={() => setView('list')}
+              className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-indigo-100 text-indigo-600"
             >
-              <List size={20} className={showList ? 'text-blue-600' : ''} />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <button
-              onClick={createNewNote}
-              className="p-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg shadow-md transition-all flex items-center gap-1"
-              title="Nouvelle note"
-            >
-              <Plus size={16} />
-            </button>
-          </div>
-        </div>
-
-        {lastSaved && (
-          <div className="text-sm text-slate-600 flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-lg">
-            <Clock size={16} />
-            Dernière sauvegarde: {formatTime(lastSaved)}
-          </div>
-        )}
-      </div>
-
-      {/* Liste des notes (optionnelle) */}
-      {showList && notesList.length > 0 && (
-        <div className="mb-6 max-h-48 overflow-y-auto bg-white rounded-xl shadow-sm border border-slate-200">
-          {notesList.map((note) => (
-            <div
-              key={note.id}
-              onClick={() => loadNote(note)}
-              className="p-4 border-b last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors flex justify-between items-start group"
-            >
-              <div className="flex-1 pr-4">
-                <div className="font-medium text-slate-900 text-sm leading-tight line-clamp-2" title={note.content}>
-                  {note.content || '[Note vide]'}
-                </div>
-                <div className="text-xs text-slate-500 mt-1.5">
-                  {formatTime(note.updated_at)}
-                </div>
-              </div>
-              <div className="text-xs text-slate-400 opacity-0 group-hover:opacity-100 whitespace-nowrap">
-                {note.content.length} chars
-              </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-gray-800">Édition de note</span>
+              <span className="text-xs text-gray-500">
+                {currentNote?.updated_at
+                  ? new Date(currentNote.updated_at).toLocaleString('fr-FR')
+                  : 'Nouvelle note'}
+              </span>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Zone d'édition */}
-      <textarea
-        value={currentNote.content}
-        onChange={(e) => setCurrentNote({ ...currentNote, content: e.target.value })}
-        placeholder="Votre note existante s'affiche ici... Tapez pour modifier (auto-sauvegarde 5s)"
-        className="flex-1 p-6 border-2 border-dashed border-slate-300 rounded-2xl resize-none focus:outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50/50 font-mono text-base leading-relaxed shadow-inner"
-        rows={12}
-      />
-
-      {/* Contrôles + Stats */}
-      <div className="mt-6 pt-5 border-t-2 border-slate-200">
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-sm font-medium text-slate-700 px-3 py-1.5 bg-slate-100 rounded-lg">
-            {saveStatus}
           </div>
-          
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
+            {saveStatus && <span className="text-xs text-gray-500">{saveStatus}</span>}
             <button
-              onClick={saveNote}
-              disabled={isSaving || !currentNote.id}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm"
-            >
-              <Save size={18} />
-              {isSaving ? 'Sauvegarde...' : 'Sauvegarder maintenant'}
-            </button>
-            
-            <button
-              onClick={() => {
-                if (confirm('Vider cette note ?')) {
-                  setCurrentNote({ ...currentNote, content: '' });
-                  saveNote();
-                }
-              }}
-              className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-lg transition-all flex items-center gap-2 font-medium text-sm"
+              onClick={saveCurrentNote}
               disabled={isSaving}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
             >
-              <Trash2 size={18} />
-              Effacer
+              <Save className="w-4 h-4" />
+              Sauvegarder
+            </button>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 w-8 h-8 flex items-center justify-center"
+            >
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="text-xs text-slate-500 text-right grid grid-cols-2 gap-4 font-mono bg-slate-50 p-2 rounded-lg">
-          <span>• {currentNote.content.length} caractères</span>
-          <span>• {currentNote.content.split('\n').length} lignes</span>
-        </div>
+        <textarea
+          className="flex-1 w-full p-6 font-mono text-sm text-gray-800 outline-none resize-none"
+          placeholder="Écrivez vos notes ici..."
+          value={currentNote?.content || ''}
+          onChange={(e) =>
+            setCurrentNote((prev) => ({ ...prev, content: e.target.value }))
+          }
+        />
       </div>
     </div>
   );

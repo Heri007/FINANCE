@@ -8,10 +8,11 @@ const { validate } = require('../middleware/validate');
 const Joi = require('joi');
 
 // Schéma de validation pour une SEULE transaction
+// ✅ AJOUTÉ
 const transactionSchema = Joi.object({
   account_id: Joi.number().integer().required(),
-  date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),               // ✅ Optionnel
-  transaction_date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),   // ✅ Optionnel
+  date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  transaction_date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
   amount: Joi.number().required(),
   type: Joi.string().valid('income', 'expense', 'transfer').required(),
   description: Joi.string().allow('', null).optional(),
@@ -19,9 +20,11 @@ const transactionSchema = Joi.object({
   is_planned: Joi.boolean().default(false),
   is_posted: Joi.boolean().default(true),
   project_id: Joi.number().integer().allow(null).optional(),
-  remarks: Joi.string().allow('', null).optional()  // ✅ Ajouté
+  project_line_id: Joi.string().allow(null).optional(), // ← CHANGER : number → string
+  remarks: Joi.string().allow('', null).optional()
 })
-.or('date', 'transaction_date');  // ✅ Au moins un des deux requis
+.or('date', 'transaction_date');
+
 
 // Schéma pour l'import (tableau de transactions)
 const importSchema = Joi.object({

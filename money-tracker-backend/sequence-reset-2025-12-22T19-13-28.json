@@ -1,0 +1,181 @@
+{
+  "timestamp": "2025-12-22T19:13:28.262Z",
+  "results": [
+    {
+      "table": "accounts",
+      "sequence": "accounts_id_seq",
+      "previousValue": "7",
+      "newValue": 7,
+      "maxTableId": 7,
+      "status": "reset"
+    },
+    {
+      "table": "transactions",
+      "sequence": "transactions_id_seq",
+      "previousValue": "495",
+      "newValue": 495,
+      "maxTableId": 495,
+      "status": "reset"
+    },
+    {
+      "table": "categories",
+      "sequence": "categories_id_seq",
+      "previousValue": "39",
+      "newValue": 39,
+      "maxTableId": 39,
+      "status": "reset"
+    },
+    {
+      "table": "receivables",
+      "sequence": "receivables_id_seq",
+      "previousValue": "7",
+      "newValue": 7,
+      "maxTableId": 7,
+      "status": "reset"
+    },
+    {
+      "table": "projects",
+      "sequence": "projects_id_seq",
+      "previousValue": "30",
+      "newValue": 30,
+      "maxTableId": 30,
+      "status": "reset"
+    },
+    {
+      "table": "project_expense_lines",
+      "sequence": "project_expense_lines_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "project_revenue_lines",
+      "sequence": "project_revenue_lines_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "tasks",
+      "sequence": "tasks_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "operator_tasks",
+      "sequence": "operator_tasks_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "sops",
+      "sequence": "sops_id_seq",
+      "previousValue": "7",
+      "newValue": 7,
+      "maxTableId": 7,
+      "status": "reset"
+    },
+    {
+      "table": "operator_sops",
+      "sequence": "operator_sops_id_seq",
+      "previousValue": "7",
+      "newValue": 7,
+      "maxTableId": 7,
+      "status": "reset"
+    },
+    {
+      "table": "master_content",
+      "sequence": "master_content_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "content_master",
+      "sequence": "content_master_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "derivatives",
+      "sequence": "derivatives_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "content_derivatives",
+      "sequence": "content_derivatives_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "objectives",
+      "sequence": "objectives_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "employees",
+      "sequence": "employees_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    },
+    {
+      "table": "notes",
+      "sequence": "notes_id_seq",
+      "previousValue": "7",
+      "newValue": 7,
+      "maxTableId": 7,
+      "status": "reset"
+    },
+    {
+      "table": "visions",
+      "sequence": "visions_id_seq",
+      "previousValue": "4",
+      "newValue": 4,
+      "maxTableId": 4,
+      "status": "reset"
+    },
+    {
+      "table": "sessions",
+      "sequence": "sessions_id_seq",
+      "previousValue": "107",
+      "newValue": 107,
+      "maxTableId": 107,
+      "status": "reset"
+    },
+    {
+      "table": "app_settings",
+      "sequence": "app_settings_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 1,
+      "status": "reset"
+    },
+    {
+      "table": "transaction_linking_log",
+      "sequence": "transaction_linking_log_id_seq",
+      "previousValue": "1",
+      "newValue": 1,
+      "maxTableId": 0,
+      "status": "empty"
+    }
+  ]
+}

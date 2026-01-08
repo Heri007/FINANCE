@@ -11,11 +11,11 @@ export const backupService = {
     const backupData = {
       version: '2.0',
       date: new Date().toISOString(),
-      label, // pour annoter le snapshot, ex: "post-migration-AVOIR"
+      label, // pour annoter le snapshot, ex: "post-migration-receivables"
       accounts,
       transactions,
       receivables,
-      projects, // ✅ CORRECTION: utiliser "projects" au lieu de "projectsData"
+      projects,
     };
 
     return apiRequest('/backup/export', {
@@ -25,7 +25,7 @@ export const backupService = {
   },
 
   // 🔹 Sauvegarder un backup uploadé (restauration) sur le serveur
-  saveUploaded: backupData =>
+  saveUploaded: (backupData) =>
     apiRequest('/backup/save', {
       method: 'POST',
       body: JSON.stringify(backupData),
@@ -54,21 +54,15 @@ export const backupService = {
   },
 
   // 🔹 Télécharger depuis le serveur un fichier de backup par son filename
-  downloadByFilename: async filename => {
-    const base =
-      import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+  downloadByFilename: async (filename) => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
 
-    const response = await fetch(
-      `${base}/backup/${encodeURIComponent(filename)}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${
-            localStorage.getItem('token') || ''
-          }`,
-        },
-      }
-    );
+    const response = await fetch(`${base}/backup/${encodeURIComponent(filename)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      },
+    });
 
     if (!response.ok) {
       throw new Error('Erreur téléchargement backup');
