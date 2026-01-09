@@ -15,92 +15,98 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
     if (selectedFile) setFile(selectedFile);
   };
 
-  const handleRestore = async () => {
-    if (!file) return;
+ const handleRestore = async () => {
+  if (!file) return;
 
-    if (
-      !window.confirm(
-        '⚠️ ATTENTION : Cette action va remplacer toutes vos données actuelles par celles du backup.\n\nContinuer ?'
-      )
-    ) {
-      return;
-    }
+  if (!window.confirm(
+    'ATTENTION: Cette action va remplacer toutes vos données actuelles par celles du backup.'
+  )) return;
 
-    setStatus('restoring');
-    setLogs([]);
-    addLog('📂 Lecture du fichier de sauvegarde...');
+  setStatus('restoring');
+  setLogs([]);
+  addLog('📖 Lecture du fichier de sauvegarde...');
 
-    const reader = new FileReader();
+  const reader = new FileReader();
+  
+  reader.onload = async (e) => {
+    try {
+      const backupData = JSON.parse(e.target.result);
 
-    reader.onload = async (e) => {
-      try {
-        const backupData = JSON.parse(e.target.result);
-
-        // Validation
-        if (!backupData.version || parseFloat(backupData.version) < 2.0) {
-          throw new Error('Version de backup non supportée. Version 2.0 requise.');
-        }
-
-        const {
-          accounts,
-          transactions,
-          receivables = [],
-          projects = [],
-          notes,
-        } = backupData;
-
-        if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
-          throw new Error(
-            'Format invalide : accounts et transactions doivent être des tableaux'
-          );
-        }
-
-        addLog(
-          `✅ Fichier valide: ${accounts.length} comptes, ${transactions.length} transactions, ${receivables.length || 0} receivables, ${projects.length || 0} projets, ${notes?.length || 0} notes`
-        );
-
-        // ✅ APPEL UNIQUE À L'API DE RESTAURATION
-        addLog('🔄 Envoi de la restauration au serveur...');
-
-        const restorePayload = {
-          backup: backupData,
-          options: {
-            includeProjects: projects.length > 0,
-            dryRun: false,
-          },
-        };
-
-        const result = await api.post('/backup/restore-full', restorePayload);
-
-        addLog('✅ RESTAURATION RÉUSSIE !');
-        addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
-        addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
-        addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
-        addLog(`📊 Projets restaurés: ${result.summary.projects}`);
-
-        setStatus('success');
-        setTimeout(() => {
-          onRestoreSuccess();
-          onClose();
-        }, 3000);
-      } catch (error) {
-        console.error('❌ Erreur globale:', error);
-        addLog(`❌ ERREUR CRITIQUE: ${error.message}`);
-        addLog('Si le problème persiste, vérifiez:');
-        addLog('• La connexion au serveur');
-        addLog('• Le format du fichier backup');
-        addLog('• Les logs du serveur backend');
-        setStatus('error');
+      // Validation
+      if (!backupData.version || parseFloat(backupData.version) < 2.0) {
+        throw new Error('Version de backup non supportée. Version 2.0+ requise.');
       }
-    };
 
-    reader.onerror = () => {
-      addLog('❌ Erreur de lecture du fichier');
+      const {
+        accounts,
+        transactions,
+        receivables = [],
+        projects = [],
+        notes = [],
+        projectexpenselines = [],  // ✅ AJOUTER
+        projectrevenuelines = []   // ✅ AJOUTER
+      } = backupData;
+
+      if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
+        throw new Error('Format invalide: accounts et transactions doivent être des tableaux');
+      }
+
+      addLog(`✅ Fichier valide:
+        - ${accounts.length} comptes
+        - ${transactions.length} transactions
+        - ${receivables.length} receivables
+        - ${projects.length} projets
+        - ${projectexpenselines.length} lignes de dépenses
+        - ${projectrevenuelines.length} lignes de revenus
+        - ${notes?.length || 0} notes`
+      );
+
+      // ✅ APPEL API AVEC TOUTES LES DONNÉES
+      addLog('📤 Envoi de la restauration au serveur...');
+
+      const restorePayload = {
+        backup: backupData,
+        options: {
+          includeProjects: projects.length > 0,
+          includeProjectLines: true,  // ✅ NOUVEAU
+          dryRun: false,
+        }
+      };
+
+      const result = await api.post('backup/restore-full', restorePayload);
+
+      addLog('✅ RESTAURATION RÉUSSIE !');
+      addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
+      addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
+      addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
+      addLog(`📊 Projets restaurés: ${result.summary.projects}`);
+      addLog(`📊 Lignes de dépenses: ${result.summary.expenseLines || 0}`);  // ✅ NOUVEAU
+      addLog(`📊 Lignes de revenus: ${result.summary.revenueLines || 0}`);   // ✅ NOUVEAU
+
+      setStatus('success');
+      setTimeout(() => {
+        onRestoreSuccess?.();
+        onClose();
+      }, 3000);
+
+    } catch (error) {
+      console.error('❌ Erreur globale:', error);
+      addLog(`🔴 ERREUR CRITIQUE: ${error.message}`);
+      addLog('Vérifiez:');
+      addLog('- La connexion au serveur');
+      addLog('- Le format du fichier backup');
+      addLog('- Les logs du serveur backend');
       setStatus('error');
-    };
-
-    reader.readAsText(file);
+    }
   };
+
+  reader.onerror = () => {
+    addLog('❌ Erreur de lecture du fichier');
+    setStatus('error');
+  };
+
+  reader.readAsText(file);
+};
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">

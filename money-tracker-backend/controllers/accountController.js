@@ -194,73 +194,33 @@ exports.recalculateBalance = async (req, res) => {
 // -----------------------------------------------------------------------------
 // POST /api/accounts/recalculate-all
 // -----------------------------------------------------------------------------
-// Recalcule le solde de TOUS les comptes en parcourant leurs transactions.
-// Même logique que recalculateBalance, mais appliquée en boucle à chaque compte.
-// Renvoie un tableau récapitulatif avec l'ancien et le nouveau solde.
+// ⚠️ DÉSACTIVÉ - Conserve les soldes du backup sans recalcul
 // -----------------------------------------------------------------------------
 exports.recalculateAllBalances = async (req, res) => {
   try {
-    console.log('🔄 Recalcul de tous les soldes...');
-
+    console.log('⚠️ Recalcul désactivé - Les soldes du backup sont conservés');
+    
+    // Récupérer les soldes actuels sans les modifier
     const accountsResult = await pool.query(
       'SELECT id, name, balance FROM accounts ORDER BY id ASC'
     );
-
-    const { RECEIVABLES_ACCOUNT_ID } = getAccountIds();
-    const results = [];
-
-    for (const account of accountsResult.rows) {
-      let newBalance = 0;
-      let transactionCount = 0;
-
-      if (account.id === RECEIVABLES_ACCOUNT_ID) {
-        // Compte RECEIVABLES = somme des receivables ouverts
-        const receivablesResult = await pool.query(
-          `SELECT COALESCE(SUM(amount), 0) AS total
-           FROM receivables
-           WHERE status <> 'closed'`
-        );
-        newBalance = parseFloat(receivablesResult.rows[0].total || 0);
-        console.log(`  ℹ️  ${account.name}: calculé depuis receivables ouverts`);
-      } else {
-        const transactionsResult = await pool.query(
-          `SELECT type, amount FROM transactions 
-           WHERE account_id = $1 
-           AND (is_posted = true OR is_planned = false)
-           ORDER BY transaction_date ASC`,
-          [account.id]
-        );
-
-        transactionCount = transactionsResult.rows.length;
-
-        transactionsResult.rows.forEach(t => {
-          const amount = parseFloat(t.amount);
-          if (t.type === 'income') newBalance += amount;
-          else if (t.type === 'expense') newBalance -= amount;
-        });
-      }
-
-      await pool.query(
-        'UPDATE accounts SET balance = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [newBalance, account.id]
-      );
-
-      results.push({
-        accountId: account.id,
-        accountName: account.name,
-        oldBalance: parseFloat(account.balance),
-        newBalance,
-        transactionCount,
-      });
-
-      console.log(
-        `  ✅ ${account.name}: ${account.balance} → ${newBalance} Ar (${transactionCount} trx)`
-      );
-    }
-
-    console.log(`✅ Tous les soldes ont été recalculés (${results.length} comptes)`);
-
-    res.json({ success: true, results, totalAccounts: results.length });
+    
+    const results = accountsResult.rows.map(account => ({
+      accountId: account.id,
+      accountName: account.name,
+      oldBalance: parseFloat(account.balance),
+      newBalance: parseFloat(account.balance), // Inchangé
+      transactionCount: 0,
+    }));
+    
+    console.log(`✅ Soldes conservés (${results.length} comptes) - Aucun recalcul effectué`);
+    
+    res.json({ 
+      success: true, 
+      results, 
+      totalAccounts: results.length,
+      message: 'Recalcul désactivé - Soldes du backup conservés'
+    });
   } catch (error) {
     console.error('❌ Erreur recalculateAllBalances:', error);
     res.status(500).json({ error: 'Erreur serveur', details: error.message });

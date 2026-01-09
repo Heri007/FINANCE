@@ -4,7 +4,6 @@ exports.generateDistributions = async (req, res) => {
   const { projectId } = req.params;
 
   try {
-    // 1. Récupérer le projet et ses métadonnées
     const projectResult = await db.query(
       'SELECT * FROM projects WHERE id = $1', [projectId]
     );
@@ -14,26 +13,25 @@ exports.generateDistributions = async (req, res) => {
       return res.status(404).json({ error: 'Projet introuvable' });
     }
 
-    // 2. Récupérer les revenus et charges du projet
+    // ✅ Noms de tables corrects
     const expenseLinesResult = await db.query(
-      'SELECT * FROM expense_lines WHERE project_id = $1 ORDER BY planned_date',
+      'SELECT * FROM projectexpenselines WHERE projectid = $1 ORDER BY transactiondate',
       [projectId]
     );
 
     const revenueLinesResult = await db.query(
-      'SELECT * FROM revenue_lines WHERE project_id = $1 ORDER BY planned_date',
+      'SELECT * FROM projectrevenuelines WHERE projectid = $1 ORDER BY transactiondate',
       [projectId]
     );
 
     const expenses = expenseLinesResult.rows;
     const revenues = revenueLinesResult.rows;
 
-    // 3. Grouper par bimestre
-    const bimesters = groupByBimester(expenses, revenues, project.start_date || project.startdate);
+    const bimesters = groupByBimester(expenses, revenues, project.startdate);
 
-    // 4. Récupérer les associés
+    // ✅ Nom de table corrigé
     const partnersResult = await db.query(
-      'SELECT * FROM project_partners WHERE project_id = $1 ORDER BY id',
+      'SELECT * FROM projectpartners WHERE projectid = $1 ORDER BY id',
       [projectId]
     );
     const partners = partnersResult.rows;
@@ -44,37 +42,28 @@ exports.generateDistributions = async (req, res) => {
       });
     }
 
-    // 5. Supprimer les anciennes distributions pour régénération
-    await db.query('DELETE FROM profit_distributions WHERE project_id = $1', [projectId]);
+    // ✅ Nom de table corrigé
+    await db.query('DELETE FROM profitdistributions WHERE projectid = $1', [projectId]);
 
-    // 6. Calculer les distributions
-    const totalInvestment = parseFloat(project.total_capital_investment || project.total_cost || project.totalcost || 0);
+    const totalInvestment = parseFloat(project.totalcapitalinvestment || project.totalcost || 0);
     let cumulativeReimbursement = 0;
     const distributions = [];
 
     for (const bimester of bimesters) {
-      const profit = bimester.total_revenue - bimester.total_costs;
-
-      // Déterminer la phase
+      const profit = bimester.totalrevenue - bimester.totalcosts;
       const isReimbursementPhase = cumulativeReimbursement < totalInvestment;
       const phase = isReimbursementPhase ? 'Remboursement' : 'Distribution normale';
 
-      // Créer la distribution
+      // ✅ Noms de colonnes corrects (sans underscores)
       const distResult = await db.query(
-        `INSERT INTO profit_distributions 
-         (project_id, distribution_period, period_start_date, period_end_date,
-          total_revenue, total_costs, profit_to_distribute, distribution_phase,
-          capital_reimbursed_cumulative, reimbursement_percentage)
+        `INSERT INTO profitdistributions 
+         (projectid, distributionperiod, periodstartdate, periodenddate,
+          totalrevenue, totalcosts, profittodistribute, distributionphase,
+          capitalreimbursedcumulative, reimbursementpercentage)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
         [
-          projectId,
-          bimester.period,
-          bimester.start_date,
-          bimester.end_date,
-          bimester.total_revenue,
-          bimester.total_costs,
-          profit,
-          phase,
+          projectId, bimester.period, bimester.startdate, bimester.enddate,
+          bimester.totalrevenue, bimester.totalcosts, profit, phase,
           cumulativeReimbursement,
           totalInvestment > 0 ? (cumulativeReimbursement / totalInvestment) * 100 : 0
         ]
@@ -82,23 +71,22 @@ exports.generateDistributions = async (req, res) => {
 
       const distribution = distResult.rows[0];
 
-      // Créer les paiements pour chaque associé
       for (const partner of partners) {
         const percentage = isReimbursementPhase 
-          ? partner.phase1_percentage 
-          : partner.phase2_percentage;
+          ? partner.phase1percentage 
+          : partner.phase2percentage;
 
         const amount = (profit * percentage) / 100;
 
+        // ✅ Noms de colonnes corrects
         await db.query(
-          `INSERT INTO partner_payments 
-           (distribution_id, partner_id, partner_name, amount_allocated, percentage_applied)
+          `INSERT INTO partnerpayments 
+           (distributionid, partnerid, partnername, amountallocated, percentageapplied)
            VALUES ($1, $2, $3, $4, $5)`,
-          [distribution.id, partner.id, partner.partner_name, amount, percentage]
+          [distribution.id, partner.id, partner.partnername, amount, percentage]
         );
 
-        // Mise à jour du remboursement cumulé (uniquement pour l'investisseur principal)
-        if (isReimbursementPhase && partner.is_capital_investor) {
+        if (isReimbursementPhase && partner.iscapitalinvestor) {
           cumulativeReimbursement += amount;
         }
       }
@@ -106,10 +94,9 @@ exports.generateDistributions = async (req, res) => {
       distributions.push(distribution);
     }
 
-    // 7. Mettre à jour le projet si remboursement complet
     if (cumulativeReimbursement >= totalInvestment) {
       await db.query(
-        'UPDATE projects SET capital_fully_reimbursed = TRUE WHERE id = $1',
+        'UPDATE projects SET capitalfullyreimbursed = TRUE WHERE id = $1',
         [projectId]
       );
     }
@@ -117,9 +104,9 @@ exports.generateDistributions = async (req, res) => {
     res.json({
       message: 'Distributions générées avec succès',
       distributions,
-      total_investment: totalInvestment,
-      total_reimbursed: cumulativeReimbursement,
-      reimbursement_complete: cumulativeReimbursement >= totalInvestment
+      totalinvestment: totalInvestment,
+      totalreimbursed: cumulativeReimbursement,
+      reimbursementcomplete: cumulativeReimbursement >= totalInvestment
     });
 
   } catch (err) {
@@ -128,12 +115,11 @@ exports.generateDistributions = async (req, res) => {
   }
 };
 
-// Fonction helper pour grouper par bimestre
 function groupByBimester(expenses, revenues, startDate) {
   const bimesters = [];
   const start = new Date(startDate);
 
-  for (let i = 0; i < 6; i++) {  // 6 bimestres dans l'année
+  for (let i = 0; i < 6; i++) {
     const bimesterStart = new Date(start);
     bimesterStart.setMonth(start.getMonth() + (i * 2));
 
@@ -141,30 +127,28 @@ function groupByBimester(expenses, revenues, startDate) {
     bimesterEnd.setMonth(bimesterStart.getMonth() + 2);
     bimesterEnd.setDate(bimesterEnd.getDate() - 1);
 
-    // Filtrer les charges du bimestre
     const bimesterExpenses = expenses.filter(exp => {
-      const expDate = new Date(exp.planned_date || exp.planneddate);
+      const expDate = new Date(exp.transactiondate);
       return expDate >= bimesterStart && expDate <= bimesterEnd;
     });
 
-    // Filtrer les revenus du bimestre
     const bimesterRevenues = revenues.filter(rev => {
-      const revDate = new Date(rev.planned_date || rev.planneddate);
+      const revDate = new Date(rev.transactiondate);
       return revDate >= bimesterStart && revDate <= bimesterEnd;
     });
 
     const totalCosts = bimesterExpenses.reduce((sum, exp) => 
-      sum + parseFloat(exp.projected_amount || exp.projectedamount || 0), 0);
+      sum + parseFloat(exp.projectedamount || 0), 0);
 
     const totalRevenue = bimesterRevenues.reduce((sum, rev) => 
-      sum + parseFloat(rev.projected_amount || rev.projectedamount || 0), 0);
+      sum + parseFloat(rev.projectedamount || 0), 0);
 
     bimesters.push({
       period: `Bimestre ${i + 1}`,
-      start_date: bimesterStart,
-      end_date: bimesterEnd,
-      total_costs: totalCosts,
-      total_revenue: totalRevenue
+      startdate: bimesterStart,
+      enddate: bimesterEnd,
+      totalcosts: totalCosts,
+      totalrevenue: totalRevenue
     });
   }
 
@@ -177,11 +161,11 @@ exports.getDistributions = async (req, res) => {
   try {
     const result = await db.query(
       `SELECT d.*, 
-        (SELECT COUNT(*) FROM partner_payments WHERE distribution_id = d.id AND is_paid = TRUE) as paid_count,
-        (SELECT COUNT(*) FROM partner_payments WHERE distribution_id = d.id) as total_partners
-       FROM profit_distributions d
-       WHERE d.project_id = $1
-       ORDER BY d.period_start_date`,
+        (SELECT COUNT(*) FROM partnerpayments WHERE distributionid = d.id AND ispaid = TRUE) as paidcount,
+        (SELECT COUNT(*) FROM partnerpayments WHERE distributionid = d.id) as totalpartners
+       FROM profitdistributions d
+       WHERE d.projectid = $1
+       ORDER BY d.periodstartdate`,
       [projectId]
     );
 
@@ -196,9 +180,8 @@ exports.getDistributionDetail = async (req, res) => {
   const { distributionId } = req.params;
 
   try {
-    // Distribution
     const distResult = await db.query(
-      'SELECT * FROM profit_distributions WHERE id = $1',
+      'SELECT * FROM profitdistributions WHERE id = $1',
       [distributionId]
     );
 
@@ -206,9 +189,8 @@ exports.getDistributionDetail = async (req, res) => {
       return res.status(404).json({ error: 'Distribution introuvable' });
     }
 
-    // Paiements associés
     const paymentsResult = await db.query(
-      'SELECT * FROM partner_payments WHERE distribution_id = $1 ORDER BY id',
+      'SELECT * FROM partnerpayments WHERE distributionid = $1 ORDER BY id',
       [distributionId]
     );
 
@@ -224,12 +206,11 @@ exports.getDistributionDetail = async (req, res) => {
 
 exports.payPartner = async (req, res) => {
   const { distributionId, partnerId } = req.params;
-  const { payment_account_id, payment_date, notes } = req.body;
+  const { accountid, paymentdate, notes } = req.body;
 
   try {
-    // Récupérer le paiement
     const paymentResult = await db.query(
-      'SELECT * FROM partner_payments WHERE distribution_id = $1 AND partner_id = $2',
+      'SELECT * FROM partnerpayments WHERE distributionid = $1 AND partnerid = $2',
       [distributionId, partnerId]
     );
 
@@ -239,26 +220,21 @@ exports.payPartner = async (req, res) => {
 
     const payment = paymentResult.rows[0];
 
-    // Créer une transaction sortie dans le compte
     await db.query(
       `INSERT INTO transactions 
-       (account_id, type, amount, category, description, transaction_date, is_posted)
+       (accountid, type, amount, category, description, transactiondate, isposted)
        VALUES ($1, 'expense', $2, 'Distribution Bénéfices', $3, $4, TRUE)`,
-      [
-        payment_account_id,
-        payment.amount_allocated,
-        `Paiement associé: ${payment.partner_name}`,
-        payment_date || new Date()
-      ]
+      [accountid, payment.amountallocated,
+       `Paiement associé: ${payment.partnername}`,
+       paymentdate || new Date()]
     );
 
-    // Marquer le paiement comme payé
     const updateResult = await db.query(
-      `UPDATE partner_payments 
-       SET is_paid = TRUE, payment_date = $1, payment_account_id = $2, notes = $3,
-           updated_at = CURRENT_TIMESTAMP
+      `UPDATE partnerpayments 
+       SET ispaid = TRUE, paymentdate = $1, paymentaccountid = $2, notes = $3,
+           updatedat = CURRENT_TIMESTAMP
        WHERE id = $4 RETURNING *`,
-      [payment_date || new Date(), payment_account_id, notes, payment.id]
+      [paymentdate || new Date(), accountid, notes, payment.id]
     );
 
     res.json({
@@ -268,6 +244,71 @@ exports.payPartner = async (req, res) => {
 
   } catch (err) {
     console.error('Erreur payPartner:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Partner Controller
+exports.addPartner = async (req, res) => {
+  const { projectId } = req.params;
+  const {
+    partnername, partnerrole, capitalcontribution, contributionpercentage,
+    phase1percentage, phase2percentage, iscapitalinvestor
+  } = req.body;
+
+  try {
+    const result = await db.query(
+      `INSERT INTO projectpartners 
+       (projectid, partnername, partnerrole, capitalcontribution, 
+        contributionpercentage, phase1percentage, phase2percentage, iscapitalinvestor)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [projectId, partnername, partnerrole, capitalcontribution,
+       contributionpercentage, phase1percentage, phase2percentage, iscapitalinvestor]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.getPartners = async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const result = await db.query(
+      'SELECT * FROM projectpartners WHERE projectid = $1 ORDER BY id',
+      [projectId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.updatePartner = async (req, res) => {
+  const { partnerId } = req.params;
+  const updates = req.body;
+
+  const fields = Object.keys(updates).map((key, i) => `${key} = $${i + 1}`).join(', ');
+  const values = [...Object.values(updates), partnerId];
+
+  try {
+    const result = await db.query(
+      `UPDATE projectpartners SET ${fields}, updatedat = CURRENT_TIMESTAMP 
+       WHERE id = $${values.length} RETURNING *`,
+      values
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.deletePartner = async (req, res) => {
+  const { partnerId } = req.params;
+  try {
+    await db.query('DELETE FROM projectpartners WHERE id = $1', [partnerId]);
+    res.json({ message: 'Associé supprimé' });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
