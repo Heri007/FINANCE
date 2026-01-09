@@ -182,7 +182,7 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
                 onClick={() => setFormData({ ...formData, type: 'income', category: '' })}
                 className={`py-3 rounded-xl font-semibold transition-all ${
                   formData.type === 'income'
-                    ? 'bg-emerald-500 text-white shadow-lg'
+                    ? 'bg-blue-500 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-600'
                 }`}
               >
@@ -193,7 +193,7 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
                 onClick={() => setFormData({ ...formData, type: 'transfer', category: 'Transfert', destinationAccountId: '' })}
                 className={`py-3 rounded-xl font-semibold transition-all ${
                   formData.type === 'transfer'
-                    ? 'bg-blue-500 text-white shadow-lg'
+                    ? 'bg-green-500 text-white shadow-lg'
                     : 'bg-gray-100 text-gray-600'
                 }`}
               >

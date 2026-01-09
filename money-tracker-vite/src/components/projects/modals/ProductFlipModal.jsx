@@ -20,6 +20,7 @@ import { projectsService } from '../../../services/projectsService';
 import { transactionsService } from '../../../services/transactionsService';
 import { formatCurrency } from '../../../utils/formatters';
 import { CalculatorInput } from '../../common/CalculatorInput';
+import { apiRequest } from '../../../services/api';
 
 export function ProductFlipModal({
   isOpen,
@@ -370,162 +371,249 @@ export function ProductFlipModal({
     }
   };
 
-  // ===== PAYER DÉPENSE =====
-  const handlePayerDepense = async (exp, index) => {
-    try {
-      if (!exp.account) return alert('Choisis un compte');
+// ✅ PAYER DÉPENSE - CORRIGÉ
+const handlePayerDepense = async (exp, index) => {
+  try {
+    if (!exp.account) return alert('❌ Choisis un compte');
+    
+    const accountObj = accounts.find((a) => a.name === exp.account);
+    if (!accountObj) return alert('❌ Compte introuvable');
+    
+    if (!project?.id) return alert('❌ Erreur : Projet introuvable.');
 
-      const accountObj = accounts.find((a) => a.name === exp.account);
-      if (!accountObj) return alert('Compte introuvable');
+    if (!exp.dbLineId) {
+      alert('❌ Cette ligne n\'a pas encore été enregistrée. Sauvegardez d\'abord le projet.');
+      return;
+    }
 
-      if (!project?.id) return alert('Erreur: Projet introuvable.');
+    const alreadyPaid = window.confirm(
+      `💰 Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n\n` +
+      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
+      `- NON (Annuler) → Je crée une transaction et débite le compte.`
+    );
 
-      const alreadyPaid = window.confirm(
-        `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-          `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-          `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-          `- NON (Annuler) → Je crée une transaction et débite le compte.`
-      );
+    const payload = alreadyPaid
+      ? {
+          paid_externally: true,
+          amount: parseFloat(exp.amount),
+          paid_date: exp.realDate 
+            ? new Date(exp.realDate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: parseFloat(exp.amount),
+          paid_date: exp.realDate 
+            ? new Date(exp.realDate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+          account_id: accountObj.id,
+        };
 
-      const payload = alreadyPaid
-        ? {
-            paid_externally: true,
-            amount: parseFloat(exp.amount),
-            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-          }
-        : {
-            create_transaction: true,
-            amount: parseFloat(exp.amount),
-            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-          };
+    const result = await apiRequest(
+  `projects/${project.id}/expense-lines/${exp.dbLineId}/mark-paid`,
+  {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }
+);
 
-      // 🔐 Appel backend via client API (CSRF + JWT auto)
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-        payload
-      );
+// ✅ RECHARGER IMMÉDIATEMENT LE PROJET DEPUIS LE SERVEUR
+const updatedProject = await projectsService.getById(project.id);
 
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: true };
-      setExpenses(updated);
+// ✅ Parser et charger les nouvelles données
+const parseList = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  try { return JSON.parse(data); } catch { return []; }
+};
 
-      await saveProjectState(updated, revenues);
+const freshExpenses = parseList(updatedProject.expenses).map(e => ({
+  ...e,
+  id: e.id || uuidv4(),
+  date: e.date ? new Date(e.date) : new Date(),
+  amount: parseFloat(e.amount) || 0,
+}));
 
-      if (onProjectUpdated) onProjectUpdated();
+const freshRevenues = parseList(updatedProject.revenues).map(r => ({
+  ...r,
+  id: r.id || uuidv4(),
+  date: r.date ? new Date(r.date) : new Date(),
+  amount: parseFloat(r.amount) || 0,
+}));
 
-      alert(result.message || 'Dépense marquée comme payée !');
-    } catch (error) {
-      console.error('Erreur handlePayerDepense:', error);
+setExpenses(freshExpenses);
+setRevenues(freshRevenues);
+
+// ✅ Rafraîchir le contexte global
+if (onProjectUpdated) {
+  await onProjectUpdated();
+}
+
+alert(result.message || '✅ Dépense marquée comme payée !');
+
+  } catch (error) {
+    // Gérer le cas "Déjà payée"
+    if (error?.message === 'Déjà payée') {
+      // Recharger quand même pour synchroniser l'affichage
+      try {
+        const updatedProject = await projectsService.getById(project.id);
+        const parseList = (data) => {
+          if (!data) return [];
+          if (Array.isArray(data)) return data;
+          try { return JSON.parse(data); } catch { return []; }
+        };
+        const freshExpenses = parseList(updatedProject.expenses).map(e => ({
+          ...e,
+          id: e.id || uuidv4(),
+          date: e.date ? new Date(e.date) : new Date(),
+          amount: parseFloat(e.amount) || 0,
+        }));
+        setExpenses(freshExpenses);
+        alert('✅ Cette dépense est déjà payée dans la base de données');
+      } catch (reloadError) {
+        console.error('Erreur rechargement:', reloadError);
+      }
+    } else {
+      console.error('❌ Erreur handlePayerDepense:', error);
       alert(error?.message || 'Erreur paiement');
     }
-  };
+  }
+};
 
-  // ===== ENCAISSER REVENU =====
-  const handleEncaisser = async (rev, index) => {
-    try {
-      if (!rev.account) return alert('Choisis un compte');
+// ✅ ENCAISSER REVENU - CORRIGÉ
+const handleEncaisser = async (rev, index) => {
+  try {
+    if (!rev.account) return alert('❌ Choisis un compte');
+    
+    const accountObj = accounts.find((a) => a.name === rev.account);
+    if (!accountObj) return alert('❌ Compte introuvable');
+    
+    if (!project?.id) return alert('❌ Erreur : Projet introuvable.');
 
-      const accountObj = accounts.find((a) => a.name === rev.account);
-      if (!accountObj) return alert('Compte introuvable');
-
-      if (!project?.id) return alert('Erreur: Projet introuvable.');
-
-      const alreadyReceived = window.confirm(
-        `Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
-          `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n` +
-          `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
-          `- NON (Annuler) → Je crée une transaction et crédite le compte.`
-      );
-
-      const payload = alreadyReceived
-        ? {
-            received_externally: true,
-            amount: parseFloat(rev.amount),
-            received_date: rev.realDate || new Date().toISOString().split('T')[0],
-          }
-        : {
-            create_transaction: true,
-            amount: parseFloat(rev.amount),
-            received_date: rev.realDate || new Date().toISOString().split('T')[0],
-          };
-
-      // 🔐 Appel backend via client API (CSRF + JWT auto)
-      const result = await api.patch(
-        `/projects/${project.id}/revenue-lines/${rev.id}/mark-received`,
-        payload
-      );
-
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: true };
-      setRevenues(updated);
-
-      await saveProjectState(expenses, updated);
-
-      if (onProjectUpdated) onProjectUpdated();
-
-      alert(result.message || 'Revenu marqué comme reçu !');
-    } catch (error) {
-      console.error('Erreur handleEncaisser:', error);
-      alert(error?.message || 'Erreur encaissement');
+    // ✅ VÉRIFIER QUE dbLineId existe
+    if (!rev.dbLineId) {
+      alert('❌ Cette ligne n\'a pas encore été enregistrée. Sauvegardez d\'abord le projet.');
+      return;
     }
-  };
 
-  // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
-  const handleCancelPaymentExpense = async (exp, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
+    const alreadyReceived = window.confirm(
+      `💰 Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
+      `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n\n` +
+      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
+      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+    );
 
-      if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`))
-        return;
+    const payload = alreadyReceived
+      ? {
+          received_externally: true,
+          amount: parseFloat(rev.amount),
+          received_date: rev.realDate 
+            ? new Date(rev.realDate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: parseFloat(rev.amount),
+          received_date: rev.realDate 
+            ? new Date(rev.realDate).toISOString().split('T')[0] 
+            : new Date().toISOString().split('T')[0],
+          account_id: accountObj.id,
+        };
 
-      // 🔐 Appel backend via client API (CSRF + JWT auto)
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${exp.id}/cancel-payment`,
-        {} // pas de payload spécifique
-      );
+    // ✅ UTILISER dbLineId au lieu de id
+    const result = await apiRequest(
+      `projects/${project.id}/revenue-lines/${rev.dbLineId}/mark-received`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }
+    );
 
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: false };
-      setExpenses(updated);
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: true };
+    setRevenues(updated);
+    await saveProjectState(expenses, updated);
 
-      await saveProjectState(expenses, updated);
+    if (onProjectUpdated) onProjectUpdated();
+    
+    alert(result.message || '✅ Revenu marqué comme reçu !');
+  } catch (error) {
+    console.error('❌ Erreur handleEncaisser:', error);
+    alert(error?.message || 'Erreur encaissement');
+  }
+};
 
-      if (onProjectUpdated) onProjectUpdated();
 
-      alert(result.message);
-    } catch (err) {
-      console.error('Erreur handleCancelPaymentExpense:', err);
-      alert('Erreur annulation: ' + (err.message || err));
+// ✅ ANNULER PAIEMENT DÉPENSE - CORRIGÉ
+const handleCancelPaymentExpense = async (exp, index) => {
+  try {
+    if (!project?.id) return alert('❌ Projet non enregistré');
+    
+    // ✅ VÉRIFIER QUE dbLineId existe
+    if (!exp.dbLineId) {
+      alert('❌ Cette ligne n\'a pas encore été enregistrée.');
+      return;
     }
-  };
+    
+    if (!window.confirm(`🔄 Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
-  const handleCancelPaymentRevenue = async (rev, index) => {
-    try {
-      if (!project?.id) return alert('Projet non enregistré');
+    // ✅ UTILISER dbLineId
+    const result = await apiRequest(
+      `projects/${project.id}/expense-lines/${exp.dbLineId}/cancel-payment`,
+      {
+        method: 'PATCH',
+      }
+    );
 
-      if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`))
-        return;
+    const updated = [...expenses];
+    updated[index] = { ...updated[index], isPaid: false };
+    setExpenses(updated);
+    await saveProjectState(updated, revenues);
 
-      // 🔐 Appel backend via client API (CSRF + JWT auto)
-      const result = await api.patch(
-        `/projects/${project.id}/revenue-lines/${rev.id}/cancel-receipt`,
-        {} // pas de payload spécifique
-      );
+    if (onProjectUpdated) onProjectUpdated();
+    
+    alert(result.message || '✅ Paiement annulé');
+  } catch (err) {
+    console.error('❌ Erreur handleCancelPaymentExpense:', err);
+    alert('Erreur annulation : ' + (err.message || err));
+  }
+};
 
-      const updated = [...revenues];
-      updated[index] = { ...updated[index], isPaid: false };
-      setRevenues(updated);
-
-      await saveProjectState(expenses, updated);
-
-      if (onProjectUpdated) onProjectUpdated();
-
-      alert(result.message);
-    } catch (err) {
-      console.error('Erreur handleCancelPaymentRevenue:', err);
-      alert('Erreur annulation: ' + (err.message || err));
+// ✅ ANNULER ENCAISSEMENT REVENU - CORRIGÉ
+const handleCancelPaymentRevenue = async (rev, index) => {
+  try {
+    if (!project?.id) return alert('❌ Projet non enregistré');
+    
+    // ✅ VÉRIFIER QUE dbLineId existe
+    if (!rev.dbLineId) {
+      alert('❌ Cette ligne n\'a pas encore été enregistrée.');
+      return;
     }
-  };
+    
+    if (!window.confirm(`🔄 Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
+
+    // ✅ UTILISER dbLineId
+    const result = await apiRequest(
+      `projects/${project.id}/revenue-lines/${rev.dbLineId}/cancel-receipt`,
+      {
+        method: 'PATCH',
+      }
+    );
+
+    const updated = [...revenues];
+    updated[index] = { ...updated[index], isPaid: false };
+    setRevenues(updated);
+    await saveProjectState(expenses, updated);
+
+    if (onProjectUpdated) onProjectUpdated();
+    
+    alert(result.message || '✅ Encaissement annulé');
+  } catch (err) {
+    console.error('❌ Erreur handleCancelPaymentRevenue:', err);
+    alert('Erreur annulation : ' + (err.message || err));
+  }
+};
 
   // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
   const saveProjectState = async (currentExpenses, currentRevenues) => {
