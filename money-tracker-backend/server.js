@@ -37,6 +37,7 @@ const notesRoutes = require('./routes/notes');
 const visionRouter = require('./routes/vision');
 const projectPartnersRoutes = require('./routes/projectPartners');
 const profitDistributionsRoutes = require('./routes/profitDistributions');
+const monitoringRoutes = require('./routes/monitoring');
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -263,6 +264,10 @@ logger.info('✅ Routes lecture configurées');
 app.use('/backup', csrfProtection, backupRoutes);
 logger.info('✅ Routes /backup protégées');
 
+app.use('/api/monitoring', monitoringRoutes);
+
+logger.info('✅ Routes monitoring configurées');
+
 // =================================================================
 // PHASE 9: ROUTES OPTIMISÉES SPÉCIFIQUES (NOUVEAU)
 // =================================================================
@@ -354,6 +359,7 @@ const server = app.listen(PORT, () => {
   logger.info(`🛡️  Sécurité: CORS + CSRF + Rate Limit + Helmet`);
   logger.info(`⚡ Performance: Cache + Compression + Pagination`);
   logger.info('='.repeat(60));
+  console.log(`📊 Monitoring: http://localhost:${PORT}/api/monitoring/metrics`);
   
   // Test connexion DB
   pool.query('SELECT NOW()', async (err, result) => {

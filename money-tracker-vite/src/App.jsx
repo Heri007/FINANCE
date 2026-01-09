@@ -140,6 +140,7 @@ import backupService from './services/backupService';
 // UTILITAIRES
 // ============================================================================
 import { formatCurrency } from './utils/formatters';
+import MonitoringDashboard from './components/monitoring/MonitoringDashboard';
 
 // ============================================================================
 // CONSTANTES
@@ -201,6 +202,7 @@ export default function App() {
     createTransaction, // ✅ AJOUTER ICI
     updateTransaction,
     deleteTransaction,
+
   } = useFinance();
 
   // ✅ HOOKS PERSONNALISÉS (non remplacés par le contexte)
@@ -802,6 +804,11 @@ export default function App() {
         />
 
         <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+
+              {/* ← NOUVEAU : Onglet Monitoring */}
+{activeTab === 'monitoring' && (
+  <MonitoringDashboard />
+)}
 
         <main className="px-8 py-8">
           {activeTab === 'overview' && (
