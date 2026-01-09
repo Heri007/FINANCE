@@ -1,0 +1,220 @@
+{
+  "startTime": "2026-01-09T05:34:34.670Z",
+  "tests": {
+    "Test 1: Endpoints GET": [
+      {
+        "endpoint": "/api/accounts",
+        "totalRequests": 97516,
+        "requestsPerSec": "3250.94",
+        "throughput": "7.43 MB/s",
+        "latencyAvg": "14.87 ms",
+        "latencyP99": "42.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/transactions",
+        "totalRequests": 5474,
+        "requestsPerSec": "182.47",
+        "throughput": "34.26 MB/s",
+        "latencyAvg": "272.59 ms",
+        "latencyP99": "330.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/projects",
+        "totalRequests": 19000,
+        "requestsPerSec": "633.34",
+        "throughput": "20.23 MB/s",
+        "latencyAvg": "78.41 ms",
+        "latencyP99": "157.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/receivables",
+        "totalRequests": 93397,
+        "requestsPerSec": "3113.87",
+        "throughput": "8.30 MB/s",
+        "latencyAvg": "15.56 ms",
+        "latencyP99": "29.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/employees",
+        "totalRequests": 179805,
+        "requestsPerSec": "5994.10",
+        "throughput": "6.97 MB/s",
+        "latencyAvg": "7.79 ms",
+        "latencyP99": "17.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      }
+    ],
+    "Test 2: POST Transactions": [
+      {
+        "totalRequests": 67313,
+        "requestsPerSec": "2244.14",
+        "throughput": "2.52 MB/s",
+        "latencyAvg": "12.86 ms",
+        "latencyP99": "23.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 67312,
+        "errors429": 67312
+      }
+    ],
+    "Test 3: Requêtes Complexes": [
+      {
+        "endpoint": "/api/projects?include=progress",
+        "totalRequests": 13847,
+        "requestsPerSec": "692.35",
+        "throughput": "22.11 MB/s",
+        "latencyAvg": "28.37 ms",
+        "latencyP99": "64.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/transactions?account_id=1&start_date=2026-01-01&end_date=2026-12-31",
+        "totalRequests": 3619,
+        "requestsPerSec": "180.95",
+        "throughput": "34.04 MB/s",
+        "latencyAvg": "109.77 ms",
+        "latencyP99": "173.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "endpoint": "/api/projects/1/progress",
+        "totalRequests": 97773,
+        "requestsPerSec": "4888.86",
+        "throughput": "4.62 MB/s",
+        "latencyAvg": "3.60 ms",
+        "latencyP99": "9.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 97773,
+        "errors429": 97773
+      }
+    ],
+    "Test 4: Import CSV": {
+      "duration": 48,
+      "throughput": "20833.33"
+    },
+    "Test 5: Spike Test": [
+      {
+        "phase": "Warm-up",
+        "connections": 10,
+        "totalRequests": 1784,
+        "requestsPerSec": "178.40",
+        "throughput": "33.56 MB/s",
+        "latencyAvg": "55.43 ms",
+        "latencyP99": "95.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "phase": "Normal",
+        "connections": 50,
+        "totalRequests": 3401,
+        "requestsPerSec": "170.05",
+        "throughput": "31.98 MB/s",
+        "latencyAvg": "291.97 ms",
+        "latencyP99": "1024.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "phase": "SPIKE",
+        "connections": 200,
+        "totalRequests": 5180,
+        "requestsPerSec": "172.67",
+        "throughput": "32.47 MB/s",
+        "latencyAvg": "1698.05 ms",
+        "latencyP99": "12077.00 ms",
+        "errors": 129,
+        "timeouts": 7,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "phase": "Recovery",
+        "connections": 50,
+        "totalRequests": 3485,
+        "requestsPerSec": "174.25",
+        "throughput": "32.77 MB/s",
+        "latencyAvg": "284.61 ms",
+        "latencyP99": "1154.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      },
+      {
+        "phase": "Cool-down",
+        "connections": 10,
+        "totalRequests": 1775,
+        "requestsPerSec": "177.50",
+        "throughput": "33.39 MB/s",
+        "latencyAvg": "55.68 ms",
+        "latencyP99": "93.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      }
+    ],
+    "Test 6: Concurrence DB": [
+      {
+        "totalRequests": 159519,
+        "requestsPerSec": "7976.10",
+        "throughput": "7.54 MB/s",
+        "latencyAvg": "5.81 ms",
+        "latencyP99": "14.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 159519,
+        "errors429": 159519
+      }
+    ],
+    "Test 7: Rate Limiting": [
+      {
+        "totalRequests": 32563,
+        "requestsPerSec": "3256.80",
+        "throughput": "7.44 MB/s",
+        "latencyAvg": "60.88 ms",
+        "latencyP99": "113.00 ms",
+        "errors": 0,
+        "timeouts": 0,
+        "non2xx": 0,
+        "errors429": 0
+      }
+    ]
+  },
+  "totalRequests": 769826,
+  "avgReqPerSec": "2946.72",
+  "avgLatency": "55.50",
+  "errorRate": "0.00",
+  "endTime": "2026-01-09T05:41:10.342Z"
+}

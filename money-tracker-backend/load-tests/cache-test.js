@@ -22,6 +22,10 @@ const CONFIG = {
   workers: 4
 };
 
+// En haut du fichier, après CONFIG
+const STATIC_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJhdXRoZW50aWNhdGVkIjp0cnVlLCJpYXQiOjE3Njc5MzU1MDEsImV4cCI6MTc2ODU0MDMwMX0.gV_L01s23RsdWBDte4vTnUhU3J0_TuODv1uWdE3OmEo';
+
+
 // Couleurs pour console
 const colors = {
   reset: '\x1b[0m',
@@ -50,18 +54,26 @@ let authToken = null;
  * Obtenir un token d'authentification
  */
 async function getAuthToken() {
+  // Si token statique fourni, l'utiliser directement
+  if (STATIC_TOKEN && STATIC_TOKEN.length > 50) {
+    authToken = STATIC_TOKEN;
+    log.success('Token statique utilisé (pas d\'authentification)');
+    return authToken;
+  }
+  
+  // Sinon essayer l'authentification
   try {
-    const response = await fetch(`${CONFIG.url}/api/auth/login`, {
+    const response = await fetch(`${CONFIG.url}/api/auth/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: 'test@test.com',
-        password: 'password123'
+        pin: '111111'
       })
     });
     
     if (!response.ok) {
-      throw new Error('Échec authentification');
+      const error = await response.text();
+      throw new Error(`Route inexistante ou erreur: ${response.status}`);
     }
     
     const data = await response.json();
@@ -70,6 +82,7 @@ async function getAuthToken() {
     return authToken;
   } catch (error) {
     log.error(`Erreur authentification: ${error.message}`);
+    log.warn('💡 Utilisez un token statique dans STATIC_TOKEN pour bypass l\'auth');
     throw error;
   }
 }
@@ -93,7 +106,7 @@ async function testReadEndpoints() {
   for (const endpoint of endpoints) {
     log.info(`Testing ${endpoint}...`);
     
-    const instance = autocannon({
+    const result = await autocannon({
       url: `${CONFIG.url}${endpoint}`,
       connections: 50,
       duration: 30,
@@ -101,15 +114,12 @@ async function testReadEndpoints() {
         'Authorization': `Bearer ${authToken}`
       }
     });
-
-    const result = await promisify(instance.track.bind(instance))();
     
     results.push({
       endpoint,
       ...formatResults(result)
     });
 
-    // Pause entre tests
     await sleep(2000);
   }
 
@@ -123,7 +133,7 @@ async function testReadEndpoints() {
 async function testCreateTransactions() {
   log.title('TEST 2: CRÉATION DE TRANSACTIONS (POST)');
 
-  const instance = autocannon({
+  const result = await autocannon({
     url: `${CONFIG.url}/api/transactions`,
     connections: 30,
     duration: 30,
@@ -142,7 +152,6 @@ async function testCreateTransactions() {
     })
   });
 
-  const result = await promisify(instance.track.bind(instance))();
   const formatted = formatResults(result);
   
   displayResults('POST Transactions', [{ endpoint: '/api/transactions', ...formatted }]);
@@ -150,7 +159,7 @@ async function testCreateTransactions() {
 }
 
 /**
- * Test 3: Requêtes Complexes (Projets avec Calculs)
+ * Test 3: Requêtes Complexes
  */
 async function testComplexQueries() {
   log.title('TEST 3: REQUÊTES COMPLEXES (Projets & Analytics)');
@@ -166,7 +175,7 @@ async function testComplexQueries() {
   for (const endpoint of endpoints) {
     log.info(`Testing ${endpoint}...`);
     
-    const instance = autocannon({
+    const result = await autocannon({
       url: `${CONFIG.url}${endpoint}`,
       connections: 20,
       duration: 20,
@@ -174,8 +183,6 @@ async function testComplexQueries() {
         'Authorization': `Bearer ${authToken}`
       }
     });
-
-    const result = await promisify(instance.track.bind(instance))();
     
     results.push({
       endpoint,
@@ -242,6 +249,7 @@ async function testCSVImport() {
   }
 }
 
+
 /**
  * Test 5: Charge Soutenue (Spike Test)
  */
@@ -261,7 +269,7 @@ async function testSpikeLoad() {
   for (const phase of phases) {
     log.info(`Phase: ${phase.label} (${phase.connections} connexions, ${phase.duration}s)`);
 
-    const instance = autocannon({
+    const result = await autocannon({
       url: `${CONFIG.url}/api/transactions`,
       connections: phase.connections,
       duration: phase.duration,
@@ -269,8 +277,6 @@ async function testSpikeLoad() {
         'Authorization': `Bearer ${authToken}`
       }
     });
-
-    const result = await promisify(instance.track.bind(instance))();
     
     results.push({
       phase: phase.label,
@@ -291,7 +297,7 @@ async function testDatabaseConcurrency() {
 
   log.info('Test de liaisons transaction-projet simultanées...');
 
-  const instance = autocannon({
+  const result = await autocannon({
     url: `${CONFIG.url}/api/transactions/1/link`,
     connections: 50,
     duration: 20,
@@ -306,7 +312,6 @@ async function testDatabaseConcurrency() {
     })
   });
 
-  const result = await promisify(instance.track.bind(instance))();
   const formatted = formatResults(result);
   
   displayResults('Concurrence DB', [{ 
@@ -325,7 +330,7 @@ async function testRateLimiting() {
 
   log.info('Test dépassement des limites...');
 
-  const instance = autocannon({
+  const result = await autocannon({
     url: `${CONFIG.url}/api/accounts`,
     connections: 200,
     duration: 10,
@@ -334,7 +339,6 @@ async function testRateLimiting() {
     }
   });
 
-  const result = await promisify(instance.track.bind(instance))();
   const formatted = formatResults(result);
   
   log.info(`Requêtes bloquées (429): ${formatted.errors429 || 'N/A'}`);
