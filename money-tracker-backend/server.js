@@ -349,7 +349,11 @@ app.use((err, req, res, next) => {
   errorHandler(err, req, res, next);
 });
 
-// PHASE 12: DÉMARRAGE SERVEUR (AMÉLIORATION DU LOG)
+// ... (tout le code existant jusqu'à app.listen) ...
+
+// =================================================================
+// PHASE 12: DÉMARRAGE SERVEUR
+// =================================================================
 const server = app.listen(PORT, () => {
   logger.info('='.repeat(60));
   logger.info('🚀 Money Tracker Backend OPTIMISÉ démarré');
@@ -385,7 +389,7 @@ const server = app.listen(PORT, () => {
         }
       } catch (e) {
         logger.warn('⚠️  Impossible de charger les IDs de comptes spéciaux');
-        logger.error('Erreur complète:', e); // ← LOG COMPLET DE L'ERREUR
+        logger.error('Erreur complète:', e);
         logger.debug('Message:', e.message);
         logger.debug('Stack:', e.stack);
         logger.warn('   ℹ️  Les fonctionnalités "Receivables" seront limitées');
@@ -394,15 +398,57 @@ const server = app.listen(PORT, () => {
   });
 });
 
+// =================================================================
+// PHASE 13: NETTOYAGE AUTOMATIQUE DES SESSIONS (NOUVEAU)
+// =================================================================
 
-// Gestion propre de l'arrêt
+/**
+ * Nettoie les sessions expirées
+ */
+async function cleanExpiredSessions() {
+  try {
+    const result = await pool.query(`
+      DELETE FROM sessions 
+      WHERE expires_at < NOW()
+      RETURNING id
+    `);
+    
+    if (result.rowCount > 0) {
+      logger.info(`🧹 ${result.rowCount} sessions expirées nettoyées`);
+    }
+  } catch (error) {
+    logger.error('❌ Erreur nettoyage sessions:', error.message);
+  }
+}
+
+// Variable pour l'interval
+let sessionCleanupInterval;
+
+// Fonction pour démarrer le nettoyage
+const startSessionCleanup = () => {
+  cleanExpiredSessions(); // Nettoyage initial
+  sessionCleanupInterval = setInterval(cleanExpiredSessions, 3600000); // Toutes les heures
+  logger.info('✅ Auto-cleanup sessions activé (toutes les heures)');
+};
+
+// Démarrer le nettoyage
+startSessionCleanup();
+
+// =================================================================
+// GESTION PROPRE DE L'ARRÊT
+// =================================================================
 const gracefulShutdown = async (signal) => {
   logger.info(`${signal} reçu, fermeture gracieuse...`);
+  
+  // Arrêter le nettoyage automatique
+  if (sessionCleanupInterval) {
+    clearInterval(sessionCleanupInterval);
+    logger.info('✅ Auto-cleanup sessions arrêté');
+  }
   
   server.close(async () => {
     logger.info('✅ Serveur HTTP fermé');
     
-    // Fermer les connexions
     await cacheService.disconnect();
     logger.info('✅ Cache déconnecté');
     
@@ -412,7 +458,6 @@ const gracefulShutdown = async (signal) => {
     process.exit(0);
   });
   
-  // Force exit après 10 secondes
   setTimeout(() => {
     logger.error('❌ Timeout, arrêt forcé');
     process.exit(1);

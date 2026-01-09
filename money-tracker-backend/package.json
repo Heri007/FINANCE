@@ -40,7 +40,6 @@
   "devDependencies": {
     "artillery": "^2.0.27",
     "autocannon": "^8.0.0",
-    "clinic": "^13.0.0",
     "form-data": "^4.0.5",
     "nodemon": "^3.0.1"
   }
