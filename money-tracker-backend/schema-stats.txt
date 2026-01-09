@@ -1,0 +1,32 @@
+SCHEMA STATISTICS - 09/01/2026 11:04:34
+============================================================
+
+Database: moneytracker
+Export file: schema.sql
+
+TABLES BY SIZE:
+----------------------------------------
+ 1. transactions                   3688 kB
+ 2. projects                       320 kB
+ 3. project_expense_lines          216 kB
+ 4. sessions                       200 kB
+ 5. notes                          192 kB
+ 6. project_revenue_lines          192 kB
+ 7. receivables                    168 kB
+ 8. employees                      120 kB
+ 9. sops                           112 kB
+10. accounts                       104 kB
+11. categories                     104 kB
+12. objectives                     80 kB
+13. operator_tasks                 72 kB
+14. app_settings                   56 kB
+15. transaction_linking_log        56 kB
+16. tasks                          48 kB
+17. visions                        40 kB
+18. derivatives                    40 kB
+19. partner_payments               32 kB
+20. master_content                 24 kB
+21. profit_distributions           16 kB
+22. project_partners               16 kB
+23. content_derivatives            8192 bytes
+24. content_master                 8192 bytes

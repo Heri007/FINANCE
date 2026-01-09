@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict e1i9F5RZUm6IvY5e9FHtucluanJn39yjNty7WgqCFsUdxJ2xPPTRM9jjCxCcl2j
+\restrict l4I86OsMBWEu4tU2h0Cw1U5qRUwHz0vP3u5QiVvq1hieTM25f9GulYOkx9ruter
 
 -- Dumped from database version 14.19 (Homebrew)
 -- Dumped by pg_dump version 14.19 (Homebrew)
@@ -2498,5 +2498,5 @@ ALTER TABLE ONLY public.transactions
 -- PostgreSQL database dump complete
 --
 
-\unrestrict e1i9F5RZUm6IvY5e9FHtucluanJn39yjNty7WgqCFsUdxJ2xPPTRM9jjCxCcl2j
+\unrestrict l4I86OsMBWEu4tU2h0Cw1U5qRUwHz0vP3u5QiVvq1hieTM25f9GulYOkx9ruter
 
