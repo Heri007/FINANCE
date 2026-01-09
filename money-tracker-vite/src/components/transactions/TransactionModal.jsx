@@ -9,6 +9,7 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
     description: '',
     date: new Date().toISOString().split('T')[0],
     accountid: accounts?.[0]?.id?.toString() || '', // ✅ Uniformisé: accountid
+    destinationAccountId: '', // ✅ NOUVEAU
     projectId: null,
     is_posted: true,
   });
@@ -82,55 +83,69 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
   }, []);
 
  const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  const finalAmount = parseFloat(formData.amount);
+    const finalAmount = parseFloat(formData.amount);
 
-  // ✅ VALIDATION
-  if (isNaN(finalAmount) || finalAmount <= 0) {
-    alert('❌ Montant invalide');
-    return;
-  }
-  
-  if (!formData.category) {
-    alert('❌ Veuillez sélectionner une catégorie');
-    return;
-  }
-  
-  if (!formData.accountid) {
-    alert('❌ Veuillez sélectionner un compte');
-    return;
-  }
-  
-  if (!formData.description?.trim()) {
-    alert('❌ Veuillez ajouter une description');
-    return;
-  }
+    // ✅ VALIDATION
+    if (isNaN(finalAmount) || finalAmount <= 0) {
+      alert('❌ Montant invalide');
+      return;
+    }
+    
+    if (!formData.category && formData.type !== 'transfer') {
+      alert('❌ Veuillez sélectionner une catégorie');
+      return;
+    }
+    
+    if (!formData.accountid) {
+      alert('❌ Veuillez sélectionner un compte source');
+      return;
+    }
 
-  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (format snake_case AVEC underscores)
-  const payload = {
-    account_id: parseInt(formData.accountid),           // ✅ CORRIGÉ
-    type: formData.type,
-    amount: finalAmount,
-    category: formData.category,
-    description: formData.description,
-    transaction_date: formData.date,                    // ✅ CORRIGÉ (nom de clé)
-    is_posted: formData.is_posted || true,              // ✅ CORRIGÉ
-    is_planned: false,                                  // ✅ CORRIGÉ
-    project_id: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ CORRIGÉ
+    // ✅ VALIDATION POUR TRANSFERT
+    if (formData.type === 'transfer') {
+      if (!formData.destinationAccountId) {
+        alert('❌ Veuillez sélectionner un compte de destination');
+        return;
+      }
+      if (formData.accountid === formData.destinationAccountId) {
+        alert('❌ Les comptes source et destination doivent être différents');
+        return;
+      }
+    }
+    
+    if (!formData.description?.trim()) {
+      alert('❌ Veuillez ajouter une description');
+      return;
+    }
+
+    // ✅ PAYLOAD
+    const payload = {
+      account_id: parseInt(formData.accountid),
+      type: formData.type,
+      amount: finalAmount,
+      category: formData.type === 'transfer' ? 'Transfert' : formData.category,
+      description: formData.description,
+      transaction_date: formData.date,
+      is_posted: formData.is_posted || true,
+      is_planned: false,
+      project_id: formData.projectId ? parseInt(formData.projectId) : null,
+      destination_account_id: formData.type === 'transfer' && formData.destinationAccountId 
+        ? parseInt(formData.destinationAccountId) 
+        : null,
+    };
+
+    console.log('📤 Payload TransactionModal:', payload);
+
+    try {
+      await onSave(payload);
+      onClose();
+    } catch (error) {
+      console.error('❌ Erreur lors de la création:', error);
+      alert('Erreur: ' + (error.message || 'Erreur inconnue'));
+    }
   };
-
-  console.log('📤 Payload TransactionModal:', payload);
-
-  try {
-    await onSave(payload);
-    onClose();
-  } catch (error) {
-    console.error('❌ Erreur lors de la création:', error);
-    alert('Erreur: ' + (error.message || 'Erreur inconnue'));
-  }
-};
-
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -172,6 +187,17 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
                 }`}
               >
                 Revenu
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, type: 'transfer', category: 'Transfert', destinationAccountId: '' })}
+                className={`py-3 rounded-xl font-semibold transition-all ${
+                  formData.type === 'transfer'
+                    ? 'bg-blue-500 text-white shadow-lg'
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                🔄 Transfert
               </button>
             </div>
           </div>
@@ -258,22 +284,24 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
             </select>
           </div>
 
-          {/* Projet */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Projet <span className="text-gray-400 text-xs">(optionnel)</span>
-            </label>
-            <select
-              value={formData.projectId || ''}
-              onChange={(e) => setFormData({ ...formData, projectId: e.target.value || null })}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-            >
-              <option value="">Aucun projet</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
+          {/* Projet - Masquer pour les transferts */}
+          {formData.type !== 'transfer' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Projet <span className="text-gray-400 text-xs">(optionnel)</span>
+              </label>
+              <select
+                value={formData.projectId || ''}
+                onChange={(e) => setFormData({ ...formData, projectId: e.target.value || null })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+              >
+                <option value="">Aucun projet</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Description */}
           <div>
@@ -284,8 +312,8 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring focus:ring-indigo-200"
-              placeholder="Ex: Courses du mardi"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+              placeholder={formData.type === 'transfer' ? "Ex: Transfert Coffre → Liquide" : "Ex: Courses du mardi"}
               required
             />
           </div>
@@ -301,6 +329,50 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
               required
             />
           </div>
+
+          {/* Compte Source */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              {formData.type === 'transfer' ? '🏦 Compte Source (De)' : 'Compte'}
+            </label>
+            <select
+              value={formData.accountid}
+              onChange={(e) => setFormData({ ...formData, accountid: e.target.value })}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl"
+              required
+            >
+              <option value="">-- Sélectionner --</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({new Intl.NumberFormat('fr-FR').format(acc.balance)} Ar)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Compte Destination - Visible uniquement pour les transferts */}
+          {formData.type === 'transfer' && (
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                🎯 Compte Destination (Vers)
+              </label>
+              <select
+                value={formData.destinationAccountId}
+                onChange={(e) => setFormData({ ...formData, destinationAccountId: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500"
+                required
+              >
+                <option value="">-- Sélectionner --</option>
+                {accounts
+                  .filter(acc => acc.id.toString() !== formData.accountid)
+                  .map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({new Intl.NumberFormat('fr-FR').format(acc.balance)} Ar)
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
 
           {/* ✅ Compte - CORRECTION CRITIQUE */}
           <div>

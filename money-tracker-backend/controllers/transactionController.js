@@ -20,14 +20,18 @@ exports.getTransactions = async (req, res, next) => {
         t.is_posted,
         t.project_id,
         t.project_line_id,
+        t.destination_account_id,
         t.created_at,
         a.name as account_name,
+        dest_acc.name as destination_account_name,
         p.name as project_name
-      FROM transactions t
-      LEFT JOIN accounts a ON t.account_id = a.id
-      LEFT JOIN projects p ON t.project_id = p.id
-      ORDER BY t.transaction_date DESC, t.created_at DESC`
+       FROM transactions t
+       LEFT JOIN accounts a ON t.account_id = a.id
+       LEFT JOIN accounts dest_acc ON t.destination_account_id = dest_acc.id
+       LEFT JOIN projects p ON t.project_id = p.id
+       ORDER BY t.transaction_date DESC, t.created_at DESC`
     );
+
     logger.info(`✅ Transactions récupérées: ${result.rows.length}`);
     res.json(result.rows);
   } catch (error) {
@@ -66,68 +70,93 @@ exports.createTransaction = async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-
-    // ✅ CORRECTION : Extraire account_id (sans underscore)
+    
     const { 
-      account_id,           // ✅ CHANGÉ : account_id → account_id
+      account_id,
       type, 
       amount, 
       category, 
       description, 
-      date, 
-      transaction_date,  
-      is_planned,           // ✅ CHANGÉ : is_planned → is_planned
-      is_posted,            // ✅ CHANGÉ : is_posted → is_posted
-      project_id,           // ✅ CHANGÉ : project_id → project_id
-      project_line_id        // ✅ CHANGÉ : project_line_id → project_line_id
+      transaction_date,
+      is_planned,
+      is_posted, 
+      project_id,
+      project_line_id,
+      destination_account_id  // ✅ NOUVEAU
     } = req.body;
 
-    const finalDate = transaction_date || date;
     const finalAmount = parseFloat(amount);
-
     logger.info('📥 Nouvelle transaction', { account_id, type, amount: finalAmount });
+
+    // ✅ VALIDATION POUR TRANSFERT
+    if (type === 'transfer') {
+      if (!destination_account_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'destination_account_id requis pour un transfert' });
+      }
+      if (account_id === destination_account_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Les comptes source et destination doivent être différents' });
+      }
+    }
 
     let shouldPost = true;
     if (is_posted !== undefined) shouldPost = is_posted;
     else if (is_planned === true) shouldPost = false;
 
-    // ✅ REQUÊTE SQL CORRIGÉE (colonnes PostgreSQL exactes)
+    // Insérer la transaction
     const insertResult = await client.query(
       `INSERT INTO transactions 
        (account_id, type, amount, category, description, transaction_date, 
-        is_planned, is_posted, project_id, project_line_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        is_planned, is_posted, project_id, project_line_id, destination_account_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
-        account_id,              // ✅ Format PostgreSQL
+        account_id,
         type, 
         finalAmount, 
         category, 
         description, 
-        finalDate, 
+        transaction_date, 
         is_planned || false, 
         shouldPost, 
         project_id || null,
-        project_line_id || null
+        project_line_id || null,
+        destination_account_id || null  // ✅ NOUVEAU
       ]
     );
 
     const transaction = insertResult.rows[0];
 
-    // Mise à jour du solde
+    // ✅ LOGIQUE DE MISE À JOUR DES SOLDES
     if (shouldPost) {
-      const updateQuery = type === 'income' 
-        ? 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'
-        : 'UPDATE accounts SET balance = balance - $1 WHERE id = $2';
-      await client.query(updateQuery, [finalAmount, account_id]);  // ✅ CORRIGÉ
+      if (type === 'transfer') {
+        // Débiter le compte source
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2',
+          [finalAmount, account_id]
+        );
+        // Créditer le compte destination
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
+          [finalAmount, destination_account_id]
+        );
+        logger.info(`✅ Transfert: ${finalAmount} Ar de compte ${account_id} → ${destination_account_id}`);
+      } else {
+        // Logique existante pour income/expense
+        const updateQuery = type === 'income' 
+          ? 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'
+          : 'UPDATE accounts SET balance = balance - $1 WHERE id = $2';
+        await client.query(updateQuery, [finalAmount, account_id]);
+      }
     }
 
-    await client.query('COMMIT');
+        await client.query('COMMIT');
     res.status(201).json(transaction);
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error.code === '23505') {
-        return res.status(409).json({ error: 'Transaction déjà existante (doublon).' });
+      return res.status(409).json({ error: 'Transaction déjà existante (doublon).' });
     }
     logger.error('❌ Erreur createTransaction:', { error: error.message });
     next(error);
@@ -147,10 +176,18 @@ exports.updateTransaction = async (req, res, next) => {
     
     const { id } = req.params;
     
-    // ✅ CORRECTION : Inclure project_line_id dans la destructuration
     const { 
-      account_id, type, amount, category, description, date,
-      is_posted, is_planned, project_id, project_line_id
+      account_id, 
+      type, 
+      amount, 
+      category, 
+      description, 
+      transaction_date,
+      is_posted, 
+      is_planned, 
+      project_id, 
+      project_line_id,
+      destination_account_id  // ✅ NOUVEAU
     } = req.body;
 
     // 1. Récupérer l'ancienne transaction
@@ -162,15 +199,28 @@ exports.updateTransaction = async (req, res, next) => {
 
     const oldTx = beforeResult.rows[0];
     const oldPosted = oldTx.is_posted;
-    const newPosted = is_posted !== undefined ? is_posted : oldPosted; 
+    const newPosted = is_posted !== undefined ? is_posted : oldPosted;
 
-    // ✅ CORRECTION : Ajouter project_line_id dans le SET (10 colonnes + WHERE)
+    // ✅ VALIDATION POUR TRANSFERT
+    if (type === 'transfer' || oldTx.type === 'transfer') {
+      if (type === 'transfer' && !destination_account_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'destination_account_id requis pour un transfert' });
+      }
+      if (type === 'transfer' && account_id === destination_account_id) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Les comptes source et destination doivent être différents' });
+      }
+    }
+
+    // 2. Mettre à jour la transaction
     const updateResult = await client.query(
       `UPDATE transactions 
        SET account_id = $1, type = $2, amount = $3, category = $4, 
            description = $5, transaction_date = $6, is_posted = $7, 
-           is_planned = $8, project_id = $9, project_line_id = $10
-       WHERE id = $11
+           is_planned = $8, project_id = $9, project_line_id = $10,
+           destination_account_id = $11
+       WHERE id = $12
        RETURNING *`,
       [
         account_id || oldTx.account_id, 
@@ -178,30 +228,58 @@ exports.updateTransaction = async (req, res, next) => {
         amount || oldTx.amount, 
         category || oldTx.category, 
         description || oldTx.description, 
-        date || oldTx.transaction_date, 
+        transaction_date || oldTx.transaction_date, 
         newPosted,
         is_planned !== undefined ? is_planned : oldTx.is_planned,
         project_id !== undefined ? project_id : oldTx.project_id,
         project_line_id !== undefined ? project_line_id : oldTx.project_line_id,
+        destination_account_id !== undefined ? destination_account_id : oldTx.destination_account_id,
         id
       ]
     );
 
     const updatedTx = updateResult.rows[0];
 
-    // 3. LOGIQUE DE SOLDE (Reverse & Replay)
+    // 3. ✅ LOGIQUE DE SOLDE (Reverse & Replay)
+    
+    // Annuler l'ancien impact si posted
     if (oldPosted) {
+      if (oldTx.type === 'transfer') {
+        // Annuler l'ancien transfert
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
+          [oldTx.amount, oldTx.account_id]
+        );
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2',
+          [oldTx.amount, oldTx.destination_account_id]
+        );
+      } else {
         const reverseQuery = oldTx.type === 'income' 
           ? 'UPDATE accounts SET balance = balance - $1 WHERE id = $2'
           : 'UPDATE accounts SET balance = balance + $1 WHERE id = $2';
         await client.query(reverseQuery, [oldTx.amount, oldTx.account_id]);
+      }
     }
 
+    // Appliquer le nouvel impact si posted
     if (newPosted) {
+      if (updatedTx.type === 'transfer') {
+        // Appliquer le nouveau transfert
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1 WHERE id = $2',
+          [updatedTx.amount, updatedTx.account_id]
+        );
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1 WHERE id = $2',
+          [updatedTx.amount, updatedTx.destination_account_id]
+        );
+      } else {
         const applyQuery = updatedTx.type === 'income'
           ? 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'
           : 'UPDATE accounts SET balance = balance - $1 WHERE id = $2';
         await client.query(applyQuery, [updatedTx.amount, updatedTx.account_id]);
+      }
     }
 
     await client.query('COMMIT');
@@ -215,7 +293,6 @@ exports.updateTransaction = async (req, res, next) => {
     client.release();
   }
 };
-
 
 // ============================================================================
 // 5. DELETE - Supprimer une transaction
@@ -233,50 +310,60 @@ exports.deleteTransaction = async (req, res, next) => {
       return res.status(404).json({ error: 'Transaction introuvable' });
     }
     
-    const transaction = checkResult.rows;
+    const transaction = checkResult.rows[0];
     console.log('🗑️ Suppression transaction:', {
       id: transaction.id,
-      description: transaction.description,
+      type: transaction.type,
       amount: transaction.amount,
-      project_line_id: transaction.project_line_id
+      destination_account_id: transaction.destination_account_id
     });
 
-    // 2. ✅ CRITIQUE: Si liée à une ligne projet, la réinitialiser
-    // ✅ EXCELLENT CODE
-if (transaction.project_line_id) {
-  const expenseCheck = await client.query('SELECT id FROM project_expense_lines WHERE id = $1', [transaction.project_line_id]);
-  const revenueCheck = await client.query('SELECT id FROM project_revenue_lines WHERE id = $1', [transaction.project_line_id]);
-  
-  if (expenseCheck.rows.length > 0) {
-    await client.query(
-      'UPDATE project_expense_lines SET is_paid = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
-      [transaction.project_line_id]
-    );
-  } else if (revenueCheck.rows.length > 0) {
-    await client.query(
-      'UPDATE project_revenue_lines SET is_received = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
-      [transaction.project_line_id]
-    );
-  }
-}
-
-    // 3. Annuler l'impact sur le solde si postée
-    if (transaction.is_posted) {
-      const updateQuery = transaction.type === 'income'
-        ? 'UPDATE accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2'
-        : 'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2';
+    // 2. Réinitialiser les lignes de projet si nécessaire
+    if (transaction.project_line_id) {
+      const expenseCheck = await client.query(
+        'SELECT id FROM project_expense_lines WHERE id = $1', 
+        [transaction.project_line_id]
+      );
+      const revenueCheck = await client.query(
+        'SELECT id FROM project_revenue_lines WHERE id = $1', 
+        [transaction.project_line_id]
+      );
       
-      await client.query(updateQuery, [transaction.amount, transaction.account_id]);
-      console.log('✅ Compte recrédité:', transaction.account_id, transaction.amount);
+      if (expenseCheck.rows.length > 0) {
+        await client.query(
+          'UPDATE project_expense_lines SET is_paid = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
+          [transaction.project_line_id]
+        );
+      } else if (revenueCheck.rows.length > 0) {
+        await client.query(
+          'UPDATE project_revenue_lines SET is_received = false, actual_amount = 0, transaction_date = NULL, transaction_id = NULL WHERE id = $1',
+          [transaction.project_line_id]
+        );
+      }
     }
 
-    // Après avoir annulé le solde, avant DELETE
-if (transaction.project_line_id) {
-  await client.query(
-    'UPDATE project_expense_lines SET is_paid = FALSE, actual_amount = 0, transaction_id = NULL WHERE id = $1',
-    [transaction.project_line_id]
-  );
-}
+    // 3. ✅ Annuler l'impact sur les soldes si postée
+    if (transaction.is_posted) {
+      if (transaction.type === 'transfer') {
+        // Annuler le transfert
+        await client.query(
+          'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2',
+          [transaction.amount, transaction.account_id]
+        );
+        await client.query(
+          'UPDATE accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2',
+          [transaction.amount, transaction.destination_account_id]
+        );
+        console.log('✅ Transfert annulé:', transaction.account_id, '←→', transaction.destination_account_id);
+      } else {
+        const updateQuery = transaction.type === 'income'
+          ? 'UPDATE accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2'
+          : 'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2';
+        
+        await client.query(updateQuery, [transaction.amount, transaction.account_id]);
+        console.log('✅ Compte recrédité:', transaction.account_id, transaction.amount);
+      }
+    }
 
     // 4. Supprimer la transaction
     await client.query('DELETE FROM transactions WHERE id = $1', [id]);
@@ -287,7 +374,8 @@ if (transaction.project_line_id) {
     res.json({ 
       message: 'Transaction supprimée',
       expenseLineReset: !!transaction.project_line_id,
-      accountCredited: transaction.is_posted
+      accountCredited: transaction.is_posted,
+      transferReversed: transaction.type === 'transfer' && transaction.is_posted
     });
     
   } catch (error) {

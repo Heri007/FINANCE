@@ -303,6 +303,7 @@ const createTransaction = useCallback(
         is_posted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,       // ✅ CORRIGÉ
         project_id: data.projectid ?? data.project_id ?? data.projectId ?? null,   // ✅ CORRIGÉ
         project_line_id: data.projectlineid ?? data.project_line_id ?? null,       // ✅ CORRIGÉ
+        destination_account_id: data.destination_account_id ?? null,  // ✅ NOUVEAU
       };
 
       console.log('📤 Payload FinanceContext (createTransaction):', payload);
