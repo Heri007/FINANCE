@@ -107,17 +107,17 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
     return;
   }
 
-  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (format snake_case sans underscores)
+  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (format snake_case AVEC underscores)
   const payload = {
-    accountid: parseInt(formData.accountid),           // ✅ Format PostgreSQL
+    account_id: parseInt(formData.accountid),           // ✅ CORRIGÉ
     type: formData.type,
     amount: finalAmount,
     category: formData.category,
     description: formData.description,
-    date: formData.date,
-    isposted: formData.is_posted || true,              // ✅ Format PostgreSQL
-    isplanned: false,                                  // ✅ Format PostgreSQL
-    projectid: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ Format PostgreSQL
+    transaction_date: formData.date,                    // ✅ CORRIGÉ (nom de clé)
+    is_posted: formData.is_posted || true,              // ✅ CORRIGÉ
+    is_planned: false,                                  // ✅ CORRIGÉ
+    project_id: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ CORRIGÉ
   };
 
   console.log('📤 Payload TransactionModal:', payload);
@@ -130,6 +130,7 @@ export function TransactionModal({ onClose, onSave, accounts, projects = [] }) {
     alert('Erreur: ' + (error.message || 'Erreur inconnue'));
   }
 };
+
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">

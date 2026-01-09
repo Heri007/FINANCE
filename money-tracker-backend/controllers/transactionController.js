@@ -67,48 +67,48 @@ exports.createTransaction = async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    // ✅ CORRECTION : Extraire accountid (sans underscore)
+    // ✅ CORRECTION : Extraire account_id (sans underscore)
     const { 
-      accountid,           // ✅ CHANGÉ : account_id → accountid
+      account_id,           // ✅ CHANGÉ : account_id → account_id
       type, 
       amount, 
       category, 
       description, 
       date, 
       transaction_date,  
-      isplanned,           // ✅ CHANGÉ : is_planned → isplanned
+      is_planned,           // ✅ CHANGÉ : is_planned → is_planned
       is_posted,            // ✅ CHANGÉ : is_posted → is_posted
-      projectid,           // ✅ CHANGÉ : project_id → projectid
-      projectlineid        // ✅ CHANGÉ : project_line_id → projectlineid
+      project_id,           // ✅ CHANGÉ : project_id → project_id
+      project_line_id        // ✅ CHANGÉ : project_line_id → project_line_id
     } = req.body;
 
     const finalDate = transaction_date || date;
     const finalAmount = parseFloat(amount);
 
-    logger.info('📥 Nouvelle transaction', { accountid, type, amount: finalAmount });
+    logger.info('📥 Nouvelle transaction', { account_id, type, amount: finalAmount });
 
     let shouldPost = true;
     if (is_posted !== undefined) shouldPost = is_posted;
-    else if (isplanned === true) shouldPost = false;
+    else if (is_planned === true) shouldPost = false;
 
     // ✅ REQUÊTE SQL CORRIGÉE (colonnes PostgreSQL exactes)
     const insertResult = await client.query(
       `INSERT INTO transactions 
-       (accountid, type, amount, category, description, transactiondate, 
-        isplanned, is_posted, projectid, projectlineid)
+       (account_id, type, amount, category, description, transaction_date, 
+        is_planned, is_posted, project_id, project_line_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
-        accountid,              // ✅ Format PostgreSQL
+        account_id,              // ✅ Format PostgreSQL
         type, 
         finalAmount, 
         category, 
         description, 
         finalDate, 
-        isplanned || false, 
+        is_planned || false, 
         shouldPost, 
-        projectid || null,
-        projectlineid || null
+        project_id || null,
+        project_line_id || null
       ]
     );
 
@@ -119,7 +119,7 @@ exports.createTransaction = async (req, res, next) => {
       const updateQuery = type === 'income' 
         ? 'UPDATE accounts SET balance = balance + $1 WHERE id = $2'
         : 'UPDATE accounts SET balance = balance - $1 WHERE id = $2';
-      await client.query(updateQuery, [finalAmount, accountid]);  // ✅ CORRIGÉ
+      await client.query(updateQuery, [finalAmount, account_id]);  // ✅ CORRIGÉ
     }
 
     await client.query('COMMIT');
@@ -149,7 +149,7 @@ exports.updateTransaction = async (req, res, next) => {
     
     // ✅ CORRECTION : Inclure project_line_id dans la destructuration
     const { 
-      accountid, type, amount, category, description, date,
+      account_id, type, amount, category, description, date,
       is_posted, is_planned, project_id, project_line_id
     } = req.body;
 

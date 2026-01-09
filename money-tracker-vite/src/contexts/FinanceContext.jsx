@@ -287,21 +287,22 @@ const createTransaction = useCallback(
         throw new Error(`accountid invalide: ${accountIdValue}`);
       }
 
+      // ✅ PAYLOAD CORRIGÉ avec underscores
       const payload = {
-        accountid: accountId,
+        account_id: accountId,                              // ✅ CORRIGÉ
         type: data.type,
         amount: parseFloat(data.amount),
         category: data.category ?? 'Autre',
         description: data.description ?? '',
-        date:
+        transaction_date:                                   // ✅ CORRIGÉ (nom de clé)
           data.date ??
           data.transactiondate ??
           data.transaction_date ??
-          new Date().toISOString().split('T')[0],
-        isplanned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,
-        isposted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,
-        projectid: data.projectid ?? data.project_id ?? data.projectId ?? null,
-        projectlineid: data.projectlineid ?? data.project_line_id ?? null,
+          new Date().toISOString().split('T'),
+        is_planned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,  // ✅ CORRIGÉ
+        is_posted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,       // ✅ CORRIGÉ
+        project_id: data.projectid ?? data.project_id ?? data.projectId ?? null,   // ✅ CORRIGÉ
+        project_line_id: data.projectlineid ?? data.project_line_id ?? null,       // ✅ CORRIGÉ
       };
 
       console.log('📤 Payload FinanceContext (createTransaction):', payload);
@@ -324,12 +325,13 @@ const createTransaction = useCallback(
   [refreshTransactions, refreshAccounts]
 );
 
+
 const updateTransaction = useCallback(
   async (id, data) => {
     try {
-      // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (format sans underscores)
+      // ✅ PAYLOAD CORRIGÉ avec underscores
       const payload = {
-        accountid: parseInt(
+        account_id: parseInt(                                 // ✅ CORRIGÉ
           data.accountid ?? data.account_id ?? data.accountId,
           10
         ),
@@ -337,15 +339,15 @@ const updateTransaction = useCallback(
         amount: parseFloat(data.amount),
         category: data.category ?? 'Autre',
         description: data.description ?? '',
-        date:
+        transaction_date:                                     // ✅ CORRIGÉ (nom de clé)
           data.date ??
           data.transactiondate ??
           data.transaction_date ??
           new Date().toISOString().split('T')[0],
-        isplanned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,
-        isposted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,
-        projectid: data.projectid ?? data.project_id ?? data.projectId ?? null,
-        projectlineid: data.projectlineid ?? data.project_line_id ?? null,
+        is_planned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,  // ✅ CORRIGÉ
+        is_posted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,       // ✅ CORRIGÉ
+        project_id: data.projectid ?? data.project_id ?? data.projectId ?? null,   // ✅ CORRIGÉ
+        project_line_id: data.projectlineid ?? data.project_line_id ?? null,       // ✅ CORRIGÉ
       };
 
       console.log('📤 Payload FinanceContext (updateTransaction):', payload);
@@ -367,6 +369,7 @@ const updateTransaction = useCallback(
   },
   [refreshTransactions, refreshAccounts]
 );
+
 
   const deleteTransaction = useCallback(
     async (id) => {
@@ -477,42 +480,43 @@ const updateTransaction = useCallback(
         const newTransactions = [];
 
         // Créer les transactions de dépenses
-        for (const exp of parsedExpenses) {
-          const acc = accounts.find((a) => a.name === exp.account);
-          if (acc) {
-            await createTransaction({
-              accountid: acc.id,
-              type: 'expense',
-              amount: parseFloat(exp.amount),
-              category: project.name,
-              description: exp.description,
-              date: new Date().toISOString().split('T')[0],
-              projectid: projectId,
-              isplanned: false,
-              isposted: true,
-            });
-            newTransactions.push(exp);
-          }
-        }
+for (const exp of parsedExpenses) {
+  const acc = accounts.find((a) => a.name === exp.account);
+  if (acc) {
+    await createTransaction({
+      accountid: acc.id,          // ✅ Garder comme ça (sera converti en account_id dans createTransaction)
+      type: 'expense',
+      amount: parseFloat(exp.amount),
+      category: project.name,
+      description: exp.description,
+      date: new Date().toISOString().split('T')[0],
+      projectid: projectId,       // ✅ Garder comme ça (sera converti en project_id dans createTransaction)
+      isplanned: false,
+      isposted: true,
+    });
+    newTransactions.push(exp);
+  }
+}
 
-        // Créer les transactions de revenus
-        for (const rev of parsedRevenues) {
-          const acc = accounts.find((a) => a.name === rev.account);
-          if (acc) {
-            await createTransaction({
-              accountid: acc.id,
-              type: 'income',
-              amount: parseFloat(rev.amount),
-              category: project.name,
-              description: rev.description,
-              date: new Date().toISOString().split('T')[0],
-              projectid: projectId,
-              isplanned: false,
-              isposted: true,
-            });
-            newTransactions.push(rev);
-          }
-        }
+// Créer les transactions de revenus
+for (const rev of parsedRevenues) {
+  const acc = accounts.find((a) => a.name === rev.account);
+  if (acc) {
+    await createTransaction({
+      accountid: acc.id,          // ✅ Garder comme ça
+      type: 'income',
+      amount: parseFloat(rev.amount),
+      category: project.name,
+      description: rev.description,
+      date: new Date().toISOString().split('T')[0],
+      projectid: projectId,       // ✅ Garder comme ça
+      isplanned: false,
+      isposted: true,
+    });
+    newTransactions.push(rev);
+  }
+}
+
 
         // Mettre à jour le statut du projet
         await updateProject(projectId, { status: 'active' });

@@ -180,15 +180,17 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
         category: transaction.category || '',
         description: transaction.description || '',
         date:
-          transaction.transactiondate?.split('T')[0] ||
-          transaction.date?.split('T')[0] ||
+          transaction.transaction_date?.split('T') ||  // ✅ CORRIGÉ
+          transaction.transactiondate?.split('T') ||
+          transaction.date?.split('T') ||
           '',
-        accountid: transaction.account_id || '',
-        projectId: transaction.project_id || null,
+        accountid: transaction.account_id || '',          // ✅ CORRIGÉ
+        projectId: transaction.project_id || null,        // ✅ CORRIGÉ
         isPosted: transaction.is_posted === true || transaction.isposted === true,
       });
     }
   }, [transaction]);
+
 
 // Fonction handleSubmit corrigée
 const handleSubmit = async (e) => {
@@ -218,17 +220,17 @@ const handleSubmit = async (e) => {
     return;
   }
 
-  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (sans underscores)
+  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (AVEC underscores)
   const payload = {
-    accountid: parseInt(formData.accountid),  // ✅ Format PostgreSQL
+    account_id: parseInt(formData.accountid),           // ✅ CORRIGÉ
     type: formData.type,
     amount: finalAmount,
     category: formData.category,
     description: formData.description,
-    date: formData.date,
-    isposted: formData.isPosted || true,     // ✅ Format PostgreSQL
-    isplanned: false,                         // ✅ Format PostgreSQL
-    projectid: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ Format PostgreSQL
+    transaction_date: formData.date,                    // ✅ CORRIGÉ (nom de clé)
+    is_posted: formData.isPosted || true,               // ✅ CORRIGÉ
+    is_planned: false,                                  // ✅ CORRIGÉ
+    project_id: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ CORRIGÉ
   };
 
   console.log('📤 Payload TransactionEditModal:', payload);
@@ -252,7 +254,6 @@ const handleSubmit = async (e) => {
     alert('Erreur: ' + (error.message || 'Erreur inconnue'));
   }
 };
-
 
 const handleDelete = async () => {
 
