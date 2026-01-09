@@ -1088,33 +1088,26 @@ export default function App() {
       </div>
 
       {/* --- MODALS GLOBAUX --- */}
-      {showAdd && (
-        <TransactionModal
-          onClose={() => setShowAdd(false)}
-          projects={projects} // ✅ Passe la liste des projets
-          accounts={accounts}
-          onSave={async (tx) => {
-            try {
-              await createTransaction({
-                account_id: tx.accountId,
-                type: tx.type,
-                amount: tx.amount,
-                category: tx.category,
-                description: tx.description,
-                date: tx.date,
-                project_id: tx.projectId || null, // ✅ Utilise le projet du formulaire
-                is_posted: true,
-                is_planned: false,
-              });
-              showToast('Transaction enregistrée', 'success');
-              await refreshAccounts();
-              await refreshTransactions();
-            } catch (e) {
-              showToast('Erreur ajout transaction', 'error');
-            }
-          }}
-        />
-      )}
+{showAdd && (
+  <TransactionModal
+    onClose={() => setShowAdd(false)}
+    projects={projects}
+    accounts={accounts}
+    onSave={async (tx) => {
+      try {
+        // ✅ CORRECTION : Passer directement tx sans transformation
+        await createTransaction(tx);
+        
+        showToast('Transaction enregistrée', 'success');
+        await refreshAccounts();
+        await refreshTransactions();
+      } catch (e) {
+        showToast('Erreur ajout transaction', 'error');
+      }
+    }}
+  />
+)}
+
 
       {showAddAccount && (
         <AccountModal

@@ -15,6 +15,25 @@ import {
 } from 'lucide-react';
 import { useFinance } from './contexts/FinanceContext';
 
+// Ajouter cette fonction en haut du composant (après les imports)
+const safeCalculate = (expression) => {
+  try {
+    if (!expression) return '';
+    const cleanExpr = expression
+      .toString()
+      .replace(/,/g, '.')
+      .replace(/x/g, '*')
+      .replace(/[^-()\d/*+.]/g, '');
+    if (!cleanExpr) return '';
+
+    const result = new Function('return ' + cleanExpr)();
+    if (!isFinite(result) || isNaN(result)) return expression;
+    return parseFloat(result.toFixed(2)).toString();
+  } catch (e) {
+    return expression;
+  }
+};
+
 const getCategoryIcon = (category) => {
   const iconMap = {
     Voiture: '🚗',
@@ -128,6 +147,7 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
   const {
     transactions,
     projects,
+    createTransaction, // ✅ AJOUT
     updateTransaction,
     deleteTransaction,
     updateProject,
@@ -135,6 +155,10 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
     refreshTransactions,
     refreshProjects,
   } = useFinance();
+
+  // ✅ DÉTECTION DU MODE
+  const isCreating = !transaction;
+  const isEditing = !!transaction;
 
   const [formData, setFormData] = useState({
     type: 'expense',
@@ -166,38 +190,74 @@ const TransactionEditModal = ({ transaction, onClose, accounts }) => {
     }
   }, [transaction]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        account_id: parseInt(formData.accountid),
-        type: formData.type,
-        amount: parseFloat(formData.amount),
-        category: formData.category,
-        description: formData.description,
-        date: formData.date,
-        is_posted: formData.isPosted,
-        is_planned: false,
-        project_id: formData.projectId || null,
-        project_line_id: formData.projectlineid || null,
-      };
+// Fonction handleSubmit corrigée
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-      console.log('📤 PAYLOAD ENVOYÉ:', payload);
-      await updateTransaction(transaction.id, payload);
+  const finalAmount = parseFloat(safeCalculate(formData.amount));
 
-      await refreshAccounts?.();
-      await refreshTransactions?.();
-      await refreshProjects?.();
+  // Validation
+  if (isNaN(finalAmount)) {
+    alert('❌ Montant invalide');
+    return;
+  }
+  
+  if (!formData.category) {
+    alert('❌ Veuillez sélectionner une catégorie');
+    return;
+  }
+  
+  if (!formData.accountid) {
+    alert('❌ Veuillez sélectionner un compte');
+    console.error('accountid manquant:', formData);
+    return;
+  }
+  
+  if (!formData.description) {
+    alert('❌ Veuillez ajouter une description');
+    return;
+  }
 
-      console.log('✅ Transaction mise à jour avec succès');
-      onClose();
-    } catch (error) {
-      console.error('❌ ERREUR:', error);
-      alert('Erreur lors de la mise à jour: ' + error.message);
-    }
+  // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (sans underscores)
+  const payload = {
+    accountid: parseInt(formData.accountid),  // ✅ Format PostgreSQL
+    type: formData.type,
+    amount: finalAmount,
+    category: formData.category,
+    description: formData.description,
+    date: formData.date,
+    isposted: formData.isPosted || true,     // ✅ Format PostgreSQL
+    isplanned: false,                         // ✅ Format PostgreSQL
+    projectid: formData.projectId ? parseInt(formData.projectId) : null,  // ✅ Format PostgreSQL
   };
 
-  const handleDelete = async () => {
+  console.log('📤 Payload TransactionEditModal:', payload);
+
+  try {
+    if (transaction?.id) {
+      // Mode édition
+      await updateTransaction(transaction.id, payload);
+    } else {
+      // Mode création
+      await createTransaction(payload);
+    }
+
+    await refreshAccounts?.();
+    await refreshTransactions?.();
+    await refreshProjects?.();
+    
+    onClose();
+  } catch (error) {
+    console.error('❌ Erreur:', error);
+    alert('Erreur: ' + (error.message || 'Erreur inconnue'));
+  }
+};
+
+
+const handleDelete = async () => {
+
+    if (!isEditing) return; // ✅ Seulement en mode édition
+
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette transaction ?')) {
       return;
     }

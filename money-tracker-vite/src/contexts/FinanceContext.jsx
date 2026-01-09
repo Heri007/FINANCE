@@ -258,75 +258,115 @@ export function FinanceProvider({ children }) {
   );
 
   // ============================================================================
-  // MUTATIONS - TRANSACTIONS
-  // ============================================================================
-  const createTransaction = useCallback(
-    async (data) => {
-      try {
-        const payload = {
-          accountid: parseInt(data.accountid ?? data.accountId ?? data.accountid, 10),
-          type: data.type,
-          amount: parseFloat(data.amount),
-          category: data.category ?? 'Autre',
-          description: data.description ?? '',
-          date: data.date ?? data.transactiondate ?? data.transactiondate ?? new Date().toISOString().split('T')[0],
-          isplanned: data.isplanned ?? data.isplanned ?? false,
-          isposted: data.isposted ?? data.isposted ?? true,
-          projectid: data.projectid ?? data.projectId ?? data.projectid ?? null,
-          projectlineid: data.projectlineid ?? data.projectlineid ?? null,
-        };
+// MUTATIONS - TRANSACTIONS
+// ============================================================================
+const createTransaction = useCallback(
+  async (data) => {
+    try {
+      console.log('🔍 Data reçu dans createTransaction:', data);
+      
+      // ✅ Accéder à toutes les variantes possibles
+      const accountIdValue = 
+        data.accountid ?? 
+        data.account_id ?? 
+        data.accountId;
 
-        const response = await apiRequest('transactions', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
+      console.log('🔍 accountIdValue trouvé:', accountIdValue);
 
-        await refreshTransactions();
-        await refreshAccounts();
-        setError(null);
-        return response;
-      } catch (err) {
-        console.error('Erreur createTransaction:', err);
-        setError({ message: 'Erreur lors de la création de la transaction', details: err });
-        throw err;
+      if (!accountIdValue) {
+        console.error('❌ Aucun accountid trouvé dans:', data);
+        throw new Error('accountid manquant dans les données');
       }
-    },
-    [refreshTransactions, refreshAccounts]
-  );
 
-  const updateTransaction = useCallback(
-    async (id, data) => {
-      try {
-        const payload = {
-          accountid: parseInt(data.accountid ?? data.accountId ?? data.accountid, 10),
-          type: data.type,
-          amount: parseFloat(data.amount),
-          category: data.category ?? 'Autre',
-          description: data.description ?? '',
-          date: data.date ?? data.transactiondate ?? data.transactiondate ?? new Date().toISOString().split('T')[0],
-          isplanned: data.isplanned ?? data.isplanned ?? false,
-          isposted: data.isposted ?? data.isposted ?? true,
-          projectid: data.projectid ?? data.projectId ?? data.projectid ?? null,
-          projectlineid: data.projectlineid ?? data.projectlineid ?? null,
-        };
+      // ✅ Convertir en nombre de manière robuste
+      const accountId = typeof accountIdValue === 'number' 
+        ? accountIdValue 
+        : parseInt(accountIdValue, 10);
 
-        const response = await apiRequest(`transactions/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-
-        await refreshTransactions();
-        await refreshAccounts();
-        setError(null);
-        return response;
-      } catch (err) {
-        console.error('Erreur updateTransaction:', err);
-        setError({ message: 'Erreur lors de la mise à jour de la transaction', details: err });
-        throw err;
+      if (isNaN(accountId)) {
+        throw new Error(`accountid invalide: ${accountIdValue}`);
       }
-    },
-    [refreshTransactions, refreshAccounts]
-  );
+
+      const payload = {
+        accountid: accountId,
+        type: data.type,
+        amount: parseFloat(data.amount),
+        category: data.category ?? 'Autre',
+        description: data.description ?? '',
+        date:
+          data.date ??
+          data.transactiondate ??
+          data.transaction_date ??
+          new Date().toISOString().split('T')[0],
+        isplanned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,
+        isposted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,
+        projectid: data.projectid ?? data.project_id ?? data.projectId ?? null,
+        projectlineid: data.projectlineid ?? data.project_line_id ?? null,
+      };
+
+      console.log('📤 Payload FinanceContext (createTransaction):', payload);
+
+      const response = await apiRequest('transactions', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+
+      await refreshTransactions();
+      await refreshAccounts();
+      setError(null);
+      return response;
+    } catch (err) {
+      console.error('Erreur createTransaction:', err);
+      setError({ message: 'Erreur lors de la création de la transaction', details: err });
+      throw err;
+    }
+  },
+  [refreshTransactions, refreshAccounts]
+);
+
+const updateTransaction = useCallback(
+  async (id, data) => {
+    try {
+      // ✅ PAYLOAD CORRIGÉ pour PostgreSQL (format sans underscores)
+      const payload = {
+        accountid: parseInt(
+          data.accountid ?? data.account_id ?? data.accountId,
+          10
+        ),
+        type: data.type,
+        amount: parseFloat(data.amount),
+        category: data.category ?? 'Autre',
+        description: data.description ?? '',
+        date:
+          data.date ??
+          data.transactiondate ??
+          data.transaction_date ??
+          new Date().toISOString().split('T')[0],
+        isplanned: data.isplanned ?? data.is_planned ?? data.isPlanned ?? false,
+        isposted: data.isposted ?? data.is_posted ?? data.isPosted ?? true,
+        projectid: data.projectid ?? data.project_id ?? data.projectId ?? null,
+        projectlineid: data.projectlineid ?? data.project_line_id ?? null,
+      };
+
+      console.log('📤 Payload FinanceContext (updateTransaction):', payload);
+
+      const response = await apiRequest(`transactions/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+
+      await refreshTransactions();
+      await refreshAccounts();
+      setError(null);
+      return response;
+    } catch (err) {
+      console.error('Erreur updateTransaction:', err);
+      setError({ message: 'Erreur lors de la mise à jour de la transaction', details: err });
+      throw err;
+    }
+  },
+  [refreshTransactions, refreshAccounts]
+);
 
   const deleteTransaction = useCallback(
     async (id) => {

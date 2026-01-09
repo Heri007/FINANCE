@@ -9,18 +9,19 @@ const Joi = require('joi');
 
 // Schéma de validation pour une SEULE transaction
 // ✅ AJOUTÉ
+// routes/transactions.js - CORRIGÉ
 const transactionSchema = Joi.object({
-  account_id: Joi.number().integer().required(),
+  accountid: Joi.number().integer().required(),        // ✅ Sans underscore (PostgreSQL)
   date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
   transaction_date: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).optional(),
   amount: Joi.number().required(),
   type: Joi.string().valid('income', 'expense', 'transfer').required(),
   description: Joi.string().allow('', null).optional(),
   category: Joi.string().allow('', null).optional(),
-  is_planned: Joi.boolean().default(false),
-  is_posted: Joi.boolean().default(true),
-  project_id: Joi.number().integer().allow(null).optional(),
-  project_line_id: Joi.string().allow(null).optional(), // ← CHANGER : number → string
+  isplanned: Joi.boolean().default(false),             // ✅ Sans underscore
+  isposted: Joi.boolean().default(true),               // ✅ Sans underscore
+  projectid: Joi.number().integer().allow(null).optional(),  // ✅ Sans underscore
+  projectlineid: Joi.string().allow(null).optional(),  // ✅ Sans underscore
   remarks: Joi.string().allow('', null).optional()
 })
 .or('date', 'transaction_date');
