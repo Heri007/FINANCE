@@ -735,7 +735,7 @@ for (const item of expensesList) {
         updateValues.push(parseFloat(item.actualAmount) || 0);
         
         updateFields.push(`transaction_date = $${paramIndex++}`);
-        updateValues.push(item.transactionDate || item.plannedDate || null);
+        updateValues.push(item.transaction_date || item.plannedDate || null);
         
         // ✅ NE METTRE À JOUR is_paid QUE si la ligne n'est PAS déjà payée
         if (!isAlreadyPaid && item.isPaid !== undefined && item.isPaid !== null) {
@@ -775,7 +775,7 @@ for (const item of expensesList) {
       item.description,
       item.category || 'Autre',
       parseFloat(item.amount || 0),
-      item.transactionDate || item.plannedDate || null
+      item.transaction_date || item.plannedDate || null
     ]);
     
     // ✅ CORRECTION 2: Vérifier que insertResult.rows[0] existe
@@ -835,7 +835,7 @@ for (const item of revenuesList) {
         item.description || '',
         item.category || 'Autre',
         parseFloat(item.amount || 0),
-        item.transactionDate || item.plannedDate || null,
+        item.transaction_date || item.plannedDate || null,
         parseInt(item.dbLineId, 10)
       ]
     );
@@ -855,7 +855,7 @@ for (const item of revenuesList) {
         item.description || '',
         item.category || 'Autre',
         parseFloat(item.amount || 0),
-        item.transactionDate || item.plannedDate || null
+        item.transaction_date || item.plannedDate || null
       ]
     );
     
@@ -1342,6 +1342,35 @@ exports.markExpenseLinePaid = async (req, res, next) => {
         });
       }
 
+      // ✅ VÉRIFIER SI UNE TRANSACTION EXISTE DÉJÀ
+  const existingTx = await client.query(
+    `SELECT id FROM transactions 
+     WHERE account_id = $1 
+     AND transaction_date = $2 
+     AND amount = $3 
+     AND description = $4 
+     AND type = 'expense'`,
+    [parseInt(account_id), paid_date || new Date().toISOString().split('T')[0],
+     parseFloat(amount), line.description]
+  );
+
+  if (existingTx.rows.length > 0) {
+    // Transaction existe déjà, juste mettre à jour la ligne
+    await client.query(
+      `UPDATE projectexpenselines 
+       SET ispaid = true, actualamount = $1, transaction_date = $2, 
+           transactionid = $3
+       WHERE id = $4`,
+      [parseFloat(amount), paid_date || new Date().toISOString().split('T')[0], 
+       existingTx.rows[0].id, lineId]
+    );
+
+    await client.query('COMMIT');
+    return res.json({ 
+      success: true, 
+      message: '✅ Ligne mise à jour avec transaction existante' 
+    });
+  }
       // Créer la transaction
       const txResult = await client.query(
         `INSERT INTO transactions 

@@ -125,48 +125,27 @@ export function ProductFlipModal({
             );
 
             // Fusionner les transactions réelles avec les lignes budgétaires
-            const mergeTransactions = (lines, type) => {
-              const newLines = [...lines];
+            // ✅ NOUVEAU CODE
+const mergeTransactions = (lines, type) => {
+  return lines.map((line) => {
+    const tx = projectTx.find(
+      (t) => t.type === type && String(t.projectlineid) === String(line.dbLineId)
+    );
 
-              projectTx
-                .filter((t) => t.type === type)
-                .forEach((tx) => {
-                  const accName =
-                    accounts.find((a) => a.id === tx.account_id)?.name || 'Inconnu';
-                  const realDate = tx.transaction_date || tx.date; // ✅ date réelle
+    if (tx) {
+      const accName = accounts.find((a) => a.id === tx.account_id)?.name || 'Inconnu';
+      return {
+        ...line,
+        isPaid: true,
+        account: accName,
+        realDate: tx.transactiondate ? new Date(tx.transactiondate) : null,
+      };
+    }
 
-                  const existingIdx = newLines.findIndex(
-                    (l) =>
-                      String(l.id) === String(tx.project_line_id) ||
-                      (l.amount === parseFloat(tx.amount) &&
-                        l.description === tx.description &&
-                        !l.isPaid)
-                  );
+    return line;  // ✅ Retourner tel quel si pas de transaction
+  });
+};
 
-                  if (existingIdx >= 0) {
-                    newLines[existingIdx] = {
-                      ...newLines[existingIdx],
-                      isPaid: true,
-                      account: accName,
-                      realDate: realDate ? new Date(realDate) : null, // ✅ nouvelle propriété
-                    };
-                  } else {
-                    newLines.push({
-                      id: tx.project_line_id || uuidv4(),
-                      description: tx.description,
-                      amount: parseFloat(tx.amount),
-                      category: tx.category,
-                      date: new Date(), // planifiée par défaut
-                      realDate: realDate ? new Date(realDate) : null, // ✅ réelle
-                      account: accName,
-                      isPaid: true,
-                      isRecurring: false,
-                    });
-                  }
-                });
-
-              return newLines;
-            };
 
             currentExpenses = mergeTransactions(currentExpenses, 'expense');
             currentRevenues = mergeTransactions(currentRevenues, 'income');
@@ -373,73 +352,155 @@ export function ProductFlipModal({
     }
   };
 
-// ✅ PAYER DÉPENSE - CORRIGÉ
+// ===== PAYER DÉPENSE =====
 const handlePayerDepense = async (expense) => {
-  // ✅ PROTECTION: Vérifier si déjà payé AVANT d'envoyer
   if (expense.isPaid === true) {
     alert('⚠️ Cette dépense est déjà payée');
     return;
   }
 
-  // ✅ PROTECTION: Désactiver le bouton pendant le traitement
-  if (isProcessingPayment) {
-    console.warn('⏳ Paiement en cours, veuillez patienter...');
-    return;
-  }
-
-  setIsProcessingPayment(true); // État à ajouter
+  if (isProcessingPayment) return;
+  setIsProcessingPayment(true);
 
   try {
-    const dbLineId = await getOrCreateDbLineId(expense);
-    if (!dbLineId) {
-      alert('❌ Impossible de trouver/créer la ligne de dépense');
+    if (!expense.account) {
+      alert('❌ Veuillez choisir un compte');
       setIsProcessingPayment(false);
       return;
     }
 
-    const payload = {
-      paidexternally: true,
-      amount: expense.amount,
-      paiddate: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
-      accountid: expense.account === 'Coffre' ? 5 : 
-                 expense.account === 'Mvola Pro' ? 6 : 
-                 expense.account === 'BOA' ? 7 : 5
-    };
+    const accountObj = accounts.find((a) => a.name === expense.account);
+    if (!accountObj) {
+      alert('❌ Compte introuvable');
+      setIsProcessingPayment(false);
+      return;
+    }
 
-    console.log('📤 Envoi paiement:', { dbLineId, payload });
+    let dbLineId = expense.dbLineId;
+    
+    if (!dbLineId) {
+      const freshProject = await projectsService.getById(project.id);
+      let expenseLines = freshProject?.expenseLines || freshProject?.expenselines || [];
 
-    const response = await api.patch(
-      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-      payload
+      if (typeof expenseLines === 'string') {
+        try {
+          expenseLines = JSON.parse(expenseLines);
+        } catch (e) {
+          expenseLines = [];
+        }
+      }
+
+      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
+        alert('Impossible de trouver les lignes de dépenses.');
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      const expenseAmount = parseFloat(expense.amount || 0);
+
+      const expenseLine = expenseLines.find((line) => {
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (expense.description || '').trim().toLowerCase();
+        if (lineDesc !== expDesc) return false;
+
+        const lineAmount = parseFloat(
+          line.projectedamount || line.projected_amount || line.amount || 0
+        );
+
+        return Math.abs(lineAmount - expenseAmount) < 0.01;
+      });
+
+      if (!expenseLine) {
+        const createConfirm = confirm(
+          `La ligne "${expense.description}" n'existe pas.\n\nCréer maintenant ?`
+        );
+
+        if (!createConfirm) {
+          setIsProcessingPayment(false);
+          return;
+        }
+
+        try {
+          const newLine = await apiRequest(`/projects/${project.id}/expense-lines`, {
+            method: 'POST',
+            body: JSON.stringify({
+              description: expense.description,
+              category: expense.category || 'Projet - Charge',
+              projected_amount: parseFloat(expense.amount),
+              actual_amount: 0,
+              transaction_date: expense.date || new Date().toISOString(),
+              is_paid: false,
+            })
+          });
+
+          dbLineId = newLine.id;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (createError) {
+          alert(`Impossible de créer la ligne:\n${createError.message}`);
+          setIsProcessingPayment(false);
+          return;
+        }
+      } else {
+        dbLineId = expenseLine.id;
+      }
+    }
+
+    const alreadyPaid = window.confirm(
+      `💰 Payer ${formatCurrency(expense.amount)} depuis ${expense.account}.\n\n` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n\n` +
+      `- OUI (OK) → Marquer comme payée, SANS créer de transaction.\n` +
+      `- NON (Annuler) → Créer une transaction et débiter le compte.`
     );
 
-    console.log('✅ Réponse:', response);
+    const payload = alreadyPaid
+      ? {
+          paid_externally: true,
+          amount: expense.amount,
+          paid_date: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: expense.amount,
+          paid_date: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+          account_id: accountObj.id,
+        };
 
-    // ✅ IMPORTANT: Recharger le projet pour synchroniser
-    await loadProject();
+    await apiRequest(`/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+
+    // RECHARGER
+    const freshProject = await projectsService.getById(project.id);
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
     
-    alert('✅ Dépense payée avec succès');
+    const freshExpenses = parseList(freshProject.expenses).map(e => ({
+      ...e,
+      id: e.id || uuidv4(),
+      date: e.date ? new Date(e.date) : new Date(),
+      amount: parseFloat(e.amount) || 0,
+    }));
+    
+    setExpenses(freshExpenses);
+
+    if (onProjectUpdated) await onProjectUpdated();
+    
+    alert('✅ Dépense marquée comme payée !');
 
   } catch (err) {
-    console.error('❌ Erreur paiement:', err);
-    
-    // ✅ GESTION D'ERREUR AMÉLIORÉE
-    if (err.message === 'Déjà payée') {
-      alert('⚠️ Cette dépense est déjà payée. Rechargement...');
-      await loadProject(); // Resynchroniser
-    } else if (err.message === 'Paramètres invalides') {
-      alert(`❌ Erreur: ${err.raw?.details || 'Paramètres invalides'}\n\nVérifiez la console pour plus de détails.`);
-      console.error('Détails:', err.raw);
-    } else {
-      alert('❌ Erreur: ' + err.message);
-    }
+    console.error('❌ Erreur:', err);
+    alert('❌ Erreur: ' + (err.message || 'Erreur inconnue'));
   } finally {
     setIsProcessingPayment(false);
   }
 };
 
 
-// ✅ ENCAISSER REVENU - CORRIGÉ
+// ✅ ENCAISSER REVENU - VERSION COMPLÈTE
 const handleEncaisser = async (rev, index) => {
   try {
     if (!rev.account) return alert('❌ Choisis un compte');
@@ -449,7 +510,6 @@ const handleEncaisser = async (rev, index) => {
     
     if (!project?.id) return alert('❌ Erreur : Projet introuvable.');
 
-    // ✅ VÉRIFIER QUE dbLineId existe
     if (!rev.dbLineId) {
       alert('❌ Cette ligne n\'a pas encore été enregistrée. Sauvegardez d\'abord le projet.');
       return;
@@ -458,8 +518,8 @@ const handleEncaisser = async (rev, index) => {
     const alreadyReceived = window.confirm(
       `💰 Encaisser ${formatCurrency(rev.amount)} sur ${rev.account}.\n\n` +
       `Ce revenu a-t-il DÉJÀ été encaissé physiquement ?\n\n` +
-      `- OUI (OK) → Je marque juste la ligne comme reçue, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et crédite le compte.`
+      `- OUI (OK) → Marquer comme reçu, SANS créer de transaction.\n` +
+      `- NON (Annuler) → Créer une transaction et créditer le compte.`
     );
 
     const payload = alreadyReceived
@@ -479,174 +539,117 @@ const handleEncaisser = async (rev, index) => {
           account_id: accountObj.id,
         };
 
-    // ✅ UTILISER dbLineId au lieu de id
-    const result = await apiRequest(
-      `projects/${project.id}/revenue-lines/${rev.dbLineId}/mark-received`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(payload),
-      }
-    );
+    await apiRequest(`/projects/${project.id}/revenue-lines/${rev.dbLineId}/mark-received`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
 
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: true };
-    setRevenues(updated);
-    await saveProjectState(expenses, updated);
+    // ✅ RECHARGER COMPLÈTEMENT
+    const freshProject = await projectsService.getById(project.id);
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshRevenues = parseList(freshProject.revenues).map(r => ({
+      ...r,
+      id: r.id || uuidv4(),
+      date: r.date ? new Date(r.date) : new Date(),
+      amount: parseFloat(r.amount) || 0,
+    }));
+    
+    setRevenues(freshRevenues);
 
     if (onProjectUpdated) onProjectUpdated();
     
-    alert(result.message || '✅ Revenu marqué comme reçu !');
+    alert('✅ Revenu marqué comme reçu !');
   } catch (error) {
     console.error('❌ Erreur handleEncaisser:', error);
     alert(error?.message || 'Erreur encaissement');
   }
 };
 
-
-// ✅ ANNULER PAIEMENT DÉPENSE - CORRIGÉ
+// ✅ ANNULER PAIEMENT DÉPENSE
 const handleCancelPaymentExpense = async (exp, index) => {
   try {
     if (!project?.id) return alert('❌ Projet non enregistré');
-    
-    // ✅ VÉRIFIER QUE dbLineId existe
     if (!exp.dbLineId) {
       alert('❌ Cette ligne n\'a pas encore été enregistrée.');
       return;
     }
-    
     if (!window.confirm(`🔄 Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
-    // ✅ UTILISER dbLineId
-    const result = await apiRequest(
-      `projects/${project.id}/expense-lines/${exp.dbLineId}/cancel-payment`,
-      {
-        method: 'PATCH',
-      }
-    );
+    await apiRequest(`/projects/${project.id}/expense-lines/${exp.dbLineId}/cancel-payment`, {
+      method: 'PATCH',
+    });
 
-    const updated = [...expenses];
-    updated[index] = { ...updated[index], isPaid: false };
-    setExpenses(updated);
-    await saveProjectState(updated, revenues);
+    // ✅ RECHARGER COMPLÈTEMENT
+    const freshProject = await projectsService.getById(project.id);
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshExpenses = parseList(freshProject.expenses).map(e => ({
+      ...e,
+      id: e.id || uuidv4(),
+      date: e.date ? new Date(e.date) : new Date(),
+      amount: parseFloat(e.amount) || 0,
+    }));
+    
+    setExpenses(freshExpenses);
 
     if (onProjectUpdated) onProjectUpdated();
     
-    alert(result.message || '✅ Paiement annulé');
+    alert('✅ Paiement annulé');
   } catch (err) {
     console.error('❌ Erreur handleCancelPaymentExpense:', err);
     alert('Erreur annulation : ' + (err.message || err));
   }
 };
 
-// ✅ ANNULER ENCAISSEMENT REVENU - CORRIGÉ
+// ✅ ANNULER ENCAISSEMENT REVENU
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
     if (!project?.id) return alert('❌ Projet non enregistré');
-    
-    // ✅ VÉRIFIER QUE dbLineId existe
     if (!rev.dbLineId) {
       alert('❌ Cette ligne n\'a pas encore été enregistrée.');
       return;
     }
-    
     if (!window.confirm(`🔄 Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
 
-    // ✅ UTILISER dbLineId
-    const result = await apiRequest(
-      `projects/${project.id}/revenue-lines/${rev.dbLineId}/cancel-receipt`,
-      {
-        method: 'PATCH',
-      }
-    );
+    await apiRequest(`/projects/${project.id}/revenue-lines/${rev.dbLineId}/cancel-receipt`, {
+      method: 'PATCH',
+    });
 
-    const updated = [...revenues];
-    updated[index] = { ...updated[index], isPaid: false };
-    setRevenues(updated);
-    await saveProjectState(expenses, updated);
+    // ✅ RECHARGER COMPLÈTEMENT
+    const freshProject = await projectsService.getById(project.id);
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshRevenues = parseList(freshProject.revenues).map(r => ({
+      ...r,
+      id: r.id || uuidv4(),
+      date: r.date ? new Date(r.date) : new Date(),
+      amount: parseFloat(r.amount) || 0,
+    }));
+    
+    setRevenues(freshRevenues);
 
     if (onProjectUpdated) onProjectUpdated();
     
-    alert(result.message || '✅ Encaissement annulé');
+    alert('✅ Encaissement annulé');
   } catch (err) {
     console.error('❌ Erreur handleCancelPaymentRevenue:', err);
     alert('Erreur annulation : ' + (err.message || err));
   }
 };
 
-  // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
-  const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) {
-      console.warn('⚠️ saveProjectState: Projet non enregistré');
-      return;
-    }
-
-    // ✅ MAPPER plannedDate AVANT stringify
-    const expensesWithDate = currentExpenses.map((exp) => ({
-      ...exp,
-      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
-    }));
-
-    const revenuesWithDate = currentRevenues.map((rev) => ({
-      ...rev,
-      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
-    }));
-
-    console.log('💾 saveProjectState démarré:', {
-      projectId: project.id,
-      expensesCount: currentExpenses.length,
-      revenuesCount: currentRevenues.length,
-      expensesPaid: currentExpenses.filter((e) => e.isPaid).length,
-    });
-
-    const newTotalRevenues = revenuesWithDate.reduce(
-      (s, r) => s + parseFloat(r.amount || 0),
-      0
-    );
-    const newTotalExpenses = expensesWithDate.reduce(
-      (s, e) => s + parseFloat(e.amount || 0),
-      0
-    );
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi =
-      newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
-
-    const payload = {
-      name: projectName.trim(),
-      type: 'PRODUCTFLIP',
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      expenses: JSON.stringify(expensesWithDate),
-      revenues: JSON.stringify(revenuesWithDate),
-      metadata: JSON.stringify({
-        productName,
-        supplier,
-        purchasePrice,
-        quantity,
-        sellingPrice,
-        targetMargin,
-      }),
-    };
-
-    console.log('📤 Payload envoyé:', {
-      ...payload,
-      expenses: `${expensesWithDate.length} lignes`,
-      revenues: `${revenuesWithDate.length} lignes`,
-    });
-
-    try {
-      const result = await projectsService.updateProject(project.id, payload);
-      console.log('✅ Projet sauvegardé:', result);
-    } catch (error) {
-      console.error('❌ Erreur saveProjectState:', error);
-      throw error;
-    }
-  };
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -659,61 +662,86 @@ const handleCancelPaymentRevenue = async (rev, index) => {
 
   // ===== SAUVEGARDE FINALE =====
   const handleSave = async () => {
-    if (!projectName.trim()) {
-      alert('Le nom du projet est obligatoire');
-      return;
-    }
+  if (!projectName.trim()) {
+    alert('Le nom du projet est obligatoire');
+    return;
+  }
 
-    setLoading(true);
+  setLoading(true);
 
-    const expensesWithDate = expenses.map((exp) => ({
-      ...exp,
-      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
-    }));
-
-    const revenuesWithDate = revenues.map((rev) => ({
-      ...rev,
-      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
-    }));
-
-    try {
-      const payload = {
-        name: projectName.trim(),
-        description: description.trim(),
-        type: 'PRODUCTFLIP',
-        status,
-        startDate: startDate.toISOString(),
-        endDate: endDate ? endDate.toISOString() : null,
-        totalCost: parseFloat(totalExpenses) || 0,
-        totalRevenues: parseFloat(totalRevenues) || 0,
-        netProfit: parseFloat(netProfit) || 0,
-        roi: parseFloat(roi) || 0,
-        expenses: JSON.stringify(expensesWithDate),
-        revenues: JSON.stringify(revenuesWithDate),
-        metadata: JSON.stringify({
-          productName,
-          supplier,
-          purchasePrice,
-          quantity,
-          sellingPrice,
-          targetMargin,
-        }),
-      };
-
-      if (project?.id) {
-        await projectsService.updateProject(project.id, payload);
-      } else {
-        await projectsService.createProject(payload);
+  // ✅ DÉDUPLIQUER et VALIDER
+  const uniqueExpenses = [];
+  const seenDbLineIds = new Set();
+  
+  for (const exp of expenses) {
+    // Déduplication par dbLineId
+    if (exp.dbLineId) {
+      if (seenDbLineIds.has(exp.dbLineId)) {
+        console.warn(`⚠️ Doublon ignoré: ${exp.description} (dbLineId: ${exp.dbLineId})`);
+        continue;
       }
-
-      if (onProjectSaved) onProjectSaved();
-      onClose();
-    } catch (e) {
-      alert('Erreur sauvegarde: ' + e.message);
-    } finally {
-      setLoading(false);
+      seenDbLineIds.add(exp.dbLineId);
     }
-  };
+    
+    // Valider montant positif
+    const amount = parseFloat(exp.amount);
+    if (amount < 0) {
+      console.warn(`⚠️ Montant négatif corrigé pour: ${exp.description}`);
+      exp.amount = Math.abs(amount);
+    }
+    
+    uniqueExpenses.push(exp);
+  }
+
+  const expensesWithDate = uniqueExpenses.map((exp) => ({
+    ...exp,
+    plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
+  }));
+
+  const revenuesWithDate = revenues.map((rev) => ({
+    ...rev,
+    plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
+  }));
+
+  try {
+    const payload = {
+      name: projectName.trim(),
+      description: description.trim(),
+      type: 'PRODUCTFLIP',
+      status,
+      startDate: startDate.toISOString(),
+      endDate: endDate ? endDate.toISOString() : null,
+      totalCost: parseFloat(totalExpenses) || 0,
+      totalRevenues: parseFloat(totalRevenues) || 0,
+      netProfit: parseFloat(netProfit) || 0,
+      roi: parseFloat(roi) || 0,
+      expenses: JSON.stringify(expensesWithDate),
+      revenues: JSON.stringify(revenuesWithDate),
+      metadata: JSON.stringify({
+        productName,
+        supplier,
+        purchasePrice,
+        quantity,
+        sellingPrice,
+        targetMargin,
+      }),
+    };
+
+    if (project?.id) {
+      await projectsService.updateProject(project.id, payload);
+    } else {
+      await projectsService.createProject(payload);
+    }
+
+    if (onProjectSaved) onProjectSaved();
+    onClose();
+  } catch (e) {
+    console.error('❌ Erreur sauvegarde:', e);
+    alert('Erreur sauvegarde: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (!isOpen) return null;
 
@@ -979,127 +1007,135 @@ const handleCancelPaymentRevenue = async (rev, index) => {
             )}
           </div>
 
-          {/* SECTION 3: CHARGES */}
-          <div className="bg-red-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingDown className="w-5 h-5 text-red-600" />
-                Charges ({expenses.length})
-              </h3>
-              <button
-                onClick={addExpense}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Charge
-              </button>
-            </div>
+        {/* SECTION 3: CHARGES */}
+<div className="bg-red-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingDown className="w-5 h-5 text-red-600" />
+      Charges ({expenses.length})
+    </h3>
+    <button
+      onClick={addExpense}
+      className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Charge
+    </button>
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {expenses.map((exp, idx) => (
-                <div
-                  key={exp.id}
-                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
-                >
-                  <input
-                    type="text"
-                    value={exp.description}
-                    onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                  />
-                  <select
-                    value={exp.category}
-                    onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    {expenseCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
-                  <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
-                  {/* Date planifiée */}
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                    placeholderText="Date planifiée"
-                  />
-                  /* Date réelle */
-                  <DatePicker
-                    selected={exp.realDate || null}
-                    onChange={(date) => updateExpense(exp.id, 'realDate', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm bg-amber-50"
-                    placeholderText="Date réelle"
-                  />
-                  <select
-                    value={exp.account}
-                    onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.name}>
-                        {acc.name}
-                      </option>
-                    ))}
-                  </select>
-                  {!exp.isPaid ? (
-                    <button
-  disabled={isProcessingPayment}
-  onClick={async () => {
-    await handlePayerDepense(exp.id); // ✅ 'exp' et non 'expense'
-  }}
-  className={`col-span-1 ${
-    isProcessingPayment 
-      ? 'bg-gray-400 cursor-wait' 
-      : 'bg-blue-600 hover:bg-blue-700'
-  } text-white p-2 rounded text-xs disabled:opacity-50`}
-  title="Marquer comme payé"
->
-  {isProcessingPayment ? '⏳...' : '💳 Payer'}
-</button>
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {expenses.map((exp, idx) => {
+      // ✅ CALCULER isPaid DEPUIS LA DB (source de vérité)
+      const expenseLine = project?.expenseLines?.find(
+        line => String(line.id) === String(exp.dbLineId)
+      );
+      const isPaid = expenseLine?.is_paid || expenseLine?.ispaid || false;
 
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentExpense(exp, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler paiement"
-                    >
-                      ↩️
-                    </button>
-                  )}
-                  <button
-                    onClick={() => removeExpense(exp.id)}
-                    className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+      return (
+        <div
+          key={exp.id}
+          className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+        >
+          <input
+            type="text"
+            value={exp.description}
+            onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
+            className="col-span-3 p-2 border rounded text-sm"
+            placeholder="Description"
+          />
+          <select
+            value={exp.category}
+            onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            {expenseCategories.map((cat) => (
+              <option key={cat.value} value={cat.value}>
+                {cat.label}
+              </option>
+            ))}
+          </select>
+          <CalculatorInput
+            value={exp.amount}
+            onChange={(val) => updateExpense(exp.id, 'amount', val)}
+            className="col-span-2 p-2 border rounded text-sm font-semibold"
+          />
+          <DatePicker
+            selected={exp.date}
+            onChange={(date) => updateExpense(exp.id, 'date', date)}
+            dateFormat="dd/MM/yy"
+            className="col-span-2 p-2 border rounded text-sm"
+            placeholderText="Date planifiée"
+          />
+          <DatePicker
+            selected={exp.realDate || null}
+            onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+            dateFormat="dd/MM/yy"
+            className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+            placeholderText="Date réelle"
+          />
+          <select
+            value={exp.account}
+            onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            <option value="">Compte</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.name}>
+                {acc.name}
+              </option>
+            ))}
+          </select>
+          
+          {!isPaid ? (
+            <button
+              disabled={isProcessingPayment}
+              onClick={async () => {
+                await handlePayerDepense(exp);
+              }}
+              className={`col-span-1 ${
+                isProcessingPayment 
+                  ? 'bg-gray-400 cursor-wait' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white p-2 rounded text-xs disabled:opacity-50`}
+              title="Marquer comme payé"
+            >
+              {isProcessingPayment ? '⏳...' : '💳 Payer'}
+            </button>
+          ) : (
+            <button
+              onClick={() => handleCancelPaymentExpense(exp, idx)}
+              className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+              title="Annuler paiement"
+            >
+              ↩️
+            </button>
+          )}
+          
+          <button
+            onClick={() => removeExpense(exp.id)}
+            className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      );
+    })}
 
-              {expenses.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucune charge. Utilisez "Générer Lignes" ou ajoutez manuellement.
-                </p>
-              )}
-            </div>
+    {expenses.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucune charge. Utilisez "Générer Lignes" ou ajoutez manuellement.
+      </p>
+    )}
+  </div>
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Charges: </span>
-              <span className="font-bold text-red-600 text-xl">
-                {formatCurrency(totalExpenses)}
-              </span>
-            </div>
-          </div>
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Charges: </span>
+    <span className="font-bold text-red-600 text-xl">
+      {formatCurrency(totalExpenses)}
+    </span>
+  </div>
+</div>
+
 
           {/* SECTION 4: REVENUS */}
           <div className="bg-green-50 p-4 rounded-lg">

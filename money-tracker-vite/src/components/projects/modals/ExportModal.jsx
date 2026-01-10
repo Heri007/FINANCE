@@ -1442,7 +1442,6 @@ const handleCancelPaymentRevenue = async (rev, index) => {
   </button>
 )}
 
-
           {/* Bouton Supprimer */}
           <button
             onClick={() => removeExpense(exp.id)}
