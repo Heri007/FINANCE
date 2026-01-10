@@ -680,196 +680,204 @@ exports.updateProject = async (req, res) => {
     const revenuesList = Array.isArray(revenues) ? revenues : JSON.parse(revenues || '[]');
     
     // ============================================================================
-    // A. EXPENSES - Créer/Mettre à jour/Supprimer (CORRECTION FINALE)
-    // ============================================================================
-    const validExpenseIds = expensesList
-      .map(e => e.dbLineId)
-      .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
-      .map(dbId => parseInt(dbId, 10)); // Convertir en nombres
-    
-    console.log(`🔍 Projet ${id}: ${validExpenseIds.length} expenses avec dbLineId valides sur ${expensesList.length}`);
-    
-    // ⚠️ NE SUPPRIMER QUE si on a des IDs valides
-    // Sinon, on garde les lignes existantes et on ne fait que des INSERTs
-    if (validExpenseIds.length > 0) {
-      // Supprimer uniquement les lignes qui ne sont plus dans la liste
-      await client.query(
-        `DELETE FROM project_expense_lines 
-         WHERE project_id = $1 AND id != ALL($2::int[])`,
-        [id, validExpenseIds]
-      );
-      console.log(`🗑️ Lignes obsolètes supprimées (hors ${validExpenseIds.length} IDs)`);
-    }
-    // ✅ PLUS de "else" qui supprime tout!
-    
-    // Créer ou mettre à jour chaque ligne
-    const updatedExpenses = [];
-    for (const item of expensesList) {
-      const hasValidDbLineId = item.dbLineId && 
-        (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
-      
-      // Dans la section UPDATE de updateProject
-if (hasValidDbLineId) {
-  // ✅ D'ABORD: Vérifier l'état actuel dans la DB
-  const currentLine = await client.query(
-    'SELECT is_paid FROM project_expense_lines WHERE id = $1',
-    [parseInt(item.dbLineId, 10)]
-  );
-  
-  const isAlreadyPaid = currentLine.rows[0]?.is_paid;
-  
-  const updateFields = [];
-  const updateValues = [];
-  let paramIndex = 1;
-  
-  updateFields.push(`description = $${paramIndex++}`);
-  updateValues.push(item.description);
-  
-  updateFields.push(`category = $${paramIndex++}`);
-  updateValues.push(item.category || 'Autre');
-  
-  updateFields.push(`projected_amount = $${paramIndex++}`);
-  updateValues.push(parseFloat(item.amount) || 0);
-  
-  updateFields.push(`actual_amount = $${paramIndex++}`);
-  updateValues.push(parseFloat(item.actualAmount) || 0);
-  
-  updateFields.push(`transaction_date = $${paramIndex++}`);
-  updateValues.push(item.transactionDate || item.plannedDate || null);
-  
-  // ✅ NE METTRE À JOUR is_paid QUE si la ligne n'est PAS déjà payée
-  if (!isAlreadyPaid && item.isPaid !== undefined && item.isPaid !== null) {
-    updateFields.push(`is_paid = $${paramIndex++}`);
-    updateValues.push(!!item.isPaid);
-  }
-  
-  updateValues.push(parseInt(item.dbLineId, 10));
-  
+// A. EXPENSES - Créer/Mettre à jour/Supprimer (CORRECTION FINALE)
+// ============================================================================
+const validExpenseIds = expensesList
+  .map(e => e.dbLineId)
+  .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
+  .map(dbId => parseInt(dbId, 10));
+
+console.log(`🔍 Projet ${id}: ${validExpenseIds.length} expenses avec dbLineId valides sur ${expensesList.length}`);
+
+if (validExpenseIds.length > 0) {
   await client.query(
-    `UPDATE project_expense_lines SET ${updateFields.join(', ')} WHERE id = $${paramIndex}`,
-    updateValues
+    `DELETE FROM project_expense_lines 
+     WHERE project_id = $1 AND id != ALL($2::int[])`,
+    [id, validExpenseIds]
   );
-  
-  updatedExpenses.push(item);
-      } else {
-  // Nouvelle ligne sans dbLineId (INSERT)
-  const insertResult = await client.query(`
-    INSERT INTO project_expense_lines (
-      project_id, description, category, projected_amount, 
-      actual_amount, is_paid, transaction_date
-    )
-    VALUES ($1, $2, $3, $4, 0, false, $5)
-    RETURNING *
-  `, [
-    id,  // Assurez-vous que "id" est bien le project_id
-    item.description,
-    item.category || 'Autre',
-    parseFloat(item.amount || 0),
-    item.transaction_date || item.plannedDate || null
-  ]);
-
-  // ✅ CORRECTION: Vérifier que insertResult.rows[0] existe
-  if (!insertResult.rows || insertResult.rows.length === 0) {
-    console.error('❌ INSERT expense line failed - No rows returned');
-    throw new Error(`Impossible de créer la ligne: ${item.description}`);
-  }
-
-  const newLine = insertResult.rows[0];
-  const newDbLineId = newLine.id;
-  
-  console.log('✅ Ligne expense créée:', newDbLineId, '-', item.description);
-  
-  // ✅ CORRECTION: Vérifier que newDbLineId existe avant toString()
-  if (!newDbLineId) {
-    console.error('❌ newDbLineId undefined pour:', item.description);
-    throw new Error(`ID de ligne manquant pour: ${item.description}`);
-  }
-  
-  updatedExpenses.push({ 
-    ...item, 
-    dbLineId: newDbLineId.toString() 
-  });
+  console.log(`🗑️ Lignes obsolètes supprimées (hors ${validExpenseIds.length} IDs)`);
 }
 
-    }
-    
-    // ============================================================================
-    // B. REVENUES - Créer/Mettre à jour SANS supprimer automatiquement
-    // ============================================================================
-    const validRevenueIds = revenuesList
-      .map(r => r.dbLineId)
-      .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
-      .map(dbId => parseInt(dbId, 10)); // ✅ FIX 1: Convertir en entiers
-    
-    console.log(`[Projet ${id}] ${validRevenueIds.length} revenues avec dbLineId valides sur ${revenuesList.length}`);
-    
-    // ✅ CORRECTION: Ne supprimer QUE si on a des IDs valides à conserver
-    if (validRevenueIds.length > 0) {
-      await client.query(
-        `DELETE FROM project_revenue_lines 
-         WHERE project_id = $1 AND id != ALL($2::int[])`,
-        [id, validRevenueIds]
+const updatedExpenses = [];
+for (const item of expensesList) {
+  const hasValidDbLineId = item.dbLineId && 
+    (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
+  
+  if (hasValidDbLineId) {
+    try {
+      // ✅ CORRECTION 1: Vérifier l'état actuel dans la DB
+      const currentLine = await client.query(
+        `SELECT is_paid, actual_amount FROM project_expense_lines WHERE id = $1`,
+        [parseInt(item.dbLineId, 10)]
       );
-      console.log(`✅ Lignes obsolètes supprimées (hors ${validRevenueIds.length} IDs)`);
-    }
-    // ✅ PLUS DE "else" qui supprimait tout
-    
-    const updatedRevenues = [];
-    for (const item of revenuesList) {
-      const hasValidDbLineId = item.dbLineId && 
-        (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
-    
-      if (hasValidDbLineId) {
-        // ✅ FIX 2: SUPPRIMER la requête SELECT inutile
-        // ✅ FIX 3: UPDATE qui préserve is_received ET actual_amount
-        
-        // Ne mettre à jour QUE les champs modifiables par l'utilisateur
-        await client.query(
-          `UPDATE project_revenue_lines 
-           SET description = $1, 
-               category = $2, 
-               projected_amount = $3, 
-               transaction_date = $4
-           WHERE id = $5`,
-          [
-            item.description || '',
-            item.category || 'Autre',
-            parseFloat(item.amount || 0),
-            item.transaction_date || item.plannedDate || null,
-            parseInt(item.dbLineId, 10)
-          ]
-        );
-        
-        console.log(`🔄 Ligne revenue ${item.dbLineId} mise à jour: "${item.description}"`);
-        
-        // ✅ is_received et actual_amount sont PRÉSERVÉS automatiquement
-        updatedRevenues.push(item);
-        
+      
+      // ✅ Vérifier que la ligne existe
+      if (currentLine.rows.length === 0) {
+        console.warn(`⚠️ Ligne ${item.dbLineId} introuvable, passage en INSERT`);
+        // Continuer avec INSERT ci-dessous
       } else {
-        // ✅ INSERT nouvelle ligne
-        const insertResult = await client.query(
-          `INSERT INTO project_revenue_lines 
-           (project_id, description, category, projected_amount, actual_amount, is_received, transaction_date)
-           VALUES ($1, $2, $3, $4, 0, false, $5)
-           RETURNING id`,
-          [
-            id,
-            item.description || '',
-            item.category || 'Autre',
-            parseFloat(item.amount || 0),
-            item.transaction_date || item.plannedDate || null
-          ]
+        const isAlreadyPaid = currentLine.rows[0]?.is_paid;
+        
+        const updateFields = [];
+        const updateValues = [];
+        let paramIndex = 1;
+        
+        updateFields.push(`description = $${paramIndex++}`);
+        updateValues.push(item.description);
+        
+        updateFields.push(`category = $${paramIndex++}`);
+        updateValues.push(item.category || 'Autre');
+        
+        updateFields.push(`projected_amount = $${paramIndex++}`);
+        updateValues.push(parseFloat(item.amount) || 0);
+        
+        updateFields.push(`actual_amount = $${paramIndex++}`);
+        updateValues.push(parseFloat(item.actualAmount) || 0);
+        
+        updateFields.push(`transaction_date = $${paramIndex++}`);
+        updateValues.push(item.transactionDate || item.plannedDate || null);
+        
+        // ✅ NE METTRE À JOUR is_paid QUE si la ligne n'est PAS déjà payée
+        if (!isAlreadyPaid && item.isPaid !== undefined && item.isPaid !== null) {
+          updateFields.push(`is_paid = $${paramIndex++}`);
+          updateValues.push(!!item.isPaid);
+        }
+        
+        updateValues.push(parseInt(item.dbLineId, 10));
+        
+        await client.query(
+          `UPDATE project_expense_lines 
+           SET ${updateFields.join(', ')} 
+           WHERE id = $${paramIndex}`,
+          updateValues
         );
         
-        const newDbLineId = insertResult.rows.id;
-        console.log(`✅ Ligne revenue créée: ${newDbLineId} - ${item.description}`);
-        
-        updatedRevenues.push({
-          ...item,
-          dbLineId: newDbLineId.toString()
-        });
+        updatedExpenses.push(item);
+        continue; // ✅ Passer à l'itération suivante
       }
+    } catch (err) {
+      console.error(`❌ Erreur UPDATE ligne ${item.dbLineId}:`, err);
+      // Continuer avec INSERT
     }
+  }
+  
+  // ✅ INSERT nouvelle ligne (si pas de dbLineId OU si UPDATE a échoué)
+  try {
+    const insertResult = await client.query(`
+      INSERT INTO project_expense_lines (
+        project_id, description, category, projected_amount, 
+        actual_amount, is_paid, transaction_date
+      )
+      VALUES ($1, $2, $3, $4, 0, false, $5)
+      RETURNING *
+    `, [
+      id,
+      item.description,
+      item.category || 'Autre',
+      parseFloat(item.amount || 0),
+      item.transactionDate || item.plannedDate || null
+    ]);
+    
+    // ✅ CORRECTION 2: Vérifier que insertResult.rows[0] existe
+    if (!insertResult.rows || insertResult.rows.length === 0) {
+      throw new Error(`Impossible de créer la ligne: ${item.description}`);
+    }
+    
+    const newLine = insertResult.rows[0];
+    const newDbLineId = newLine.id;
+    
+    console.log(`✅ Ligne expense créée: ${newDbLineId} - ${item.description}`);
+    
+    updatedExpenses.push({ 
+      ...item, 
+      dbLineId: newDbLineId.toString() 
+    });
+  } catch (insertErr) {
+    console.error(`❌ Erreur INSERT ligne:`, insertErr);
+    throw insertErr; // Arrêter la transaction
+  }
+}
+
+// ============================================================================
+// B. REVENUES - Créer/Mettre à jour
+// ============================================================================
+const validRevenueIds = revenuesList
+  .map(r => r.dbLineId)
+  .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
+  .map(dbId => parseInt(dbId, 10));
+
+console.log(`🔍 Projet ${id}: ${validRevenueIds.length} revenues avec dbLineId valides sur ${revenuesList.length}`);
+
+if (validRevenueIds.length > 0) {
+  await client.query(
+    `DELETE FROM project_revenue_lines 
+     WHERE project_id = $1 AND id != ALL($2::int[])`,
+    [id, validRevenueIds]
+  );
+  console.log(`🗑️ Lignes obsolètes supprimées (hors ${validRevenueIds.length} IDs)`);
+}
+
+const updatedRevenues = [];
+for (const item of revenuesList) {
+  const hasValidDbLineId = item.dbLineId && 
+    (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
+
+  if (hasValidDbLineId) {
+    // ✅ UPDATE sans modifier is_received ni actual_amount
+    await client.query(
+      `UPDATE project_revenue_lines 
+       SET description = $1, 
+           category = $2, 
+           projected_amount = $3, 
+           transaction_date = $4
+       WHERE id = $5`,
+      [
+        item.description || '',
+        item.category || 'Autre',
+        parseFloat(item.amount || 0),
+        item.transactionDate || item.plannedDate || null,
+        parseInt(item.dbLineId, 10)
+      ]
+    );
+    
+    console.log(`🔄 Ligne revenue ${item.dbLineId} mise à jour: "${item.description}"`);
+    updatedRevenues.push(item);
+    
+  } else {
+    // ✅ INSERT nouvelle ligne
+    const insertResult = await client.query(
+      `INSERT INTO project_revenue_lines 
+       (project_id, description, category, projected_amount, actual_amount, is_received, transaction_date)
+       VALUES ($1, $2, $3, $4, 0, false, $5)
+       RETURNING id`,
+      [
+        id,
+        item.description || '',
+        item.category || 'Autre',
+        parseFloat(item.amount || 0),
+        item.transactionDate || item.plannedDate || null
+      ]
+    );
+    
+    // ✅ CORRECTION 3: Accès correct avec [0]
+    if (!insertResult.rows || insertResult.rows.length === 0) {
+      throw new Error(`Impossible de créer la ligne revenue: ${item.description}`);
+    }
+    
+    const newDbLineId = insertResult.rows[0].id; // ✅ [0] ajouté
+    
+    if (!newDbLineId) {
+      throw new Error(`ID de ligne revenue manquant pour: ${item.description}`);
+    }
+    
+    console.log(`✅ Ligne revenue créée: ${newDbLineId} - ${item.description}`);
+    
+    updatedRevenues.push({
+      ...item,
+      dbLineId: newDbLineId.toString()
+    });
+  }
+}
     
     // ✅ MISE À JOUR FINALE DU JSON AVEC LES NOUVEAUX dbLineId
     await client.query(
@@ -1232,23 +1240,51 @@ exports.createRevenueLine = async (req, res) => {
 /// Marquer une ligne de dépense comme payée
 exports.markExpenseLinePaid = async (req, res, next) => {
   const client = await pool.connect();
-  
   try {
     await client.query('BEGIN');
     
     const projectId = parseInt(req.params.id, 10);
     const lineId = parseInt(req.params.lineId, 10);
-    
     const { paid_externally, create_transaction, amount, paid_date, account_id } = req.body;
 
-    if (!projectId || isNaN(projectId) || !lineId || isNaN(lineId)) {
+    console.log('📥 markExpenseLinePaid - Payload:', {
+      projectId,
+      lineId,
+      paid_externally,
+      create_transaction,
+      amount,
+      paid_date,
+      account_id
+    });
+
+    // ✅ Validations
+    if (!projectId || isNaN(projectId)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Paramètres invalides' });
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'projectId invalide ou manquant'
+      });
     }
 
-    // ✅ UTILISER project_expense_lines (avec underscores)
+    if (!lineId || isNaN(lineId)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'lineId invalide ou manquant'
+      });
+    }
+
+    if (!amount || isNaN(parseFloat(amount))) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'amount invalide ou manquant'
+      });
+    }
+
+    // Vérifier la ligne
     const lineRes = await client.query(
-      'SELECT * FROM project_expense_lines WHERE id = $1 AND project_id = $2',
+      `SELECT * FROM project_expense_lines WHERE id = $1 AND project_id = $2`,
       [lineId, projectId]
     );
 
@@ -1259,51 +1295,106 @@ exports.markExpenseLinePaid = async (req, res, next) => {
 
     const line = lineRes.rows[0];
 
-    if (line.is_paid) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Déjà payée' });
+    // ✅ IDEMPOTENCE: Si déjà payée, mettre à jour quand même
+    if (line.is_paid) { // ✅ CORRECTION: is_paid
+      console.warn(`⚠️ Ligne ${lineId} déjà payée - mise à jour forcée`);
+      
+      if (paid_externally === true) {
+        await client.query(
+          `UPDATE project_expense_lines 
+           SET actual_amount = $1, 
+               transaction_date = $2,
+               last_synced_at = NOW()
+           WHERE id = $3`,
+          [parseFloat(amount), paid_date || new Date().toISOString().split('T')[0], lineId]
+        );
+        await client.query('COMMIT');
+        return res.json({ 
+          success: true, 
+          message: 'Dépense mise à jour',
+          alreadyPaid: true 
+        });
+      }
     }
 
+    // CAS 1: Paiement externe
     if (paid_externally === true) {
       await client.query(
-        'UPDATE project_expense_lines SET is_paid = true, actual_amount = $1, transaction_date = $2 WHERE id = $3',
+        `UPDATE project_expense_lines 
+         SET is_paid = true, 
+             actual_amount = $1, 
+             transaction_date = $2,
+             last_synced_at = NOW()
+         WHERE id = $3`,
         [parseFloat(amount), paid_date || new Date().toISOString().split('T')[0], lineId]
       );
       await client.query('COMMIT');
-      return res.json({ success: true, message: '✅ Dépense payée' });
+      return res.json({ success: true, message: 'Dépense payée' });
     }
 
+    // CAS 2: Créer une transaction
     if (create_transaction === true) {
       if (!account_id) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'account_id requis' });
+        return res.status(400).json({ 
+          error: 'Paramètres invalides',
+          details: 'account_id requis pour create_transaction' 
+        });
       }
 
+      // Créer la transaction
       const txResult = await client.query(
-        `INSERT INTO transactions (account_id, type, amount, category, description, transaction_date, is_planned, is_posted, project_id, project_line_id)
-         VALUES ($1, 'expense', $2, $3, $4, $5, false, true, $6, $7) RETURNING *`,
-        [parseInt(account_id), parseFloat(amount), line.category || 'Projet', line.description,
-         paid_date || new Date().toISOString().split('T')[0], projectId, lineId.toString()]
+        `INSERT INTO transactions 
+         (account_id, type, amount, category, description, transaction_date, is_planned, is_posted, project_id, project_line_id)
+         VALUES ($1, 'expense', $2, $3, $4, $5, false, true, $6, $7)
+         RETURNING *`,
+        [
+          parseInt(account_id),
+          -Math.abs(parseFloat(amount)), // ✅ Négatif pour expense
+          line.category || 'Projet',
+          line.description,
+          paid_date || new Date().toISOString().split('T')[0],
+          projectId,
+          lineId.toString()
+        ]
       );
 
-      await client.query('UPDATE accounts SET balance = balance - $1 WHERE id = $2',
-        [parseFloat(amount), parseInt(account_id)]);
-
+      // Débiter le compte
       await client.query(
-        'UPDATE project_expense_lines SET is_paid = true, actual_amount = $1, transaction_date = $2, transaction_id = $3 WHERE id = $4',
+        `UPDATE accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2`,
+        [Math.abs(parseFloat(amount)), parseInt(account_id)]
+      );
+
+      // Mettre à jour la ligne
+      await client.query(
+        `UPDATE project_expense_lines 
+         SET is_paid = true, 
+             actual_amount = $1, 
+             transaction_date = $2, 
+             transaction_id = $3,
+             last_synced_at = NOW()
+         WHERE id = $4`,
         [parseFloat(amount), paid_date || new Date().toISOString().split('T')[0], txResult.rows[0].id, lineId]
       );
 
       await client.query('COMMIT');
-      return res.json({ success: true, message: '✅ Transaction créée' });
+      return res.json({ 
+        success: true, 
+        message: 'Transaction créée',
+        transactionId: txResult.rows[0].id 
+      });
     }
 
+    // Aucune action valide
     await client.query('ROLLBACK');
-    return res.status(400).json({ error: 'Paramètres invalides' });
+    return res.status(400).json({ 
+      error: 'Paramètres invalides',
+      details: 'Spécifiez paid_externally=true OU create_transaction=true'
+    });
 
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('❌ Erreur:', error);
+    console.error('❌ Erreur markExpenseLinePaid:', error);
     next(error);
   } finally {
     client.release();
@@ -1313,40 +1404,52 @@ exports.markExpenseLinePaid = async (req, res, next) => {
 // Marquer une ligne de revenu comme reçue
 exports.markRevenueLineReceived = async (req, res, next) => {
   const client = await pool.connect();
-  
   try {
     await client.query('BEGIN');
     
-    // ✅ CORRECTION: Extraction correcte
-    const project_id = parseInt(req.params.id, 10);
-    const lineId = req.params.lineId; // ✅ UUID
-    
-    const {
-      received_externally,
+    const projectid = parseInt(req.params.id, 10);
+    const lineId = parseInt(req.params.lineId, 10); // ✅ INTEGER pour revenue_lines aussi
+    const { receivedexternally, create_transaction, amount, receiveddate, account_id } = req.body;
+
+    console.log('📥 markRevenueLineReceived - Payload:', {
+      projectid,
+      lineId,
+      receivedexternally,
       create_transaction,
       amount,
-      received_date,
+      receiveddate,
       account_id
-    } = req.body;
+    });
 
-    console.log('🔵 markRevenueLineReceived appelé');
-    console.log('📦 Params:', { project_id, lineId });
-
-    // ✅ VALIDATION
-    if (!lineId) {
+    // Validations
+    if (!projectid || isNaN(projectid)) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'lineId manquant' });
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'projectid invalide' 
+      });
+    }
+
+    if (!lineId || isNaN(lineId)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'lineId manquant ou invalide' 
+      });
     }
 
     if (!amount || isNaN(parseFloat(amount))) {
       await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'amount invalide' });
+      return res.status(400).json({ 
+        error: 'Paramètres invalides',
+        details: 'amount invalide' 
+      });
     }
 
-    // ✅ VÉRIFIER QUE LA LIGNE EXISTE (UUID)
+    // Vérifier la ligne (✅ INTEGER, pas UUID)
     const lineRes = await client.query(
-      'SELECT * FROM project_revenue_lines WHERE id = $1::uuid AND project_id = $2',
-      [lineId, project_id]
+      `SELECT * FROM project_revenue_lines WHERE id = $1 AND project_id = $2`,
+      [lineId, projectid]
     );
 
     if (lineRes.rows.length === 0) {
@@ -1356,69 +1459,79 @@ exports.markRevenueLineReceived = async (req, res, next) => {
 
     const line = lineRes.rows[0];
 
+    // ✅ IDEMPOTENCE
     if (line.is_received) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({ error: 'Ligne déjà reçue' });
+      console.warn(`⚠️ Ligne ${lineId} déjà reçue - mise à jour forcée`);
+      
+      if (receivedexternally === true) {
+        await client.query(
+          `UPDATE project_revenue_lines 
+           SET actual_amount = $1, 
+               transaction_date = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [parseFloat(amount), receiveddate || new Date().toISOString().split('T')[0], lineId]
+        );
+        await client.query('COMMIT');
+        return res.json({ 
+          success: true, 
+          message: 'Revenu mis à jour',
+          alreadyReceived: true,
+          lineid: lineId 
+        });
+      }
     }
 
-    let transactionId = null;
-
-    // ✅ CAS 1: Encaissement externe
-    if (received_externally === true) {
+    // CAS 1: Encaissement externe
+    if (receivedexternally === true) {
       await client.query(
         `UPDATE project_revenue_lines 
          SET is_received = true, 
              actual_amount = $1, 
-             transaction_date = $2,
+             transaction_date = $2, 
              updated_at = NOW()
-         WHERE id = $3::uuid`,
-        [
-          parseFloat(amount),
-          received_date || new Date().toISOString().split('T')[0],
-          lineId
-        ]
+         WHERE id = $3`,
+        [parseFloat(amount), receiveddate || new Date().toISOString().split('T')[0], lineId]
       );
-
       await client.query('COMMIT');
-      
-      return res.json({
-        success: true,
-        message: '✅ Revenu marqué comme reçu (externe)',
-        line_id: lineId
+      return res.json({ 
+        success: true, 
+        message: 'Revenu marqué comme reçu externe',
+        lineid: lineId 
       });
     }
 
-    // ✅ CAS 2: Créer une transaction
+    // CAS 2: Créer une transaction
     if (create_transaction === true) {
       if (!account_id) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'account_id requis' });
+        return res.status(400).json({ 
+          error: 'Paramètres invalides',
+          details: 'account_id requis' 
+        });
       }
 
-      // Créer la transaction
       const txResult = await client.query(
         `INSERT INTO transactions 
-         (account_id, type, amount, category, description, transaction_date, 
-          is_planned, is_posted, project_id, project_line_id)
-         VALUES ($1, 'income', $2, $3, $4, $5, false, true, $6, $7::uuid)
+         (account_id, type, amount, category, description, transaction_date, is_planned, is_posted, project_id, project_line_id)
+         VALUES ($1, 'income', $2, $3, $4, $5, false, true, $6, $7)
          RETURNING *`,
         [
           parseInt(account_id),
-          parseFloat(amount),
+          parseFloat(amount), // ✅ Positif pour income
           line.category || 'Projet - Revenu',
           line.description || 'Encaissement revenu projet',
-          received_date || new Date().toISOString().split('T')[0],
-          project_id,
-          lineId
+          receiveddate || new Date().toISOString().split('T')[0],
+          projectid,
+          lineId.toString()
         ]
       );
 
       const transaction = txResult.rows[0];
-      transactionId = transaction.id;
 
       // Créditer le compte
       await client.query(
-        'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2',
+        `UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
         [parseFloat(amount), parseInt(account_id)]
       );
 
@@ -1427,31 +1540,26 @@ exports.markRevenueLineReceived = async (req, res, next) => {
         `UPDATE project_revenue_lines 
          SET is_received = true, 
              actual_amount = $1, 
-             transaction_date = $2,
-             transaction_id = $3,
+             transaction_date = $2, 
+             transaction_id = $3, 
              updated_at = NOW()
-         WHERE id = $4::uuid`,
-        [
-          parseFloat(amount),
-          received_date || new Date().toISOString().split('T')[0],
-          transactionId,
-          lineId
-        ]
+         WHERE id = $4`,
+        [parseFloat(amount), receiveddate || new Date().toISOString().split('T')[0], transaction.id, lineId]
       );
 
       await client.query('COMMIT');
-      
-      return res.json({
-        success: true,
-        message: '✅ Transaction créée et revenu marqué comme reçu',
-        transaction_id: transactionId,
-        line_id: lineId
+      return res.json({ 
+        success: true, 
+        message: 'Transaction créée et revenu marqué comme reçu',
+        transactionid: transaction.id,
+        lineid: lineId 
       });
     }
 
     await client.query('ROLLBACK');
     return res.status(400).json({ 
-      error: 'Spécifiez received_externally=true OU create_transaction=true' 
+      error: 'Paramètres invalides',
+      details: 'Spécifiez receivedexternally=true OU create_transaction=true' 
     });
 
   } catch (error) {
@@ -1467,19 +1575,16 @@ exports.markRevenueLineReceived = async (req, res, next) => {
 exports.cancelExpenseLinePayment = async (req, res) => {
   const client = await pool.connect();
   try {
-    // ✅ CORRECTION: Extraire correctement les paramètres
-    const project_id = parseInt(req.params.id, 10);
-    const lineId = req.params.lineId; // ✅ UUID, pas parseInt
-    
-    console.log('🔵 cancelExpenseLinePayment appelé');
-    console.log('📦 Données:', { project_id, lineId });
+    const projectid = parseInt(req.params.id, 10);
+    const lineId = parseInt(req.params.lineId, 10);
+
+    console.log('📥 cancelExpenseLinePayment appelé:', { projectid, lineId });
 
     await client.query('BEGIN');
 
-    // ✅ Vérifier que la ligne existe (avec cast UUID)
     const lineRes = await client.query(
-      'SELECT * FROM project_expense_lines WHERE id = $1::uuid AND project_id = $2',
-      [lineId, project_id]
+      `SELECT * FROM project_expense_lines WHERE id = $1 AND project_id = $2`,
+      [lineId, projectid]
     );
 
     if (lineRes.rows.length === 0) {
@@ -1495,38 +1600,39 @@ exports.cancelExpenseLinePayment = async (req, res) => {
       console.log('🔄 Suppression transaction et recrédit compte...');
       
       const txRes = await client.query(
-        'SELECT * FROM transactions WHERE id = $1',
+        `SELECT * FROM transactions WHERE id = $1`,
         [line.transaction_id]
       );
 
       if (txRes.rows.length > 0) {
         const transaction = txRes.rows[0];
         
-        // Annuler l'impact sur le solde (expense = débit, donc on recrédite)
+        // Annuler l'impact sur le solde
         if (transaction.is_posted) {
           await client.query(
-            'UPDATE accounts SET balance = balance + $1, updated_at = NOW() WHERE id = $2',
-            [transaction.amount, transaction.account_id]
+            `UPDATE accounts 
+             SET balance = balance + $1, updated_at = NOW() 
+             WHERE id = $2`,
+            [Math.abs(transaction.amount), transaction.account_id]
           );
-          console.log('✅ Compte recrédité:', transaction.account_id, transaction.amount);
+          console.log('✅ Compte recrédité:', transaction.account_id, Math.abs(transaction.amount));
         }
 
         // Supprimer la transaction
-        await client.query('DELETE FROM transactions WHERE id = $1', [line.transaction_id]);
+        await client.query(`DELETE FROM transactions WHERE id = $1`, [line.transaction_id]);
         console.log('✅ Transaction supprimée:', line.transaction_id);
       }
     }
 
-    // ✅ Remettre la ligne en état "non payé" (avec cast UUID)
+    // Remettre la ligne en état non payé
     await client.query(
       `UPDATE project_expense_lines 
-       SET 
-         is_paid = FALSE, 
-         actual_amount = 0, 
-         transaction_date = NULL, 
-         transaction_id = NULL,
-         last_synced_at = NOW()
-       WHERE id = $1::uuid`,
+       SET is_paid = FALSE, 
+           actual_amount = 0, 
+           transaction_date = NULL, 
+           transaction_id = NULL, 
+           last_synced_at = NOW()
+       WHERE id = $1`,
       [lineId]
     );
 
@@ -1535,10 +1641,10 @@ exports.cancelExpenseLinePayment = async (req, res) => {
     await client.query('COMMIT');
     console.log('✅ COMMIT');
 
-    res.json({
-      success: true,
+    res.json({ 
+      success: true, 
       message: 'Paiement annulé avec succès',
-      transactionDeleted: !!line.transaction_id
+      transactionDeleted: !!line.transaction_id 
     });
 
   } catch (error) {
@@ -1554,18 +1660,17 @@ exports.cancelExpenseLinePayment = async (req, res) => {
 exports.cancelRevenueLineReceipt = async (req, res) => {
   const client = await pool.connect();
   try {
-    // ✅ CORRECTION: Extraire correctement les paramètres
     const project_id = parseInt(req.params.id, 10);
-    const lineId = req.params.lineId; // ✅ UUID, pas parseInt
+    const lineId = parseInt(req.params.lineId, 10); // ✅ INTEGER
     
     console.log('🔵 cancelRevenueLineReceipt appelé');
     console.log('📦 Données:', { project_id, lineId });
 
     await client.query('BEGIN');
 
-    // ✅ Vérifier que la ligne existe (avec cast UUID)
+    // ✅ INTEGER, pas UUID
     const lineRes = await client.query(
-      'SELECT * FROM project_revenue_lines WHERE id = $1::uuid AND project_id = $2',
+      'SELECT * FROM project_revenue_lines WHERE id = $1 AND project_id = $2',
       [lineId, project_id]
     );
 
@@ -1604,7 +1709,7 @@ exports.cancelRevenueLineReceipt = async (req, res) => {
       }
     }
 
-    // ✅ Remettre la ligne en état "non reçu" (avec cast UUID)
+    // ✅ Remettre la ligne en état "non reçu"
     await client.query(
       `UPDATE project_revenue_lines 
        SET 
@@ -1613,7 +1718,7 @@ exports.cancelRevenueLineReceipt = async (req, res) => {
          transaction_date = NULL, 
          transaction_id = NULL,
          last_synced_at = NOW()
-       WHERE id = $1::uuid`,
+       WHERE id = $1`,
       [lineId]
     );
 
@@ -1775,7 +1880,6 @@ exports.getProjectRevenueLines = async (req, res) => {
 // ============================================================================
 // RECALCUL DES TOTAUX (endpoints publics)
 // ============================================================================
-
 exports.recalculateTotals = async (req, res) => {
   const client = await pool.connect();
   try {

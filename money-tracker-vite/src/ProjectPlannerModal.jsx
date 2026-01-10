@@ -72,6 +72,8 @@ export function ProjectPlannerModal({
 
   const [loading, setLoading] = useState(false);
   const [loadingOperational, setLoadingOperational] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
 
   // --- CHARGEMENT INITIAL (CORRIGÉ & ROBUSTE) ---
   // --- CHARGEMENT INITIAL (AVEC RÉCUPÉRATION DES TRANSACTIONS RÉELLES) ---
@@ -383,54 +385,70 @@ export function ProjectPlannerModal({
   const removeExpense = (id) => setExpenses(expenses.filter((e) => e.id !== id));
   const removeRevenue = (id) => setRevenues(revenues.filter((r) => r.id !== id));
 
-  const handlePayerDepense = async (exp, index) => {
-    try {
-      if (!exp.account) return alert('Choisis un compte');
+  const handlePayerDepense = async (expense) => {
+  // ✅ PROTECTION: Vérifier si déjà payé AVANT d'envoyer
+  if (expense.isPaid === true) {
+    alert('⚠️ Cette dépense est déjà payée');
+    return;
+  }
 
-      const accountObj = accounts.find((a) => a.name === exp.account);
-      if (!accountObj) return alert('Compte introuvable');
+  // ✅ PROTECTION: Désactiver le bouton pendant le traitement
+  if (isProcessingPayment) {
+    console.warn('⏳ Paiement en cours, veuillez patienter...');
+    return;
+  }
 
-      if (!project?.id) return alert('Erreur: Projet introuvable.');
+  setIsProcessingPayment(true); // État à ajouter
 
-      const alreadyPaid = window.confirm(
-        `Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-          `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n` +
-          `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-          `- NON (Annuler) → Je crée une transaction et débite le compte.`
-      );
-
-      const payload = alreadyPaid
-        ? {
-            paid_externally: true,
-            amount: parseFloat(exp.amount),
-            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-          }
-        : {
-            create_transaction: true,
-            amount: parseFloat(exp.amount),
-            paid_date: exp.realDate || new Date().toISOString().split('T')[0],
-          };
-
-      // 🔐 Appel backend via client API (CSRF + JWT auto)
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${exp.id}/mark-paid`,
-        payload
-      );
-
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: true };
-      setExpenses(updated);
-
-      await saveProjectState(updated, revenues);
-
-      if (onProjectUpdated) onProjectUpdated();
-
-      alert(result.message || 'Dépense marquée comme payée !');
-    } catch (error) {
-      console.error('Erreur handlePayerDepense:', error);
-      alert(error?.message || 'Erreur paiement');
+  try {
+    const dbLineId = await getOrCreateDbLineId(expense);
+    if (!dbLineId) {
+      alert('❌ Impossible de trouver/créer la ligne de dépense');
+      setIsProcessingPayment(false);
+      return;
     }
-  };
+
+    const payload = {
+      paidexternally: true,
+      amount: expense.amount,
+      paiddate: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+      accountid: expense.account === 'Coffre' ? 5 : 
+                 expense.account === 'Mvola Pro' ? 6 : 
+                 expense.account === 'BOA' ? 7 : 5
+    };
+
+    console.log('📤 Envoi paiement:', { dbLineId, payload });
+
+    const response = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      payload
+    );
+
+    console.log('✅ Réponse:', response);
+
+    // ✅ IMPORTANT: Recharger le projet pour synchroniser
+    await loadProject();
+    
+    alert('✅ Dépense payée avec succès');
+
+  } catch (err) {
+    console.error('❌ Erreur paiement:', err);
+    
+    // ✅ GESTION D'ERREUR AMÉLIORÉE
+    if (err.message === 'Déjà payée') {
+      alert('⚠️ Cette dépense est déjà payée. Rechargement...');
+      await loadProject(); // Resynchroniser
+    } else if (err.message === 'Paramètres invalides') {
+      alert(`❌ Erreur: ${err.raw?.details || 'Paramètres invalides'}\n\nVérifiez la console pour plus de détails.`);
+      console.error('Détails:', err.raw);
+    } else {
+      alert('❌ Erreur: ' + err.message);
+    }
+  } finally {
+    setIsProcessingPayment(false);
+  }
+};
+
 
   const handleEncaisser = async (rev, index) => {
     try {
@@ -1076,12 +1094,20 @@ useEffect(() => {
                     ) : (
                       <>
                         <button
-                          onClick={() => handlePayerDepense(exp, idx)}
-                          disabled={!exp.account || !exp.amount}
-                          className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700 disabled:opacity-50"
-                        >
-                          Payer
-                        </button>
+  disabled={isProcessingPayment}
+  onClick={async () => {
+    await handlePayerDepense(exp.id); // ✅ 'exp' et non 'expense'
+  }}
+  className={`col-span-1 ${
+    isProcessingPayment 
+      ? 'bg-gray-400 cursor-wait' 
+      : 'bg-blue-600 hover:bg-blue-700'
+  } text-white p-2 rounded text-xs disabled:opacity-50`}
+  title="Marquer comme payé"
+>
+  {isProcessingPayment ? '⏳...' : '💳 Payer'}
+</button>
+
                         <button
                           onClick={() => removeExpense(exp.id)}
                           className="text-gray-400 hover:text-red-500 p-1"

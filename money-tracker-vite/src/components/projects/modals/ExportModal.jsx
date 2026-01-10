@@ -26,7 +26,6 @@ import { useFinance } from '../../../contexts/FinanceContext';
 export function ExportModal({
   isOpen,
   onClose,
-  onSave,
   accounts = [],
   project = null,
   onProjectSaved,
@@ -61,6 +60,8 @@ export function ExportModal({
   const [expenses, setExpenses] = useState([]);
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
 
   // ===== CHARGEMENT PROJET EXISTANT =====
   useEffect(() => {
@@ -449,216 +450,156 @@ export function ExportModal({
     }
   };
 
-  // ===== PAYER DÉPENSE =====
-  const handlePayerDepense = async (exp, index) => {
-    try {
-      if (!exp.account) return alert('Choisis un compte');
+  // ===== PAYER DÉPENSE (VERSION CORRIGÉE SANS getOrCreateDbLineId) =====
+const handlePayerDepense = async (expense) => {
+  if (expense.isPaid === true) {
+    alert('⚠️ Cette dépense est déjà payée');
+    return;
+  }
 
-      const accountObj = accounts.find((a) => a.name === exp.account);
-      if (!accountObj) return alert('Compte introuvable');
+  if (isProcessingPayment) return;
+  setIsProcessingPayment(true);
 
-      if (!project?.id) return alert('Erreur: Projet introuvable.');
-
-      console.log('🔍 Recherche/création dbLineId pour:', {
-        description: exp.description,
-        amount: exp.amount,
-        id: exp.id,
-      });
-
-      // ✅ Chercher ou créer le dbLineId
-      let dbLineId = exp.dbLineId;
-
-      if (!dbLineId) {
-        console.log('📋 expenseLines disponibles:', project.expenseLines);
-
-        // Chercher dans expenseLines existantes
-        const expenseAmount = parseFloat(exp.amount || 0);
-
-        let expenseLine = project?.expenseLines?.find((line) => {
-          // Match par UUID
-          if (line.id === exp.id || line.uuid === exp.id) return true;
-
-          // Match par description + montant
-          const lineDesc = (line.description || '').trim().toLowerCase();
-          const expDesc = (exp.description || '').trim().toLowerCase();
-
-          if (lineDesc !== expDesc) return false;
-
-          const lineAmount = parseFloat(
-            line.projectedamount || line.projected_amount || line.projectedAmount || 0
-          );
-
-          return Math.abs(lineAmount - expenseAmount) < 0.01;
-        });
-
-        // ✅ Si pas trouvée, créer la ligne en base
-        if (!expenseLine) {
-          console.log('📝 Ligne introuvable, création en cours...');
-
-          const createConfirm = confirm(
-            `La ligne "${exp.description}" n'existe pas encore en base.\n\n` +
-              `Voulez-vous la créer maintenant ?\n\n` +
-              `Montant: ${formatCurrency(exp.amount)}\n` +
-              `Catégorie: ${exp.category || 'Non catégorisé'}`
-          );
-
-          if (!createConfirm) {
-            console.log("❌ Création annulée par l'utilisateur");
-            return;
-          }
-
-          try {
-            // Créer la ligne via API
-            const newLine = await api.post(`/projects/${project.id}/expense-lines`, {
-              description: exp.description,
-              category: exp.category || 'Non catégorisé',
-              projectedamount: parseFloat(exp.amount),
-              actualamount: 0,
-              transactiondate: exp.date || new Date().toISOString(),
-              ispaid: false,
-            });
-
-            expenseLine = newLine;
-            console.log('✅ Ligne créée:', newLine);
-
-            // ✅ AJOUT 1: Attendre que la transaction SQL soit commitée
-            console.log('⏳ Attente sécurité COMMIT (500ms)...');
-            await new Promise((resolve) => setTimeout(resolve, 500));
-
-            // ✅ AJOUT 2: Vérifier que la ligne existe vraiment avec retry
-            let lineExists = false;
-            let retries = 0;
-            const maxRetries = 5;
-
-            while (!lineExists && retries < maxRetries) {
-              await new Promise((resolve) => setTimeout(resolve, 300));
-
-              try {
-                // ✅ CORRECTION: Vérifier via le projet complet au lieu d'un endpoint inexistant
-                const freshProject = await api.get(`/projects/${project.id}`);
-                const lineFound = freshProject.expenseLines?.some(
-                  (line) => String(line.id) === String(newLine.id)
-                );
-
-                if (lineFound) {
-                  lineExists = true;
-                  console.log(
-                    `✅ Ligne ${newLine.id} vérifiée et présente dans le projet après ${retries + 1} tentative(s)`
-                  );
-                } else {
-                  throw new Error('Ligne pas encore dans le projet');
-                }
-              } catch (verifyError) {
-                retries++;
-                if (retries < maxRetries) {
-                  console.log(
-                    `⏳ Ligne ${newLine.id} pas encore visible dans le projet, retry ${retries}/${maxRetries}...`
-                  );
-                } else {
-                  console.error(
-                    `❌ Ligne ${newLine.id} toujours introuvable après ${maxRetries} tentatives`
-                  );
-                  throw new Error(
-                    "La ligne créée n'est pas accessible. Réessayez dans quelques secondes."
-                  );
-                }
-              }
-            }
-
-            // ✅ AJOUT 3: Maintenant qu'on est sûr que la ligne existe, on peut recharger
-            if (onProjectUpdated) {
-              console.log('🔄 Rechargement du projet après vérification ligne...');
-              await onProjectUpdated(project.id);
-            }
-          } catch (createError) {
-            console.error('❌ Erreur création ligne:', createError);
-            alert(`Impossible de créer la ligne en base:\n${createError.message}`);
-            return;
-          }
-        } // ⬅️ FIN du if (!expenseLine)
-
-        // ✅ CORRECTION: Cette ligne doit être ICI (après le if, pas dedans)
-        dbLineId = expenseLine.id;
-        console.log('✅ dbLineId:', dbLineId);
-      } else {
-        console.log('✅ dbLineId déjà stocké:', dbLineId);
-      }
-
-      // ✅ Demander confirmation de paiement (LOGIQUE INVERSÉE)
-      const createTransaction = window.confirm(
-        `💰 PAIEMENT: ${formatCurrency(exp.amount)}\n` +
-          `Compte: ${exp.account}\n\n` +
-          `❓ Voulez-vous CRÉER UNE TRANSACTION et débiter le compte ?\n\n` +
-          `👉 Cliquez OK pour PAYER MAINTENANT\n` +
-          `   (le compte SERA débité de ${formatCurrency(exp.amount)})\n\n` +
-          `👉 Cliquez ANNULER si le paiement EST DÉJÀ FAIT\n` +
-          `   (le compte ne sera PAS débité)`
-      );
-
-      const payload = createTransaction
-        ? {
-            // OK = Créer transaction
-            create_transaction: true,
-            amount: parseFloat(exp.amount),
-            paiddate: exp.realDate
-              ? new Date(exp.realDate).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
-            accountid: accountObj.id,
-          }
-        : {
-            // Annuler = Paiement externe
-            paidexternally: true,
-            amount: parseFloat(exp.amount),
-            paiddate: exp.realDate
-              ? new Date(exp.realDate).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
-            accountid: accountObj.id,
-          };
-
-      console.log('📤 Envoi requête mark-paid:', {
-        url: `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-        payload,
-      });
-
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-        payload
-      );
-
-      console.log('✅ Réponse serveur:', result);
-
-      // ✅ Mettre à jour l'état local
-      const updated = [...expenses];
-      updated[index] = { ...updated[index], isPaid: true, dbLineId };
-      setExpenses(updated);
-
-      // ❌ SUPPRIMÉ: Ne plus appeler saveProjectState ici
-      // Le backend a déjà tout mis à jour correctement
-      // await saveProjectState(updated, revenues);
-
-      // ✅ Recalcul automatique après paiement
-      console.log('🔄 Recalcul automatique des totaux...');
-      try {
-        await api.post(`/projects/${project.id}/recalculate`, {});
-        console.log('✅ Totaux recalculés avec succès');
-      } catch (recalcError) {
-        console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
-      }
-
-      // ✅ Rafraîchir les données
-      console.log('🔄 Rafraîchissement après paiement...');
-      await refreshProjects();
-
-      if (onProjectUpdated) {
-        await onProjectUpdated(project.id);
-      }
-
-      alert(result.message || 'Dépense marquée comme payée !');
-    } catch (error) {
-      console.error('❌ Erreur handlePayerDepense:', error);
-      alert(error?.message || 'Erreur paiement');
+  try {
+    if (!expense.account) {
+      alert('❌ Veuillez choisir un compte');
+      setIsProcessingPayment(false);
+      return;
     }
-  };
+
+    const accountObj = accounts.find((a) => a.name === expense.account);
+    if (!accountObj) {
+      alert('❌ Compte introuvable');
+      setIsProcessingPayment(false);
+      return;
+    }
+
+    // ✅ Trouver ou créer dbLineId
+    let dbLineId = expense.dbLineId;
+    
+    if (!dbLineId) {
+      console.log('🔍 Recherche dbLineId pour:', {
+        description: expense.description,
+        amount: expense.amount,
+      });
+
+      const freshProject = await projectsService.getById(project.id);
+      let expenseLines = freshProject?.expenseLines || freshProject?.expenselines || [];
+
+      if (typeof expenseLines === 'string') {
+        try {
+          expenseLines = JSON.parse(expenseLines);
+        } catch (e) {
+          expenseLines = [];
+        }
+      }
+
+      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
+        console.error('❌ Aucune ligne expense trouvée');
+        alert('Impossible de trouver les lignes de dépenses.');
+        setIsProcessingPayment(false);
+        return;
+      }
+
+      const expenseAmount = parseFloat(expense.amount || 0);
+
+      const expenseLine = expenseLines.find((line) => {
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (expense.description || '').trim().toLowerCase();
+        if (lineDesc !== expDesc) return false;
+
+        const lineAmount = parseFloat(
+          line.projectedamount || line.projected_amount || line.amount || 0
+        );
+
+        return Math.abs(lineAmount - expenseAmount) < 0.01;
+      });
+
+      if (!expenseLine) {
+        const createConfirm = confirm(
+          `La ligne "${expense.description}" n'existe pas.\n\nCréer maintenant ?\n\nMontant: ${formatCurrency(expense.amount)}`
+        );
+
+        if (!createConfirm) {
+          setIsProcessingPayment(false);
+          return;
+        }
+
+        try {
+          const newLine = await api.post(`/projects/${project.id}/expense-lines`, {
+            description: expense.description,
+            category: expense.category || 'Projet - Charge',
+            projected_amount: parseFloat(expense.amount),
+            actual_amount: 0,
+            transaction_date: expense.date || new Date().toISOString(),
+            is_paid: false,
+          });
+
+          dbLineId = newLine.id;
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } catch (createError) {
+          alert(`Impossible de créer la ligne:\n${createError.message}`);
+          setIsProcessingPayment(false);
+          return;
+        }
+      } else {
+        dbLineId = expenseLine.id;
+      }
+    }
+
+    // ✅ DEMANDER À L'UTILISATEUR
+    const alreadyPaid = window.confirm(
+      `💰 Payer ${formatCurrency(expense.amount)} depuis ${expense.account}.\n\n` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n\n` +
+      `- OUI (OK) → Marquer comme payée, SANS créer de transaction.\n` +
+      `- NON (Annuler) → Créer une transaction et débiter le compte.`
+    );
+
+    const payload = alreadyPaid
+      ? {
+          paid_externally: true,
+          amount: expense.amount,
+          paid_date: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+        }
+      : {
+          create_transaction: true,
+          amount: expense.amount,
+          paid_date: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+          account_id: accountObj.id,
+        };
+
+    console.log('📤 Payload:', payload);
+    await api.patch(`/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`, payload);
+
+    // ✅ RECHARGER
+    const freshProject = await projectsService.getById(project.id);
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshExpenses = parseList(freshProject.expenses).map(e => ({
+      ...e,
+      id: e.id || uuidv4(),
+      date: e.date ? new Date(e.date) : new Date(),
+      amount: parseFloat(e.amount) || 0,
+    }));
+    
+    setExpenses(freshExpenses);
+
+    await refreshProjects();
+    if (onProjectUpdated) await onProjectUpdated(project.id);
+    
+    alert('✅ Dépense marquée comme payée !');
+
+  } catch (err) {
+    console.error('❌ Erreur:', err);
+    alert('❌ Erreur: ' + (err.message || 'Erreur inconnue'));
+  } finally {
+    setIsProcessingPayment(false);
+  }
+};
 
   // ===== ENCAISSER REVENU =====
   const handleEncaisser = async (rev, index) => {
@@ -872,163 +813,63 @@ export function ExportModal({
   };
 
   // ===== ANNULER PAIEMENT DÉPENSE/REVENUE =====
-  const handleCancelPaymentExpense = async (exp, index) => {
+const handleCancelPaymentExpense = async (exp, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
+    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`)) return;
 
-    if (!window.confirm(`Annuler le paiement de ${formatCurrency(exp.amount)} ?`))
-      return;
-
-    // ✅ NOUVELLE VÉRIFICATION: La ligne existe-t-elle vraiment?
     let dbLineId = exp.dbLineId;
-
+    
     if (!dbLineId) {
-      console.log('🔍 Recherche dbLineId pour:', {
-        description: exp.description,
-        amount: exp.amount,
-        expenseLines: project?.expenseLines?.length || 0,
-      });
-
-      // Recharger le projet pour avoir les expenseLines à jour
-      const freshProject = await projectsService.getById(project.id);
-
-      let expenseLines = freshProject?.expenseLines || freshProject?.expenselines || [];
-
-      if (typeof expenseLines === 'string') {
-        try {
-          expenseLines = JSON.parse(expenseLines);
-        } catch (e) {
-          expenseLines = [];
-        }
-      }
-
-      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
-        console.error('❌ Aucune ligne expense trouvée dans le projet');
-        alert(
-          `Impossible de trouver les lignes de dépenses.\n\n` +
-            `Le projet doit être rechargé.`
-        );
-        // Forcer le refresh
-        await refreshProjects();
-        if (onProjectUpdated) {
-          await onProjectUpdated(project.id);
-        }
-        return;
-      }
-
-      const expenseAmount = parseFloat(exp.amount || 0);
-
-      // Recherche améliorée
-      const expenseLine = expenseLines.find((line) => {
-        // Stratégie 1: Match par UUID
-        if (line.uuid === exp.id || line.uuid === exp.id) {
-          console.log('✅ Match par UUID:', line.uuid);
-          return true;
-        }
-
-        // Stratégie 2: Match par ID
-        if (line.id === exp.dbLineId) {
-          console.log('✅ Match par ID:', line.id);
-          return true;
-        }
-
-        // Stratégie 3: Match par description+montant+isPaid
-        const lineDesc = (line.description || '').trim().toLowerCase();
-        const expDesc = (exp.description || '').trim().toLowerCase();
-
-        if (lineDesc !== expDesc) return false;
-
-        const lineAmount = parseFloat(
-          line.projectedamount ||
-            line.projected_amount ||
-            line.projectedAmount ||
-            line.actualamount ||
-            line.actual_amount ||
-            line.actualAmount ||
-            line.amount ||
-            0
-        );
-
-        const amountMatch = Math.abs(lineAmount - expenseAmount) < 0.01;
-        const isPaidMatch = line.ispaid === true || line.isPaid === true;
-
-        if (amountMatch && isPaidMatch) {
-          console.log('✅ Match par description+montant+isPaid:', {
-            description: lineDesc,
-            amount: lineAmount,
-            isPaid: isPaidMatch,
-          });
-          return true;
-        }
-
-        return false;
-      });
-
-      if (!expenseLine) {
-        console.error('❌ Ligne expense DB introuvable pour annulation');
-        console.error('Critères de recherche:', {
-          description: exp.description,
-          amount: expenseAmount,
-          uuid: exp.id,
-          dbLineId: exp.dbLineId,
-        });
-
-        alert(
-          `⚠️ Impossible de trouver la ligne de dépense en base.\n\n` +
-            `Description: ${exp.description}\n` +
-            `Montant: ${formatCurrency(exp.amount)}\n\n` +
-            `La ligne a peut-être été supprimée.\n` +
-            `Le projet va être rechargé.`
-        );
-
-        // Forcer le refresh pour resynchroniser
-        await refreshProjects();
-        if (onProjectUpdated) {
-          await onProjectUpdated(project.id);
-        }
-        return;
-      }
-
-      dbLineId = expenseLine.id;
-      console.log('✅ dbLineId trouvé:', dbLineId);
+      console.error('❌ Impossible d\'annuler: dbLineId manquant');
+      alert('Erreur: ID de ligne introuvable');
+      return;
     }
 
-    // ✅ Appel backend avec dbLineId validé
     console.log('📤 Appel API cancel-payment avec dbLineId:', dbLineId);
-
+    
     const result = await api.patch(
-      `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,
-      {} // Pas de payload nécessaire
+      `/projects/${project.id}/expense-lines/${dbLineId}/cancel-payment`,  // ✅ Avec /api/
+      {}
     );
 
     console.log('✅ Réponse serveur:', result);
 
-    // ✅✅ MISE À JOUR DES DEUX ÉTATS : expenses ET project
-    const updatedExpenses = expenses.map((e, i) => 
-      i === index 
-        ? { ...e, isPaid: false, actualAmount: 0, transactionDate: null } 
-        : e
-    );
-    setExpenses(updatedExpenses);
+    // ✅ RECHARGER LE PROJET COMPLET
+    console.log('🔄 Rechargement FORCÉ du projet complet...');
+    const freshProject = await projectsService.getById(project.id);
+    
+    // ✅ RECHARGER LES EXPENSES DEPUIS LE JSON DU PROJET
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshExpenses = parseList(freshProject.expenses).map(e => ({
+      ...e,
+      id: e.id || uuidv4(),
+      date: e.date ? new Date(e.date) : new Date(),
+      amount: parseFloat(e.amount) || 0,
+    }));
+    
+    setExpenses(freshExpenses);  // ✅ Remplacer complètement, pas juste mettre à jour
+    project.expenseLines = freshProject.expenseLines;  // ✅ Mettre à jour aussi
 
-    // ✅ Recalcul automatique
-    console.log('🔄 Recalcul automatique des totaux...');
+    // Recalcul automatique
     try {
       await api.post(`/projects/${project.id}/recalculate`, {});
-      console.log('✅ Totaux recalculés avec succès');
     } catch (recalcError) {
-      console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
+      console.warn('⚠️ Erreur recalcul:', recalcError.message);
     }
 
-    // Rafraîchir
-    console.log('🔄 Rafraîchissement après annulation...');
+    // Rafraîchir globalement
     await refreshProjects();
-
     if (onProjectUpdated) {
       await onProjectUpdated(project.id);
     }
 
-    alert(result.message || 'Paiement annulé avec succès!');
+    alert(result.message || '✅ Paiement annulé avec succès!');
   } catch (err) {
     console.error('❌ Erreur handleCancelPaymentExpense:', err);
     alert(`Erreur annulation: ${err.message || err}`);
@@ -1038,10 +879,8 @@ export function ExportModal({
 const handleCancelPaymentRevenue = async (rev, index) => {
   try {
     if (!project?.id) return alert('Projet non enregistré');
-    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`))
-      return;
+    if (!window.confirm(`Annuler l'encaissement de ${formatCurrency(rev.amount)} ?`)) return;
 
-    // ✅ Même logique que handleCancelPaymentExpense
     let dbLineId = rev.dbLineId;
 
     if (!dbLineId) {
@@ -1116,114 +955,43 @@ const handleCancelPaymentRevenue = async (rev, index) => {
       {}
     );
 
-    // ✅✅ MISE À JOUR DES DEUX ÉTATS : revenues ET project
-    const updatedRevenues = revenues.map((r, i) => 
-      i === index 
-        ? { ...r, isPaid: false, actualAmount: 0, transactionDate: null } 
-        : r
-    );
-    setRevenues(updatedRevenues);
+    // ✅ RECHARGER LE PROJET COMPLET (au lieu de mettre à jour par index)
+    console.log('🔄 Rechargement FORCÉ du projet complet...');
+    const freshProject = await projectsService.getById(project.id);
+    
+    const parseList = (data) => {
+      if (!data) return [];
+      if (Array.isArray(data)) return data;
+      try { return JSON.parse(data); } catch { return []; }
+    };
+    
+    const freshRevenues = parseList(freshProject.revenues).map(r => ({
+      ...r,
+      id: r.id || uuidv4(),
+      date: r.date ? new Date(r.date) : new Date(),
+      amount: parseFloat(r.amount) || 0,
+    }));
+    
+    setRevenues(freshRevenues);  // ✅ Remplacer complètement
+    project.revenueLines = freshProject.revenueLines;
 
-    // ✅ Recalcul automatique après annulation
-    console.log('🔄 Recalcul automatique des totaux...');
+    // Recalcul et rafraîchissement
     try {
       await api.post(`/projects/${project.id}/recalculate`, {});
-      console.log('✅ Totaux recalculés avec succès');
     } catch (recalcError) {
-      console.warn('⚠️ Erreur recalcul auto (non bloquant):', recalcError.message);
+      console.warn('⚠️ Erreur recalcul:', recalcError.message);
     }
 
-    // Rafraîchir
-    console.log('🔄 Rafraîchissement après annulation...');
     await refreshProjects();
+    if (onProjectUpdated) await onProjectUpdated(project.id);
 
-    if (onProjectUpdated) {
-      await onProjectUpdated(project.id);
-    }
-
-    alert(result.message || 'Encaissement annulé avec succès!');
+    alert(result.message || '✅ Encaissement annulé avec succès!');
   } catch (err) {
     console.error('❌ Erreur handleCancelPaymentRevenue:', err);
     alert(err?.message || 'Erreur annulation encaissement');
   }
 };
 
-
-  // ===== SAUVEGARDER L'ÉTAT DU PROJET =====
-  const saveProjectState = async (currentExpenses, currentRevenues) => {
-    if (!project?.id) {
-      console.warn('⚠️ saveProjectState: Projet non enregistré');
-      return;
-    }
-
-    // ✅ MAPPER plannedDate AVANT stringify
-    const expensesWithDate = currentExpenses.map((exp) => ({
-      ...exp,
-      plannedDate: exp.date ? new Date(exp.date).toISOString().split('T')[0] : null,
-    }));
-
-    const revenuesWithDate = currentRevenues.map((rev) => ({
-      ...rev,
-      plannedDate: rev.date ? new Date(rev.date).toISOString().split('T')[0] : null,
-    }));
-
-    console.log('💾 saveProjectState démarré:', {
-      projectId: project.id,
-      expensesCount: currentExpenses.length,
-      revenuesCount: currentRevenues.length,
-      expensesPaid: currentExpenses.filter((e) => e.isPaid).length,
-    });
-
-    const newTotalRevenues = revenuesWithDate.reduce(
-      (s, r) => s + parseFloat(r.amount || 0),
-      0
-    );
-    const newTotalExpenses = expensesWithDate.reduce(
-      (s, e) => s + parseFloat(e.amount || 0),
-      0
-    );
-    const newNetProfit = newTotalRevenues - newTotalExpenses;
-    const newRoi =
-      newTotalExpenses > 0 ? ((newNetProfit / newTotalExpenses) * 100).toFixed(1) : 0;
-
-    const payload = {
-      name: projectName.trim(),
-      type: 'EXPORT',
-      description: description || '',
-      status: status || 'active',
-      startDate: startDate ? new Date(startDate).toISOString() : null,
-      endDate: endDate ? new Date(endDate).toISOString() : null,
-      totalCost: newTotalExpenses,
-      totalRevenues: newTotalRevenues,
-      netProfit: newNetProfit,
-      roi: parseFloat(newRoi),
-      expenses: JSON.stringify(expensesWithDate), // ✅ AVEC plannedDate
-      revenues: JSON.stringify(revenuesWithDate), // ✅ AVEC plannedDate
-      metadata: JSON.stringify({
-        pricePerContainer,
-        containerCount,
-        commissionRateProprio,
-        commissionRateRandou,
-        productType,
-        destination,
-        containerType,
-      }),
-    };
-
-    console.log('📤 Payload envoyé:', {
-      ...payload,
-      expenses: `${expensesWithDate.length} lignes`,
-      revenues: `${revenuesWithDate.length} lignes`,
-    });
-
-    try {
-      const result = await projectsService.updateProject(project.id, payload);
-      console.log('✅ Projet sauvegardé:', result);
-    } catch (error) {
-      console.error('❌ Erreur saveProjectState:', error);
-      throw error;
-    }
-  };
   // ===== CALCULS FINANCIERS =====
   const totalExpenses = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const totalRevenues = revenues.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -1549,251 +1317,264 @@ const handleCancelPaymentRevenue = async (rev, index) => {
             )}
           </div>
 
-          {/* SECTION 4: CHARGES */}
-          <div className="bg-red-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingDown className="w-5 h-5 text-red-600" />
-                Charges ({expenses.length})
-              </h3>
-              <button
-                onClick={addExpense}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Charge
-              </button>
-            </div>
+          {/* ============================================ */}
+{/* SECTION 4: CHARGES */}
+{/* ============================================ */}
+<div className="bg-red-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingDown className="w-5 h-5 text-red-600" />
+      Charges ({expenses.length})
+    </h3>
+    <button
+      onClick={addExpense}
+      className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-red-700"
+    >
+      <Plus className="w-4 h-4" />
+      Ajouter Charge
+    </button>
+  </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {expenses.map((exp, idx) => (
-                <div
-                  key={exp.id}
-                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${
-                    exp.isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
-                  }`}
-                >
-                  <input
-                    type="text"
-                    value={exp.description}
-                    onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                  />
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {expenses.map((exp, idx) => {
+      // ✅ CALCUL DE isPaid EN PRIORITÉ DEPUIS LA DB
+      const expenseLine = project?.expenseLines?.find(
+        (line) => String(line.id) === String(exp.dbLineId)
+      );
+      const isPaid = expenseLine?.is_paid || false;
 
-                  <select
-                    value={exp.category}
-                    onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    {expenseCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
+      // 🔍 DEBUG LOG (vous pouvez le retirer après tests)
+      if (exp.dbLineId) {
+        console.log('🔎 État expense:', {
+          description: exp.description,
+          dbLineId: exp.dbLineId,
+          'exp.isPaid': exp.isPaid,
+          'exp.is_paid': exp.is_paid,
+          'expenseLine?.is_paid': expenseLine?.is_paid,
+          'isPaid FINAL': isPaid
+        });
+      }
 
-                  <CalculatorInput
-                    value={exp.amount}
-                    onChange={(val) => updateExpense(exp.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+      return (
+        <div
+          key={exp.id}
+          className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${
+            isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+          }`}
+        >
+          {/* Description */}
+          <input
+            type="text"
+            value={exp.description}
+            onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
+            className="col-span-3 p-2 border rounded text-sm"
+            placeholder="Description"
+          />
 
-                  {/* Date planifiée */}
-                  <DatePicker
-                    selected={exp.date}
-                    onChange={(date) => updateExpense(exp.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+          {/* Catégorie */}
+          <select
+            value={exp.category}
+            onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            {expenseCategories.map((cat) => (
+              <option key={cat.value} value={cat.value}>
+                {cat.label}
+              </option>
+            ))}
+          </select>
 
-                  {/* Date réelle */}
-                  <DatePicker
-                    selected={exp.realDate || null}
-                    onChange={(date) => updateExpense(exp.id, 'realDate', date)}
-                    dateFormat="dd/MM/yy"
-                    placeholderText="Date réelle"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+          {/* Montant */}
+          <CalculatorInput
+            value={exp.amount}
+            onChange={(val) => updateExpense(exp.id, 'amount', val)}
+            className="col-span-2 p-2 border rounded text-sm font-semibold"
+          />
 
-                  <select
-                    value={exp.account}
-                    onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.name}>
-                        {acc.name}
-                      </option>
-                    ))}
-                  </select>
+          {/* Date planifiée */}
+          <DatePicker
+            selected={exp.date}
+            onChange={(date) => updateExpense(exp.id, 'date', date)}
+            dateFormat="dd/MM/yy"
+            className="col-span-2 p-2 border rounded text-sm"
+          />
 
-                  {!exp.isPaid ? (
-                    <button
-                      onClick={() => handlePayerDepense(exp, idx)}
-                      disabled={!exp.account || !project?.id}
-                      className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-                      title="Payer"
-                    >
-                      💳
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentExpense(exp, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler paiement"
-                    >
-                      ↩️
-                    </button>
-                  )}
+          {/* Date réelle */}
+          <DatePicker
+            selected={exp.realDate || null}
+            onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+            dateFormat="dd/MM/yy"
+            placeholderText="Date réelle"
+            className="col-span-2 p-2 border rounded text-sm"
+          />
 
-                  <button
-                    onClick={() => removeExpense(exp.id)}
-                    className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+          {/* Compte */}
+          <select
+            value={exp.account}
+            onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            <option value="">Compte</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.name}>
+                {acc.name}
+              </option>
+            ))}
+          </select>
 
-              {expenses.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
-                </p>
-              )}
-            </div>
+          {/* BOUTONS PAYER / ANNULER */}
+{!isPaid ? (
+  <button
+    onClick={() => handlePayerDepense(exp)}
+    disabled={!exp.account || !project?.id || isProcessingPayment}
+    className="col-span-1 bg-green-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-green-700"
+    title="Payer"
+  >
+    Payer
+  </button>
+) : (
+  <button
+    onClick={() => handleCancelPaymentExpense(exp, idx)}
+    className="col-span-1 bg-orange-500 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-orange-600"
+    title="Annuler le paiement"
+  >
+    Annuler
+  </button>
+)}
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Charges: </span>
-              <span className="font-bold text-red-600 text-xl">
-                {formatCurrency(totalExpenses)}
-              </span>
-            </div>
-          </div>
 
-          {/* SECTION 5: REVENUS */}
-          <div className="bg-green-50 p-4 rounded-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-green-600" />
-                Revenus ({revenues.length})
-              </h3>
-              <button
-                onClick={addRevenue}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700"
-              >
-                <Plus className="w-4 h-4" />
-                Ajouter Revenu
-              </button>
-            </div>
+          {/* Bouton Supprimer */}
+          <button
+            onClick={() => removeExpense(exp.id)}
+            className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      );
+    })}
 
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {revenues.map((rev, idx) => (
-                <div
-                  key={rev.id}
-                  className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${
-                    rev.isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'
-                  }`}
-                >
-                  <input
-                    type="text"
-                    value={rev.description}
-                    onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
-                    className="col-span-3 p-2 border rounded text-sm"
-                    placeholder="Description"
-                  />
+    {expenses.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucune charge. Cliquez sur "Ajouter Charge" pour commencer.
+      </p>
+    )}
+  </div>
 
-                  <select
-                    value={rev.category}
-                    onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    {revenueCategories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
+  {/* Total */}
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Charges: </span>
+    <span className="font-bold text-red-600 text-xl">
+      {formatCurrency(totalExpenses)}
+    </span>
+  </div>
+</div>
 
-                  <CalculatorInput
-                    value={rev.amount}
-                    onChange={(val) => updateRevenue(rev.id, 'amount', val)}
-                    className="col-span-2 p-2 border rounded text-sm font-semibold"
-                  />
+{/* SECTION 5 - REVENUS */}
+<div className="bg-green-50 p-4 rounded-lg">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="font-bold text-lg flex items-center gap-2">
+      <TrendingUp className="w-5 h-5 text-green-600" />
+      Revenus ({revenues.length})
+    </h3>
+    <button onClick={addRevenue} className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+      <Plus className="w-4 h-4" />
+      Ajouter Revenu
+    </button>
+  </div>
 
-                  {/* Date planifiée */}
-                  <DatePicker
-                    selected={rev.date}
-                    onChange={(date) => updateRevenue(rev.id, 'date', date)}
-                    dateFormat="dd/MM/yy"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+  <div className="space-y-2 max-h-96 overflow-y-auto">
+    {revenues.map((rev, idx) => {
+      const revenueLine = project?.revenueLines?.find(line => String(line.id) === String(rev.dbLineId));
+      const isPaid = revenueLine?.is_received || false;
 
-                  {/* Date réelle */}
-                  <DatePicker
-                    selected={rev.realDate || null}
-                    onChange={(date) => updateRevenue(rev.id, 'realDate', date)}
-                    dateFormat="dd/MM/yy"
-                    placeholderText="Date réelle"
-                    className="col-span-2 p-2 border rounded text-sm"
-                  />
+      return (
+        <div key={rev.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>
+          <input
+            type="text"
+            value={rev.description}
+            onChange={(e) => updateRevenue(rev.id, 'description', e.target.value)}
+            className="col-span-3 p-2 border rounded text-sm"
+            placeholder="Description"
+          />
+          
+          <select
+            value={rev.category}
+            onChange={(e) => updateRevenue(rev.id, 'category', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            {revenueCategories.map((cat) => (
+              <option key={cat.value} value={cat.value}>{cat.label}</option>
+            ))}
+          </select>
 
-                  <select
-                    value={rev.account}
-                    onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
-                    className="col-span-2 p-2 border rounded text-sm"
-                  >
-                    <option value="">Compte</option>
-                    {accounts.map((acc) => (
-                      <option key={acc.id} value={acc.name}>
-                        {acc.name}
-                      </option>
-                    ))}
-                  </select>
+          <CalculatorInput
+            value={rev.amount}
+            onChange={(val) => updateRevenue(rev.id, 'amount', val)}
+            className="col-span-2 p-2 border rounded text-sm font-semibold"
+          />
 
-                  {!rev.isPaid ? (
-                    <button
-                      onClick={() => handleEncaisser(rev, idx)}
-                      disabled={!rev.account || !project?.id}
-                      className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
-                      title="Encaisser"
-                    >
-                      💰
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleCancelPaymentRevenue(rev, idx)}
-                      className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-                      title="Annuler encaissement"
-                    >
-                      ↩️
-                    </button>
-                  )}
+          <DatePicker
+            selected={rev.date}
+            onChange={(date) => updateRevenue(rev.id, 'date', date)}
+            dateFormat="dd/MM/yy"
+            className="col-span-2 p-2 border rounded text-sm"
+          />
 
-                  <button
-                    onClick={() => removeRevenue(rev.id)}
-                    className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+          <select
+            value={rev.account}
+            onChange={(e) => updateRevenue(rev.id, 'account', e.target.value)}
+            className="col-span-2 p-2 border rounded text-sm"
+          >
+            <option value="">Compte</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.name}>{acc.name}</option>
+            ))}
+          </select>
 
-              {revenues.length === 0 && (
-                <p className="text-center text-gray-500 py-8">
-                  Aucun revenu. Utilisez "Générer Lignes" ou ajoutez manuellement.
-                </p>
-              )}
-            </div>
+          {!isPaid ? (
+            <button
+              onClick={() => handleEncaisser(rev, idx)}
+              disabled={!rev.account || !project?.id}
+              className="col-span-1 bg-blue-600 text-white p-2 rounded text-xs"
+              title="Encaisser"
+            >
+              Encaisser
+            </button>
+          ) : (
+            <button
+              onClick={() => handleCancelPaymentRevenue(rev, idx)}
+              className="col-span-1 bg-orange-500 text-white p-2 rounded text-xs"
+              title="Annuler"
+            >
+              Annuler
+            </button>
+          )}
 
-            <div className="mt-3 text-right">
-              <span className="text-sm text-gray-600">Total Revenus: </span>
-              <span className="font-bold text-green-600 text-xl">
-                {formatCurrency(totalRevenues)}
-              </span>
-            </div>
-          </div>
+          <button
+            onClick={() => removeRevenue(rev.id)}
+            className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      );
+    })}
+
+    {revenues.length === 0 && (
+      <p className="text-center text-gray-500 py-8">
+        Aucun revenu. Cliquez sur "Ajouter Revenu" ou "Générer Ligne Globale".
+      </p>
+    )}
+  </div>
+
+  <div className="mt-3 text-right">
+    <span className="text-sm text-gray-600">Total Revenus: </span>
+    <span className="font-bold text-green-600 text-xl">{formatCurrency(totalRevenues)}</span>
+  </div>
+</div>
+
+
 
           {/* RÉSUMÉ FINANCIER */}
           <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 rounded-lg">

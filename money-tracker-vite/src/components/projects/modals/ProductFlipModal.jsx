@@ -56,6 +56,8 @@ export function ProductFlipModal({
   const [expenses, setExpenses] = useState([]);
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
 
   // ===== CHARGEMENT PROJET EXISTANT =====
   useEffect(() => {
@@ -372,114 +374,70 @@ export function ProductFlipModal({
   };
 
 // ✅ PAYER DÉPENSE - CORRIGÉ
-const handlePayerDepense = async (exp, index) => {
-  try {
-    if (!exp.account) return alert('❌ Choisis un compte');
-    
-    const accountObj = accounts.find((a) => a.name === exp.account);
-    if (!accountObj) return alert('❌ Compte introuvable');
-    
-    if (!project?.id) return alert('❌ Erreur : Projet introuvable.');
+const handlePayerDepense = async (expense) => {
+  // ✅ PROTECTION: Vérifier si déjà payé AVANT d'envoyer
+  if (expense.isPaid === true) {
+    alert('⚠️ Cette dépense est déjà payée');
+    return;
+  }
 
-    if (!exp.dbLineId) {
-      alert('❌ Cette ligne n\'a pas encore été enregistrée. Sauvegardez d\'abord le projet.');
+  // ✅ PROTECTION: Désactiver le bouton pendant le traitement
+  if (isProcessingPayment) {
+    console.warn('⏳ Paiement en cours, veuillez patienter...');
+    return;
+  }
+
+  setIsProcessingPayment(true); // État à ajouter
+
+  try {
+    const dbLineId = await getOrCreateDbLineId(expense);
+    if (!dbLineId) {
+      alert('❌ Impossible de trouver/créer la ligne de dépense');
+      setIsProcessingPayment(false);
       return;
     }
 
-    const alreadyPaid = window.confirm(
-      `💰 Payer ${formatCurrency(exp.amount)} depuis ${exp.account}.\n\n` +
-      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n\n` +
-      `- OUI (OK) → Je marque juste la ligne comme payée, sans créer de transaction.\n` +
-      `- NON (Annuler) → Je crée une transaction et débite le compte.`
+    const payload = {
+      paidexternally: true,
+      amount: expense.amount,
+      paiddate: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+      accountid: expense.account === 'Coffre' ? 5 : 
+                 expense.account === 'Mvola Pro' ? 6 : 
+                 expense.account === 'BOA' ? 7 : 5
+    };
+
+    console.log('📤 Envoi paiement:', { dbLineId, payload });
+
+    const response = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      payload
     );
 
-    const payload = alreadyPaid
-      ? {
-          paid_externally: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate 
-            ? new Date(exp.realDate).toISOString().split('T')[0] 
-            : new Date().toISOString().split('T')[0],
-        }
-      : {
-          create_transaction: true,
-          amount: parseFloat(exp.amount),
-          paid_date: exp.realDate 
-            ? new Date(exp.realDate).toISOString().split('T')[0] 
-            : new Date().toISOString().split('T')[0],
-          account_id: accountObj.id,
-        };
+    console.log('✅ Réponse:', response);
 
-    const result = await apiRequest(
-  `projects/${project.id}/expense-lines/${exp.dbLineId}/mark-paid`,
-  {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  }
-);
+    // ✅ IMPORTANT: Recharger le projet pour synchroniser
+    await loadProject();
+    
+    alert('✅ Dépense payée avec succès');
 
-// ✅ RECHARGER IMMÉDIATEMENT LE PROJET DEPUIS LE SERVEUR
-const updatedProject = await projectsService.getById(project.id);
-
-// ✅ Parser et charger les nouvelles données
-const parseList = (data) => {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  try { return JSON.parse(data); } catch { return []; }
-};
-
-const freshExpenses = parseList(updatedProject.expenses).map(e => ({
-  ...e,
-  id: e.id || uuidv4(),
-  date: e.date ? new Date(e.date) : new Date(),
-  amount: parseFloat(e.amount) || 0,
-}));
-
-const freshRevenues = parseList(updatedProject.revenues).map(r => ({
-  ...r,
-  id: r.id || uuidv4(),
-  date: r.date ? new Date(r.date) : new Date(),
-  amount: parseFloat(r.amount) || 0,
-}));
-
-setExpenses(freshExpenses);
-setRevenues(freshRevenues);
-
-// ✅ Rafraîchir le contexte global
-if (onProjectUpdated) {
-  await onProjectUpdated();
-}
-
-alert(result.message || '✅ Dépense marquée comme payée !');
-
-  } catch (error) {
-    // Gérer le cas "Déjà payée"
-    if (error?.message === 'Déjà payée') {
-      // Recharger quand même pour synchroniser l'affichage
-      try {
-        const updatedProject = await projectsService.getById(project.id);
-        const parseList = (data) => {
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          try { return JSON.parse(data); } catch { return []; }
-        };
-        const freshExpenses = parseList(updatedProject.expenses).map(e => ({
-          ...e,
-          id: e.id || uuidv4(),
-          date: e.date ? new Date(e.date) : new Date(),
-          amount: parseFloat(e.amount) || 0,
-        }));
-        setExpenses(freshExpenses);
-        alert('✅ Cette dépense est déjà payée dans la base de données');
-      } catch (reloadError) {
-        console.error('Erreur rechargement:', reloadError);
-      }
+  } catch (err) {
+    console.error('❌ Erreur paiement:', err);
+    
+    // ✅ GESTION D'ERREUR AMÉLIORÉE
+    if (err.message === 'Déjà payée') {
+      alert('⚠️ Cette dépense est déjà payée. Rechargement...');
+      await loadProject(); // Resynchroniser
+    } else if (err.message === 'Paramètres invalides') {
+      alert(`❌ Erreur: ${err.raw?.details || 'Paramètres invalides'}\n\nVérifiez la console pour plus de détails.`);
+      console.error('Détails:', err.raw);
     } else {
-      console.error('❌ Erreur handlePayerDepense:', error);
-      alert(error?.message || 'Erreur paiement');
+      alert('❌ Erreur: ' + err.message);
     }
+  } finally {
+    setIsProcessingPayment(false);
   }
 };
+
 
 // ✅ ENCAISSER REVENU - CORRIGÉ
 const handleEncaisser = async (rev, index) => {
@@ -1096,13 +1054,20 @@ const handleCancelPaymentRevenue = async (rev, index) => {
                   </select>
                   {!exp.isPaid ? (
                     <button
-                      onClick={() => handlePayerDepense(exp, idx)}
-                      disabled={!exp.account || !project?.id}
-                      className="col-span-1 bg-green-600 text-white p-2 rounded hover:bg-green-700 disabled:opacity-50 text-xs"
-                      title="Payer"
-                    >
-                      💳
-                    </button>
+  disabled={isProcessingPayment}
+  onClick={async () => {
+    await handlePayerDepense(exp.id); // ✅ 'exp' et non 'expense'
+  }}
+  className={`col-span-1 ${
+    isProcessingPayment 
+      ? 'bg-gray-400 cursor-wait' 
+      : 'bg-blue-600 hover:bg-blue-700'
+  } text-white p-2 rounded text-xs disabled:opacity-50`}
+  title="Marquer comme payé"
+>
+  {isProcessingPayment ? '⏳...' : '💳 Payer'}
+</button>
+
                   ) : (
                     <button
                       onClick={() => handleCancelPaymentExpense(exp, idx)}

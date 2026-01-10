@@ -81,6 +81,9 @@ export function CarriereModal({
   const [revenues, setRevenues] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+
   // LISTE DES SUBSTANCES COMMUNES
   const substancesList = [
     'Agate',
@@ -557,142 +560,69 @@ export function CarriereModal({
   ];
 
   // ==================== PAYER DÉPENSE ====================
-  const handlePayExpense = async (expenseId) => {
-    try {
-      const expense = expenses.find((e) => e.id === expenseId);
-      if (!expense || !expense.account) {
-        alert('Veuillez sélectionner un compte avant de payer');
-        return;
-      }
+  const handlePayerDepense = async (expense) => {
+  // ✅ PROTECTION: Vérifier si déjà payé AVANT d'envoyer
+  if (expense.isPaid === true) {
+    alert('⚠️ Cette dépense est déjà payée');
+    return;
+  }
 
-      console.log('💳 Paiement de la ligne:', expenseId, expense.description);
-      console.log('🔍 Expense state complet:', expense);
-      console.log(
-        '📋 ExpenseLines disponibles:',
-        project?.expenseLines?.map((line) => ({
-          id: line.id,
-          description: line.description,
-          projectedAmount: line.projectedamount || line.projected_amount,
-          actualAmount: line.actualamount || line.actual_amount,
-          isPaid: line.is_paid || line.isPaid,
-        }))
-      );
+  // ✅ PROTECTION: Désactiver le bouton pendant le traitement
+  if (isProcessingPayment) {
+    console.warn('⏳ Paiement en cours, veuillez patienter...');
+    return;
+  }
 
-      const alreadyPaid = window.confirm(
-        `Paiement de ${expense.description}\nMontant: ${expense.amount.toLocaleString()} Ar\nCompte: ${expense.account}\n\nCe paiement a-t-il DÉJÀ ÉTÉ EFFECTUÉ physiquement?\n\nCliquez OK si DÉJÀ PAYÉ (pas d'impact sur le Coffre)\nCliquez Annuler pour CRÉER UNE TRANSACTION (débite le Coffre)`
-      );
+  setIsProcessingPayment(true); // État à ajouter
 
-      // ✅ 1. TROUVER OU VALIDER LE dbLineId
-      let dbLineId = expense.dbLineId;
-
-      if (!dbLineId) {
-        console.log('⚠️ dbLineId absent, recherche manuelle...');
-        console.log('🔎 Recherche pour:', {
-          description: expense.description,
-          descriptionTrimmed: expense.description?.trim(),
-          amount: expense.amount,
-          type: typeof expense.amount,
-        });
-
-        const expenseLine = project?.expenseLines?.find((line) => {
-          const lineDesc = line.description?.trim();
-          const expDesc = expense.description?.trim();
-          const descMatch = lineDesc === expDesc;
-
-          const lineProjectedAmount = parseFloat(
-            line.projectedamount || line.projected_amount || line.projectedAmount || 0
-          );
-          const expenseAmount = parseFloat(expense.amount || 0);
-          const amountMatch = Math.abs(lineProjectedAmount - expenseAmount) < 0.01;
-
-          console.log(`🔍 Comparaison avec ligne DB ${line.id}:`, {
-            lineDesc,
-            expDesc,
-            descMatch,
-            lineAmount: lineProjectedAmount,
-            expenseAmount,
-            amountMatch,
-            MATCH: descMatch && amountMatch,
-          });
-
-          return descMatch && amountMatch;
-        });
-
-        if (!expenseLine) {
-          console.error('❌ Ligne expense DB introuvable');
-          console.error('📊 Recherche finale:', {
-            description: expense.description,
-            amount: expense.amount,
-            disponibles: project?.expenseLines?.map((line) => ({
-              id: line.id,
-              description: line.description,
-              projectedamount: line.projectedamount,
-              projected_amount: line.projected_amount,
-              allKeys: Object.keys(line),
-            })),
-          });
-          alert(
-            'Impossible de trouver la ligne de dépense dans la base de données.\n\nVeuillez vérifier la console pour les détails de debug.'
-          );
-          return;
-        }
-
-        dbLineId = expenseLine.id;
-        console.log('✅ Ligne trouvée via recherche manuelle, ID:', dbLineId);
-      } else {
-        console.log('✅ Utilisation du dbLineId stocké:', dbLineId);
-      }
-
-      // ✅ 2. VALIDER LE COMPTE
-      const accountObj = accounts.find((a) => a.name === expense.account);
-      if (!accountObj) {
-        alert(`Compte ${expense.account} introuvable`);
-        return;
-      }
-
-      // ✅ 3. CONSTRUIRE LE PAYLOAD
-      const payload = alreadyPaid
-        ? {
-            paidexternally: true,
-            amount: expense.amount,
-            paiddate: expense.date
-              ? new Date(expense.date).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
-            accountid: accountObj.id,
-          }
-        : {
-            create_transaction: true,
-            amount: expense.amount,
-            paiddate: expense.date
-              ? new Date(expense.date).toISOString().split('T')[0]
-              : new Date().toISOString().split('T')[0],
-            accountid: accountObj.id,
-          };
-
-      console.log('📤 Payload envoyé:', payload);
-
-      // ✅ 4. APPEL API (CSRF + JWT auto via le client api)
-      const result = await api.patch(
-        `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-        payload
-      );
-
-      console.log('✅ Réponse serveur:', result);
-
-      // ✅ 5. METTRE À JOUR L'ÉTAT LOCAL
-      setExpenses(
-        expenses.map((e) => (e.id === expenseId ? { ...e, isPaid: true, dbLineId } : e))
-      );
-
-      // ✅ 6. RAFRAÎCHIR LES DONNÉES
-      await loadProjectData();
-
-      alert(result.message || 'Dépense payée avec succès!');
-    } catch (error) {
-      console.error('❌ Erreur paiement:', error);
-      alert(`Erreur lors du paiement: ${error.message}`);
+  try {
+    const dbLineId = await getOrCreateDbLineId(expense);
+    if (!dbLineId) {
+      alert('❌ Impossible de trouver/créer la ligne de dépense');
+      setIsProcessingPayment(false);
+      return;
     }
-  };
+
+    const payload = {
+      paidexternally: true,
+      amount: expense.amount,
+      paiddate: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
+      accountid: expense.account === 'Coffre' ? 5 : 
+                 expense.account === 'Mvola Pro' ? 6 : 
+                 expense.account === 'BOA' ? 7 : 5
+    };
+
+    console.log('📤 Envoi paiement:', { dbLineId, payload });
+
+    const response = await api.patch(
+      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
+      payload
+    );
+
+    console.log('✅ Réponse:', response);
+
+    // ✅ IMPORTANT: Recharger le projet pour synchroniser
+    await loadProject();
+    
+    alert('✅ Dépense payée avec succès');
+
+  } catch (err) {
+    console.error('❌ Erreur paiement:', err);
+    
+    // ✅ GESTION D'ERREUR AMÉLIORÉE
+    if (err.message === 'Déjà payée') {
+      alert('⚠️ Cette dépense est déjà payée. Rechargement...');
+      await loadProject(); // Resynchroniser
+    } else if (err.message === 'Paramètres invalides') {
+      alert(`❌ Erreur: ${err.raw?.details || 'Paramètres invalides'}\n\nVérifiez la console pour plus de détails.`);
+      console.error('Détails:', err.raw);
+    } else {
+      alert('❌ Erreur: ' + err.message);
+    }
+  } finally {
+    setIsProcessingPayment(false);
+  }
+};
 
   // ==================== ENCAISSER REVENU (MODIFIÉ) ====================
   const handleEncaisser = async (rev, index) => {
@@ -1536,17 +1466,19 @@ export function CarriereModal({
                   {/* BOUTON PAYER/CANCEL */}
                   {!exp.isPaid ? (
                     <button
-                      disabled={isProcessing}
-                      onClick={async () => {
-                        setIsProcessing(true);
-                        await handlePayExpense(exp.id);
-                        setIsProcessing(false);
-                      }}
-                      className="col-span-1 bg-blue-600 text-white p-2 rounded hover:bg-blue-700 text-xs disabled:opacity-50"
-                      title="Marquer comme payé"
-                    >
-                      {isProcessing ? '...' : 'Payer'}
-                    </button>
+  disabled={isProcessingPayment}
+  onClick={async () => {
+    await handlePayerDepense(exp.id); // ✅ 'exp' et non 'expense'
+  }}
+  className={`col-span-1 ${
+    isProcessingPayment 
+      ? 'bg-gray-400 cursor-wait' 
+      : 'bg-blue-600 hover:bg-blue-700'
+  } text-white p-2 rounded text-xs disabled:opacity-50`}
+  title="Marquer comme payé"
+>
+  {isProcessingPayment ? '⏳...' : '💳 Payer'}
+</button>
                   ) : (
                     <button
                       onClick={() => handleCancelPayment(exp.id)}
