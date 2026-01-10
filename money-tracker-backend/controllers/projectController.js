@@ -1116,26 +1116,17 @@ exports.reactivateProject = async (req, res) => {
 // ============================================================================
 exports.getUnpaidExpenses = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        pel.id,
-        pel.project_id as "project_id",
-        pel.description,
-        pel.category,
-        pel.projected_amount as "projectedAmount",
-        pel.actual_amount as "actual_amount",
-        pel.transaction_date as "transaction_date",
-        pel.is_paid as "is_paid",
-        pel.created_at as "createdAt",
-        p.name as "projectName"
-      FROM project_expense_lines pel
-      JOIN projects p ON p.id = pel.project_id
-      WHERE pel.is_paid = false
-        AND p.status = 'active'
-      ORDER BY 
-        COALESCE(pel.transaction_date, '9999-12-31'::date) ASC,
-        pel.created_at ASC
-    `);
+    const result = await pool.query(
+  `SELECT pel.id, pel.project_id as projectId, pel.description, pel.category,
+          pel.projected_amount as projectedAmount, pel.actual_amount as actualAmount,
+          pel.transaction_date as transactionDate, pel.is_paid as isPaid,
+          pel.created_at as createdAt, p.name as projectName
+   FROM project_expense_lines pel
+   JOIN projects p ON p.id = pel.project_id
+   WHERE pel.is_paid = false
+   AND p.status = 'active'
+   ORDER BY COALESCE(pel.transaction_date, '9999-12-31'::date) ASC, pel.created_at ASC`
+);
     
     console.log('📊 Unpaid expenses récupérées:', result.rows.length);
     res.json(result.rows);
@@ -1818,12 +1809,12 @@ exports.getPendingRevenues = async (req, res) => {
     const result = await pool.query(`
       SELECT 
         prl.id,
-        prl.project_id as "project_id",
+        prl.project_id as "projectId",           -- ✅ CORRIGÉ
         prl.description,
         prl.category,
         prl.projected_amount as "projectedAmount",
-        prl.actual_amount as "actual_amount",
-        prl.transaction_date as "transaction_date",
+        prl.actual_amount as "actualAmount",      -- ✅ CORRIGÉ
+        prl.transaction_date as "transactionDate", -- ✅ CORRIGÉ
         prl.is_received as "isReceived",
         prl.created_at as "createdAt",
         p.name as "projectName"
@@ -1843,6 +1834,7 @@ exports.getPendingRevenues = async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: error.message });
   }
 };
+
 
 // ============================================================================
 // 14. GET - Lignes de dépenses pour un projet spécifique

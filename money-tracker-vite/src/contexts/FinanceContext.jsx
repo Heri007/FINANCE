@@ -408,20 +408,31 @@ const updateTransaction = useCallback(
   );
 
   const updateProject = useCallback(
-    async (id, data) => {
-      try {
-        const updated = await projectsService.update(id, data);
-        await refreshProjects();
-        setError(null);
-        return updated;
-      } catch (err) {
-        console.error('Erreur updateProject:', err);
-        setError({ message: 'Erreur lors de la mise à jour du projet', details: err });
-        throw err;
-      }
-    },
-    [refreshProjects]
-  );
+  async (id, data) => {
+    try {
+      console.log('🔄 updateProject: Mise à jour du projet', id);
+      const updated = await projectsService.update(id, data);
+      
+      console.log('✅ updateProject: Projet mis à jour, refresh en cours...');
+      
+      // ✅ Rafraîchir à la fois les projets ET les lignes
+      await Promise.all([
+        refreshProjects(),
+        refreshProjectLines(), // ✅ CRITIQUE
+      ]);
+      
+      console.log('✅ updateProject: Refresh terminé');
+      
+      setError(null);
+      return updated;
+    } catch (err) {
+      console.error('❌ Erreur updateProject:', err);
+      setError({ message: 'Erreur lors de la mise à jour du projet', details: err });
+      throw err;
+    }
+  },
+  [refreshProjects, refreshProjectLines] // ✅ DÉPENDANCES
+);
 
   const deleteProject = useCallback(
     async (id) => {

@@ -57,148 +57,166 @@ export function ProjectDetailsModal({
   }, [project]);
 
   // =======================================================================
-  // 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
-  // ======================================================================
-  const normalizeData = useMemo(() => {
-    console.log('🔄 Normalisation projet:', project.name);
+// 1. NORMALISATION DES DONNÉES (Le Cœur du Correctif)
+// =======================================================================
+const normalizeData = useMemo(() => {
+  console.log('🔄 Normalisation projet:', project.name);
 
-    // Fonction pour parser et nettoyer n'importe quelle liste
-    const cleanList = (jsonOrArray, type) => {
-      let list = [];
+  // Fonction pour parser et nettoyer n'importe quelle liste
+  const cleanList = (jsonOrArray, type) => {
+    let list = [];
 
-      if (Array.isArray(jsonOrArray)) {
-        list = jsonOrArray;
-      } else if (typeof jsonOrArray === 'string') {
-        try {
-          list = JSON.parse(jsonOrArray);
-        } catch (e) {
-          console.warn(`❌ Erreur parsing ${type}:`, e);
-          list = [];
-        }
+    if (Array.isArray(jsonOrArray)) {
+      list = jsonOrArray;
+    } else if (typeof jsonOrArray === 'string') {
+      try {
+        list = JSON.parse(jsonOrArray);
+      } catch (e) {
+        console.warn(`❌ Erreur parsing ${type}:`, e);
+        list = [];
       }
-
-      return list.map((item) => {
-        const isNormalizedLine = item.id && Number.isInteger(item.id);
-
-        return {
-          id: isNormalizedLine
-            ? item.id
-            : item.id || `temp-${Math.random().toString(36)}`,
-          description: item.description || item.category || 'Sans description',
-          category: item.category || 'Autre',
-          amount: parseFloat(
-            item.amount ||
-              item.projectedAmount ||
-              item.projectedamount ||
-              item.actualAmount ||
-              item.actualamount ||
-              item.montant ||
-              0
-          ),
-          isPaid: !!(item.isPaid || item.ispaid || item.isReceived || item.isreceived), // ✅ PRÉSERVER
-          date: item.date || item.transactionDate || item.transactiondate || new Date(),
-          plannedDate: item.plannedDate || null, // ✅ AJOUTER
-          realDate: item.realDate || null, // ✅ AJOUTER
-          account: item.account || 'Coffre', // ✅ PRÉSERVER
-          phase: item.phase,
-          isRecurring: !!item.isRecurring,
-        };
-      });
-    };
-
-    // ✅ CORRECTION: Prioriser le JSON (qui contient isPaid à jour) sur les lignes DB
-    let expenses = [];
-    let revenues = [];
-
-    // 1. D'ABORD charger depuis JSON (contient isPaid mis à jour)
-    if (project.expenses) {
-      expenses = cleanList(project.expenses, 'expenses');
-      console.log(
-        '📦 expenses depuis JSON:',
-        expenses.length,
-        '| Payées:',
-        expenses.filter((e) => e.isPaid).length
-      );
     }
 
-    // 2. ENSUITE fusionner avec expenseLines SI elles existent (mais JSON a priorité pour isPaid)
-    if (project.expenseLines && project.expenseLines.length > 0) {
-      const linesFromDB = cleanList(project.expenseLines, 'expenseLines');
-      console.log('📊 expenseLines depuis DB:', linesFromDB.length);
+    return list.map((item) => {
+      const isNormalizedLine = item.id && Number.isInteger(item.id);
 
-      // Fusionner: Mettre à jour les montants réels depuis DB, mais garder isPaid du JSON
-      linesFromDB.forEach((dbLine) => {
-        const jsonIndex = expenses.findIndex((jsonExp) => {
-          const descMatch =
-            jsonExp.description?.trim().toLowerCase() ===
-            dbLine.description?.trim().toLowerCase();
-          const amountMatch = Math.abs(jsonExp.amount - dbLine.amount) < 0.01;
-          return descMatch && amountMatch;
-        });
-
-        if (jsonIndex >= 0) {
-          // Mettre à jour avec les données DB mais GARDER isPaid du JSON
-          expenses[jsonIndex] = {
-            ...expenses[jsonIndex],
-            id: dbLine.id, // Utiliser l'ID DB
-            actualAmount: dbLine.amount,
-            // isPaid reste celui du JSON! ✅
-          };
-        } else {
-          // Ligne dans DB mais pas dans JSON (rare)
-          console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
-          expenses.push(dbLine);
-        }
-      });
-    }
-
-    // Même logique pour revenues
-    if (project.revenues) {
-      revenues = cleanList(project.revenues, 'revenues');
-      console.log(
-        '📦 revenues depuis JSON:',
-        revenues.length,
-        '| Reçus:',
-        revenues.filter((r) => r.isPaid).length
-      );
-    }
-
-    if (project.revenueLines && project.revenueLines.length > 0) {
-      const linesFromDB = cleanList(project.revenueLines, 'revenueLines');
-      console.log('📊 revenueLines depuis DB:', linesFromDB.length);
-
-      linesFromDB.forEach((dbLine) => {
-        const jsonIndex = revenues.findIndex((jsonRev) => {
-          const descMatch =
-            jsonRev.description?.trim().toLowerCase() ===
-            dbLine.description?.trim().toLowerCase();
-          const amountMatch = Math.abs(jsonRev.amount - dbLine.amount) < 0.01;
-          return descMatch && amountMatch;
-        });
-
-        if (jsonIndex >= 0) {
-          revenues[jsonIndex] = {
-            ...revenues[jsonIndex],
-            id: dbLine.id,
-            actualAmount: dbLine.amount,
-            // isPaid reste celui du JSON! ✅
-          };
-        } else {
-          console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
-          revenues.push(dbLine);
-        }
-      });
-    }
-
-    console.log('✅ Fusionné:', {
-      expenses: expenses.length,
-      expensesPaid: expenses.filter((e) => e.isPaid).length,
-      revenues: revenues.length,
-      revenuesPaid: revenues.filter((r) => r.isPaid).length,
+      return {
+        id: isNormalizedLine
+          ? item.id
+          : item.id || `temp-${Math.random().toString(36)}`,
+        description: item.description || item.category || 'Sans description',
+        category: item.category || 'Autre',
+        amount: parseFloat(
+          item.amount ||
+            item.projectedAmount ||
+            item.projectedamount ||
+            item.projected_amount || // ✅ AJOUTÉ
+            item.actualAmount ||
+            item.actualamount ||
+            item.actual_amount || // ✅ AJOUTÉ
+            item.montant ||
+            0
+        ),
+        // ✅ CORRECTION : Supporter à la fois camelCase et snake_case
+        isPaid: !!(
+          item.isPaid || 
+          item.ispaid || 
+          item.is_paid || // ✅ AJOUTÉ depuis DB
+          item.isReceived || 
+          item.isreceived ||
+          item.is_received // ✅ AJOUTÉ depuis DB
+        ),
+        date: item.date || item.transactionDate || item.transactiondate || item.transaction_date || new Date(),
+        plannedDate: item.plannedDate || item.planned_date || null,
+        realDate: item.realDate || item.real_date || item.transactionDate || item.transaction_date || null, // ✅ AMÉLIORÉ
+        account: item.account || 'Coffre',
+        phase: item.phase,
+        isRecurring: !!item.isRecurring,
+        dbLineId: item.id && Number.isInteger(item.id) ? item.id : item.dbLineId || null, // ✅ AJOUTÉ
+      };
     });
+  };
 
-    return { expenses, revenues };
-  }, [project]);
+  // ✅ CORRECTION: Prioriser les données DB (is_paid) sur le JSON
+  let expenses = [];
+  let revenues = [];
+
+  // 1. Charger depuis JSON comme base
+  if (project.expenses) {
+    expenses = cleanList(project.expenses, 'expenses');
+    console.log(
+      '📦 expenses depuis JSON:',
+      expenses.length,
+      '| Payées (JSON):',
+      expenses.filter((e) => e.isPaid).length
+    );
+  }
+
+  // 2. ✅ FUSIONNER avec expenseLines en PRIORITÉ pour isPaid depuis DB
+  if (project.expenseLines && project.expenseLines.length > 0) {
+    const linesFromDB = cleanList(project.expenseLines, 'expenseLines');
+    console.log('📊 expenseLines depuis DB:', linesFromDB.length);
+
+    // Fusionner: PRENDRE is_paid DEPUIS LA DB
+    linesFromDB.forEach((dbLine) => {
+      const jsonIndex = expenses.findIndex((jsonExp) => {
+        const descMatch =
+          jsonExp.description?.trim().toLowerCase() ===
+          dbLine.description?.trim().toLowerCase();
+        const amountMatch = Math.abs(jsonExp.amount - dbLine.amount) < 0.01;
+        return descMatch && amountMatch;
+      });
+
+      if (jsonIndex >= 0) {
+        // ✅ CORRECTION : Prioriser is_paid depuis DB
+        expenses[jsonIndex] = {
+          ...expenses[jsonIndex],
+          id: dbLine.id, // ID de la DB
+          dbLineId: dbLine.id, // ✅ AJOUTÉ
+          actualAmount: dbLine.amount,
+          isPaid: !!(dbLine.isPaid || dbLine.ispaid || dbLine.is_paid), // ✅ DEPUIS DB
+          realDate: dbLine.realDate || dbLine.transaction_date || expenses[jsonIndex].realDate, // ✅ DEPUIS DB
+          account: dbLine.account || expenses[jsonIndex].account, // ✅ DEPUIS DB si présent
+        };
+      } else {
+        // Ligne dans DB mais pas dans JSON (rare)
+        console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
+        expenses.push(dbLine);
+      }
+    });
+  }
+
+  // Même logique pour revenues
+  if (project.revenues) {
+    revenues = cleanList(project.revenues, 'revenues');
+    console.log(
+      '📦 revenues depuis JSON:',
+      revenues.length,
+      '| Reçus (JSON):',
+      revenues.filter((r) => r.isPaid).length
+    );
+  }
+
+  if (project.revenueLines && project.revenueLines.length > 0) {
+    const linesFromDB = cleanList(project.revenueLines, 'revenueLines');
+    console.log('📊 revenueLines depuis DB:', linesFromDB.length);
+
+    linesFromDB.forEach((dbLine) => {
+      const jsonIndex = revenues.findIndex((jsonRev) => {
+        const descMatch =
+          jsonRev.description?.trim().toLowerCase() ===
+          dbLine.description?.trim().toLowerCase();
+        const amountMatch = Math.abs(jsonRev.amount - dbLine.amount) < 0.01;
+        return descMatch && amountMatch;
+      });
+
+      if (jsonIndex >= 0) {
+        // ✅ CORRECTION : Prioriser is_paid depuis DB
+        revenues[jsonIndex] = {
+          ...revenues[jsonIndex],
+          id: dbLine.id,
+          dbLineId: dbLine.id, // ✅ AJOUTÉ
+          actualAmount: dbLine.amount,
+          isPaid: !!(dbLine.isPaid || dbLine.ispaid || dbLine.is_paid || dbLine.isReceived || dbLine.is_received), // ✅ DEPUIS DB
+          realDate: dbLine.realDate || dbLine.transaction_date || revenues[jsonIndex].realDate, // ✅ DEPUIS DB
+          account: dbLine.account || revenues[jsonIndex].account, // ✅ DEPUIS DB si présent
+        };
+      } else {
+        console.log('➕ Ajout ligne DB absente du JSON:', dbLine.description);
+        revenues.push(dbLine);
+      }
+    });
+  }
+
+  console.log('✅ Fusionné (après DB):', {
+    expenses: expenses.length,
+    expensesPaid: expenses.filter((e) => e.isPaid).length,
+    revenues: revenues.length,
+    revenuesPaid: revenues.filter((r) => r.isPaid).length,
+  });
+
+  return { expenses, revenues };
+}, [project]);
 
   const { expenses, revenues } = normalizeData;
 
