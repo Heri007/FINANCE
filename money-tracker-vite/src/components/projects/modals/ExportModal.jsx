@@ -1204,10 +1204,10 @@ const handleSave = async () => {
     };
 
     if (project?.id) {
-      await projectsService.updateProject(project.id, payload);
-    } else {
-      await projectsService.createProject(payload);
-    }
+  await projectsService.update(project.id, payload);  // ✅ CORRECT
+} else {
+  await projectsService.create(payload);  // ✅ CORRECT
+}
 
     // 🛡️ CHECK 2: Après sauvegarde (async)
     if (!isMountedRef.current) {
@@ -1519,11 +1519,10 @@ const handleSave = async () => {
         (line) => String(line.id) === String(exp.dbLineId)
       );
       const isPaid = !!(
-  expenseLine?.is_paid ||     // PostgreSQL snake_case
-  expenseLine?.ispaid ||       // PostgreSQL lowercase
-  expenseLine?.isPaid ||       // API camelCase mappé
-  exp.is_paid ||               // JSON snake_case
-  exp.isPaid                   // JSON camelCase
+  expenseLine?.is_paid ||  // ✅ Vrai nom retourné par l'API
+  expenseLine?.ispaid ||   // Fallback au cas où
+  exp.ispaid ||           // Depuis le JSON
+  exp.isPaid              // Depuis le JSON camelCase
 );
 
       return (
@@ -1656,7 +1655,12 @@ const handleSave = async () => {
   <div className="space-y-2 max-h-96 overflow-y-auto">
     {revenues.map((rev, idx) => {
       const revenueLine = project?.revenueLines?.find(line => String(line.id) === String(rev.dbLineId));
-      const isPaid = revenueLine?.is_received || false;
+      const isPaid = !!(
+  revenueLine?.is_received ||  // ✅ Vrai nom retourné par l'API
+  revenueLine?.isreceived ||   // Fallback
+  rev.isreceived ||           // Depuis le JSON
+  rev.isReceived              // Depuis le JSON camelCase
+);
 
       return (
         <div key={rev.id} className={`bg-white p-3 rounded-lg border-2 grid grid-cols-14 gap-2 items-center ${isPaid ? 'border-green-500 bg-green-50' : 'border-gray-200'}`}>

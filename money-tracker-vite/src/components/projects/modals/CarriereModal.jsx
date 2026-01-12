@@ -733,89 +733,213 @@ const loadProject = async () => {
     { value: 'Autre', label: 'Autre' },
   ];
 
-  // ==================== PAYER DÉPENSE ====================
+// PAYER DÉPENSE - VERSION CORRIGÉE AVEC CHOIX OK/ANNULER
 const handlePayerDepense = async (expense) => {
-  // 🛡️ CHECK 1: Au début
+  // CHECK 1: Au début
   if (!isMountedRef.current) return;
   
   if (expense.isPaid === true) {
-    alert('⚠️ Cette dépense est déjà payée');
+    alert('Cette dépense est déjà payée');
     return;
   }
-
+  
   if (isProcessingPayment) {
-    console.warn('⏳ Paiement en cours...');
+    console.warn('Paiement en cours...');
     return;
   }
-
+  
   setIsProcessingPayment(true);
   
   try {
-    const dbLineId = await getOrCreateDbLineId(expense);
-    
-    // 🛡️ CHECK 2: Après fonction async helper
-    if (!isMountedRef.current) {
-      setIsProcessingPayment(false);
+    // Vérifier le compte
+    if (!expense.account) {
+      alert('Veuillez choisir un compte');
+      if (isMountedRef.current) setIsProcessingPayment(false);
       return;
     }
+    
+    const accountObj = accounts.find(a => a.name === expense.account);
+    if (!accountObj) {
+      alert('Compte introuvable');
+      if (isMountedRef.current) setIsProcessingPayment(false);
+      return;
+    }
+    
+    // Trouver ou créer dbLineId
+    let dbLineId = expense.dbLineId;
     
     if (!dbLineId) {
-      alert('❌ Impossible de trouver/créer la ligne');
-      if (isMountedRef.current) { // ✅ AJOUT
+      console.log('Recherche dbLineId pour:', { description: expense.description, amount: expense.amount });
+      const freshProject = await projectsService.getById(project.id);
+      
+      // CHECK 2: Après appel async
+      if (!isMountedRef.current) {
         setIsProcessingPayment(false);
+        return;
       }
-      return;
+      
+      let expenseLines = freshProject?.expenseLines || freshProject?.expenselines;
+      if (typeof expenseLines === 'string') {
+        try {
+          expenseLines = JSON.parse(expenseLines);
+        } catch (e) {
+          expenseLines = [];
+        }
+      }
+      
+      if (!Array.isArray(expenseLines) || expenseLines.length === 0) {
+        console.error('Aucune ligne expense trouvée');
+        alert('Impossible de trouver les lignes de dépenses.');
+        if (isMountedRef.current) setIsProcessingPayment(false);
+        return;
+      }
+      
+      const expenseAmount = parseFloat(expense.amount) || 0;
+      const expenseLine = expenseLines.find(line => {
+        const lineDesc = (line.description || '').trim().toLowerCase();
+        const expDesc = (expense.description || '').trim().toLowerCase();
+        if (lineDesc !== expDesc) return false;
+        
+        const lineAmount = parseFloat(line.projectedamount || line.projectedamount || line.amount || 0);
+        return Math.abs(lineAmount - expenseAmount) < 0.01;
+      });
+      
+      if (!expenseLine) {
+        const createConfirm = confirm(`La ligne "${expense.description}" n'existe pas. Créer maintenant ?\n\n${formatCurrency(expense.amount)}`);
+        if (!createConfirm) {
+          if (isMountedRef.current) setIsProcessingPayment(false);
+          return;
+        }
+        
+        // CHECK 3: Avant création
+        if (!isMountedRef.current) {
+          setIsProcessingPayment(false);
+          return;
+        }
+        
+        try {
+          const newLine = await api.post(`projects/${project.id}/expense-lines`, {
+            description: expense.description,
+            category: expense.category || 'Projet - Charge',
+            projectedamount: parseFloat(expense.amount),
+            actualamount: 0,
+            transactiondate: (expense.date || new Date()).toISOString(),
+            ispaid: false,
+          });
+          dbLineId = newLine.id;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (createError) {
+          if (isMountedRef.current) {
+            alert(`Impossible de créer la ligne: ${createError.message}`);
+            setIsProcessingPayment(false);
+          }
+          return;
+        }
+      } else {
+        dbLineId = expenseLine.id;
+      }
     }
-
-    const payload = {
-      paid_externally: true,
+    
+    // LOGIQUE INVERSE COMME DANS EXPORTMODAL
+    // OK = Déjà payée physiquement (paidexternally: true, PAS de transaction)
+    // Annuler = Créer transaction et débiter le compte
+    const alreadyPaid = window.confirm(
+      `Payer ${formatCurrency(expense.amount)} depuis ${expense.account}.\n\n` +
+      `Cette dépense a-t-elle DÉJÀ été payée physiquement ?\n\n` +
+      `- OUI (OK): Marquer comme payée, SANS créer de transaction.\n` +
+      `- NON (Annuler): Créer une transaction et débiter le compte.`
+    );
+    
+    const payload = alreadyPaid
+  ? {
+      paid_externally: true,        // ← snake_case!
       amount: expense.amount,
-      paid_date: expense.date?.toISOString?.()?.split('T')[0] || new Date().toISOString().split('T')[0],
-      account_id: expense.account === 'Coffre' ? 5 : 
-                  expense.account === 'Mvola Pro' ? 6 : 
-                  expense.account === 'BOA' ? 7 : 5
+      paid_date: expense.date?.toISOString()?.split('T') || new Date().toISOString().split('T'), // ← snake_case!
+      account_id: accountObj.id,    // ← snake_case!
+    }
+  : {
+      create_transaction: true,     // ← snake_case!
+      amount: expense.amount,
+      paid_date: expense.date?.toISOString()?.split('T') || new Date().toISOString().split('T'), // ← snake_case!
+      account_id: accountObj.id,    // ← snake_case!
     };
 
-    console.log('📤 Envoi paiement:', { dbLineId, payload });
-
-    const response = await api.patch(
-      `/projects/${project.id}/expense-lines/${dbLineId}/mark-paid`,
-      payload
-    );
-
-    console.log('✅ Réponse:', response);
-
-    // 🛡️ CHECK 3: Après appel API
-    if (!isMountedRef.current) return;
-
-    await loadProject();
+console.log('📤 Payload:', payload);
     
-    // 🛡️ CHECK 4: Après loadProject
+    console.log('📤 Payload:', payload);
+    await api.patch(`projects/${project.id}/expense-lines/${dbLineId}/mark-paid`, payload);
+    
+    // CHECK 4: Après appel API
     if (!isMountedRef.current) return;
     
-    alert('✅ Dépense payée avec succès');
+    // RECHARGER le projet avec les expenseLines
+const freshProject = await projectsService.getById(project.id);
 
-  } catch (err) {
-    // 🛡️ CHECK 5: Avant traitement d'erreur
+// CHECK 5: Après rechargement
+if (!isMountedRef.current) return;
+
+const parseList = (data) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  try { return JSON.parse(data); } catch { return []; }
+};
+
+// ✅ FUSION avec expenseLines pour synchroniser isPaid
+const freshExpenses = parseList(freshProject.expenses).map(exp => {
+  // Chercher la ligne DB correspondante
+  const expenseLine = freshProject.expenseLines?.find(line => 
+    String(line.id) === String(exp.dbLineId) ||
+    (line.description?.trim().toLowerCase() === exp.description?.trim().toLowerCase() &&
+     Math.abs(parseFloat(line.projectedamount || 0) - parseFloat(exp.amount || 0)) < 0.01)
+  );
+  
+  // Synchroniser isPaid depuis la DB
+  return {
+    ...exp,
+    id: exp.id || uuidv4(),
+    date: exp.date ? new Date(exp.date) : new Date(),
+    amount: parseFloat(exp.amount) || 0,
+    dbLineId: exp.dbLineId || expenseLine?.id,  // ✅ S'assurer que dbLineId est présent
+    isPaid: expenseLine ? !!expenseLine.ispaid : exp.isPaid,  // ✅ SYNC depuis DB
+  };
+});
+
+setExpenses(freshExpenses);
+
+// ✅ SAUVEGARDER le JSON mis à jour dans la base
+await projectsService.update(project.id, {
+  expenses: JSON.stringify(freshExpenses.map(e => ({
+    id: e.id,
+    description: e.description,
+    amount: e.amount,
+    category: e.category,
+    date: e.date,
+    account: e.account,
+    isPaid: e.isPaid,  // ✅ Le nouveau statut sera sauvegardé
+    dbLineId: e.dbLineId,
+    isRecurring: e.isRecurring,
+    plannedDate: e.plannedDate,
+  })))
+});
+
+    // CHECK 6: Avant callback
     if (!isMountedRef.current) return;
     
-    console.error('❌ Erreur paiement:', err);
-    
-    if (err.message === 'Déjà payée') {
-      alert('⚠️ Cette dépense est déjà payée. Rechargement...');
-      if (isMountedRef.current) { // ✅ AJOUT
-        await loadProject();
-      }
-    } else if (err.message === 'Paramètres invalides') {
-      alert(`❌ Erreur: ${err.raw?.details || 'Paramètres invalides'}\n\nVérifiez la console.`);
-      console.error('Détails:', err.raw);
-    } else {
-      alert('❌ Erreur: ' + err.message);
+    if (onProjectUpdated) {
+      await onProjectUpdated(project.id);
     }
     
+    alert('Dépense marquée comme payée !');
+    
+  } catch (err) {
+    // CHECK 7: Avant erreur
+    if (!isMountedRef.current) return;
+    
+    console.error('❌ Erreur:', err);
+    alert(`Erreur: ${err.message || 'Erreur inconnue'}`);
   } finally {
-    // 🛡️ CHECK 6: Dans finally
-    if (isMountedRef.current) { // ✅ AJOUT
+    // CHECK 8: Dans finally
+    if (isMountedRef.current) {
       setIsProcessingPayment(false);
     }
   }
@@ -1287,7 +1411,7 @@ const saveProjectState = async (currentExpenses, currentRevenues) => {
     console.log('📤 Payload expenses:', JSON.parse(payload.expenses).map(e => ({ desc: e.description, dbLineId: e.dbLineId })));
 
     if (project?.id) {
-      await projectsService.updateProject(project.id, payload);
+      await projectsService.update(project.id, payload);
     } else {
       await projectsService.createProject(payload);
     }
@@ -1748,9 +1872,32 @@ const saveProjectState = async (currentExpenses, currentRevenues) => {
               <div className="col-span-1">Action</div>
               <div className="col-span-1">✓</div>
             </div>
-
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {expenses.map((exp, idx) => (
+
+  {expenses.map((exp, idx) => {
+    // ✅ Chercher la ligne DB
+    let expenseLine = project?.expenseLines?.find(
+      line => String(line.id) === String(exp.dbLineId)
+    );
+    
+    // Fallback : chercher par description + montant
+    if (!expenseLine && exp.description && exp.amount) {
+      expenseLine = project?.expenseLines?.find(line => {
+        const descMatch = line.description?.trim().toLowerCase() === exp.description?.trim().toLowerCase();
+        const amountMatch = Math.abs(parseFloat(line.projectedAmount || line.projectedamount || 0) - parseFloat(exp.amount || 0)) < 0.01;
+        return descMatch && amountMatch;
+      });
+    }
+  
+    // ✅ Détecter isPaid
+    const isPaid = !!(
+      expenseLine?.is_paid ||
+      expenseLine?.ispaid ||
+      exp.isPaid ||
+      exp.ispaid
+    );
+
+       return (
                 <div
                   key={exp.id}
                   className={`bg-white p-3 rounded-lg border-2 grid gap-2 items-center ${
@@ -1830,13 +1977,13 @@ const saveProjectState = async (currentExpenses, currentRevenues) => {
                   </select>
 
                   {/* BOUTON PAYER/CANCEL */}
-                  {!exp.isPaid ? (
+                  {!isPaid ? (
                     <button
   disabled={isProcessingPayment}
   onClick={async () => {
-    await handlePayerDepense(exp.id); // ✅ 'exp' et non 'expense'
+    await handlePayerDepense(exp);
   }}
-  className={`col-span-1 ${
+  className={`col-span-1 ${   
     isProcessingPayment 
       ? 'bg-gray-400 cursor-wait' 
       : 'bg-blue-600 hover:bg-blue-700'
@@ -1847,7 +1994,7 @@ const saveProjectState = async (currentExpenses, currentRevenues) => {
 </button>
                   ) : (
                     <button
-                      onClick={() => handleCancelPayment(exp.id)}
+                      onClick={() => handleCancelPayment(exp)}
                       className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
                       title="Annuler paiement"
                     >
@@ -1864,7 +2011,9 @@ const saveProjectState = async (currentExpenses, currentRevenues) => {
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-              ))}
+                
+              );
+            })}
 
               {expenses.length === 0 && (
                 <p className="text-center text-gray-500 py-8">
