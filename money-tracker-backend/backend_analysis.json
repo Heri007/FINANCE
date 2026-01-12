@@ -1,0 +1,513 @@
+{
+  "files": [
+    {
+      "path": "server.js",
+      "requires": [
+        "const express = require('express');",
+        "const cors = require('cors');",
+        "const pool = require('./config/database');",
+        "const { loadAccountIds } = require('./config/accounts');",
+        "const authRoutes = require('./routes/auth');",
+        "const accountsRoutes = require('./routes/accounts');",
+        "const transactionsRoutes = require('./routes/transactions');",
+        "const projectRoutes = require('./routes/projects');",
+        "const operatorRoutes = require('./routes/operator');",
+        "const contentRoutes = require('./routes/content');",
+        "const backupRoutes = require('./routes/backup');",
+        "const receivablesRoutes = require('./routes/receivables');",
+        "const errorHandler = require('./middleware/errorHandler');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": true,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "middleware/validators.js",
+      "requires": [
+        "const { body, validationResult } = require('express-validator');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "middleware/auth.js",
+      "requires": [
+        "const jwt = require('jsonwebtoken');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = authenticateToken;",
+        "module.exports.authenticateToken = authenticateToken;"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "middleware/errorHandler.js",
+      "requires": [],
+      "imports": [],
+      "exports": [
+        "module.exports = errorHandler;"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "config/database.js",
+      "requires": [
+        "const { Pool } = require('pg');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = pool;"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "config/resetDatabase.js",
+      "requires": [
+        "const pool = require('./database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "config/logger.js",
+      "requires": [
+        "const winston = require('winston');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = logger;"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "config/accounts.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = {"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "config/init-db.js",
+      "requires": [
+        "const pool = require('./database');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = initializeDatabase;"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/recategorize.js",
+      "requires": [
+        "const pool = require('../config/database.js');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = { recategorizeTransactions, findCategory };"
+      ],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/diagnostic-csv.js",
+      "requires": [
+        "const fs = require('fs');",
+        "const csv = require('csv-parser');",
+        "const path = require('path');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/export-plg-delah.js",
+      "requires": [
+        "const pool = require('../config/database'); // ton pool Postgres"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/test-cors.js",
+      "requires": [
+        "const axios = require('axios');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": true
+    },
+    {
+      "path": "scripts/test-csv-import.js",
+      "requires": [
+        "const fs = require('fs');",
+        "const csv = require('csv-parser');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/show-account-names.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/smart-csv-import.js",
+      "requires": [
+        "const pool = require('../config/database');",
+        "const fs = require('fs');",
+        "const csv = require('csv-parser');",
+        "const path = require('path');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/test-restore.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/verify-setup.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/show-accounts-details.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/sync-from-csv.js",
+      "requires": [
+        "const pool = require('../config/database');",
+        "const fs = require('fs');",
+        "const csv = require('csv-parser');",
+        "const path = require('path');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/import-plg-flpt-from-csv.js",
+      "requires": [],
+      "imports": [
+        "import fs from 'fs';",
+        "import path from 'path';",
+        "import { parse } from 'csv-parse';",
+        "import { fileURLToPath } from 'url';"
+      ],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/import-csv-complete.js",
+      "requires": [
+        "const pool = require('../config/database');",
+        "const fs = require('fs');",
+        "const csv = require('csv-parser');",
+        "const path = require('path');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "scripts/analyze-problem.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "controllers/accountController.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "controllers/projectController.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "controllers/authController.js",
+      "requires": [
+        "const bcrypt = require('bcryptjs');",
+        "const jwt = require('jsonwebtoken');",
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "controllers/transactionController.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "controllers/importController.js",
+      "requires": [
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [],
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/transactions.js",
+      "requires": [
+        "const express = require('express');",
+        "const authMiddleware = require('../middleware/auth');",
+        "const transactionController = require('../controllers/transactionController');",
+        "const importController = require('../controllers/importController');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/operator.js",
+      "requires": [
+        "const express = require('express');",
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/backup.js",
+      "requires": [
+        "const express = require('express');",
+        "const fs = require('fs').promises;",
+        "const path = require('path');",
+        "const pool = require('../config/database');",
+        "const accountController = require('../controllers/accountController');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/auth.js",
+      "requires": [
+        "const express = require('express');",
+        "const authController = require('../controllers/authController');",
+        "const authMiddleware = require('../middleware/auth');",
+        "const { RateLimiterMemory } = require('rate-limiter-flexible');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/accounts.js",
+      "requires": [
+        "const express = require('express');",
+        "const accountController = require('../controllers/accountController');",
+        "const authMiddleware = require('../middleware/auth');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/projects.js",
+      "requires": [
+        "const express = require('express');",
+        "const authMiddleware = require('../middleware/auth');",
+        "const projectController = require('../controllers/projectController');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/receivables.js",
+      "requires": [
+        "const express = require('express');",
+        "const pool = require('../config/database');",
+        "const authMiddleware = require('../middleware/auth');",
+        "const { getAccountIds } = require('../config/accounts');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "uses_fetch_like": false
+    },
+    {
+      "path": "routes/content.js",
+      "requires": [
+        "const express = require('express');",
+        "const pool = require('../config/database');"
+      ],
+      "imports": [],
+      "exports": [
+        "module.exports = router;"
+      ],
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "uses_fetch_like": false
+    }
+  ]
+}

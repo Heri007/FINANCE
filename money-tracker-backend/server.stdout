@@ -1,0 +1,33 @@
+nohup: ignoring input
+🔍 POOL IMPORT: true object
+info: ✅ Serveur démarré sur http://localhost:5002 {"timestamp":"2025-12-13T03:32:45.025Z"}
+✅ Connecté à PostgreSQL
+info: ✅ Connecté à PostgreSQL {"timestamp":"2025-12-13T03:32:45.104Z"}
+⚠️ AVOIR / COFFRE non trouvés en base, vérifiez vos comptes initiaux.
+✅ ACCOUNT IDS chargés: { AVOIR_ACCOUNT_ID: null, COFFRE_ACCOUNT_ID: null }
+info: ✅ IDs chargés: AVOIR=null, COFFRE=null {"timestamp":"2025-12-13T03:32:45.112Z"}
+info: GET / {"timestamp":"2025-12-13T03:32:45.464Z"}
+info: GET /api/auth/check-pin {"timestamp":"2025-12-13T03:32:45.475Z"}
+🔍 Vérification existence PIN...
+✅ PIN existe: false
+info: GET /api/accounts {"timestamp":"2025-12-13T03:32:45.485Z"}
+info: GET / {"timestamp":"2025-12-13T03:32:51.437Z"}
+info: GET /favicon.ico {"timestamp":"2025-12-13T03:32:52.139Z"}
+info: POST /api/auth/setup-pin {"timestamp":"2025-12-13T03:33:59.722Z"}
+📝 Création du PIN...
+✅ Connecté à PostgreSQL
+🔐 PIN hashé
+✅ PIN créé avec succès + token généré
+info: GET /api/accounts {"timestamp":"2025-12-13T03:33:59.868Z"}
+info: POST /api/auth/verify-pin {"timestamp":"2025-12-13T03:35:13.589Z"}
+🔐 Rate limit key: ::1
+🔐 Vérification du PIN...
+✅ Connecté à PostgreSQL
+❌ PIN incorrect
+info: POST /api/auth/verify-pin {"timestamp":"2025-12-13T03:36:57.101Z"}
+🔐 Rate limit key: ::1
+🔐 Vérification du PIN...
+✅ Connecté à PostgreSQL
+✅ PIN correct, création du token...
+✅ Token créé: eyJhbGciOiJIUzI1NiIs...
+info: GET /api/accounts {"timestamp":"2025-12-13T03:36:57.208Z"}

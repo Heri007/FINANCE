@@ -1,0 +1,406 @@
+{
+  "by_route_file": [
+    {
+      "path": "controllers/authController.js",
+      "is_route": true,
+      "is_controller": true,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "config/accounts.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = {"
+      ]
+    },
+    {
+      "path": "middleware/auth.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = authenticateToken;",
+        "module.exports.authenticateToken = authenticateToken;"
+      ]
+    },
+    {
+      "path": "routes/accounts.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/auth.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/backup.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/content.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/operator.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/projects.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "categories": [
+        "projets"
+      ],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/receivables.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "routes/transactions.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": true,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = router;"
+      ]
+    },
+    {
+      "path": "scripts/show-accounts-details.js",
+      "is_route": true,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "controllers/accountController.js",
+      "is_route": false,
+      "is_controller": true,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "controllers/importController.js",
+      "is_route": false,
+      "is_controller": true,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "controllers/projectController.js",
+      "is_route": false,
+      "is_controller": true,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "controllers/transactionController.js",
+      "is_route": false,
+      "is_controller": true,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "config/database.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = pool;"
+      ]
+    },
+    {
+      "path": "config/init-db.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = initializeDatabase;"
+      ]
+    },
+    {
+      "path": "config/logger.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = logger;"
+      ]
+    },
+    {
+      "path": "config/resetDatabase.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "middleware/errorHandler.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": [
+        "module.exports = errorHandler;"
+      ]
+    },
+    {
+      "path": "middleware/validators.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/analyze-problem.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/diagnostic-csv.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/export-plg-delah.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/import-csv-complete.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/import-plg-flpt-from-csv.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/recategorize.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": [
+        "module.exports = { recategorizeTransactions, findCategory };"
+      ]
+    },
+    {
+      "path": "scripts/show-account-names.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/smart-csv-import.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/sync-from-csv.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/test-cors.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/test-csv-import.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": false,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/test-restore.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "scripts/verify-setup.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": false,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [],
+      "exports": []
+    },
+    {
+      "path": "server.js",
+      "is_route": false,
+      "is_controller": false,
+      "uses_express": true,
+      "uses_router": false,
+      "uses_db": true,
+      "categories": [
+        "projets",
+        "avoirs"
+      ],
+      "exports": []
+    }
+  ],
+  "summary": {
+    "total_files": 36,
+    "routes_files": 12,
+    "controllers_files": 5,
+    "db_users": 24
+  }
+}

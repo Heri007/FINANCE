@@ -1,0 +1,1477 @@
+// OperatorDashboard.jsx - VERSION COMPLÃˆTE CORRIGÃ‰E
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Settings, CheckSquare, Clock, Target, FileText, Plus, Edit, Trash2, Play, Pause, AlertCircle, TrendingUp, Calendar } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, differenceInDays, parseISO, isWithinInterval, isSameDay, addDays } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import operatorService from './services/operatorService';
+import { CopyButton } from './components/common/CopyButton';
+import { api } from './services/api'; // adapte le chemin
+import GanttTimelineModal from './components/operator/GanttTimelineModal';
+
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(amount || 0) + ' Ar';
+};
+
+export function OperatorDashboard({ 
+  onClose, 
+  projects = [], 
+  transactions = [], 
+  accounts = [],
+  onProjectUpdated, // ✅ Ajouter pour rafraîchir les projets
+  refreshProjects   // ✅ Ajouter pour rafraîchir les projets
+}) {
+
+  const [sops, setSops] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showSOPModal, setShowSOPModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedSOP, setSelectedSOP] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
+ const [showGanttTimeline, setShowGanttTimeline] = useState(false);
+
+
+  // Charger les donnÃ©es au montage
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // 3. DEBUG EFFECT - DEPLACER ICI (PAS dans useMemo!)
+  useEffect(() => {
+    console.log('PROJETS REÇUS DANS OPERATOR:', projects);
+    console.log('Nombre de projets:', projects.length);
+    
+    projects.forEach((p, idx) => {
+      console.log(`\‹ Projet ${idx + 1}:`, {
+        id: p.id,
+        name: p.name,
+        status: p.status,
+        totalcost: p.totalcost,
+        totalrevenues: p.totalrevenues,
+        type_totalcost: typeof p.totalcost,
+        type_totalrevenues: typeof p.totalrevenues
+      });
+    });
+  }, [projects]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [sopsData, tasksData] = await Promise.all([
+        operatorService.getSOPs(),
+        operatorService.getTasks()
+      ]);
+      
+      console.log('📋 SOPs chargées:', sopsData);
+      console.log('✅ Tasks chargées:', tasksData);
+      
+      setSops(sopsData || []);
+      setTasks(tasksData || []);
+    } catch (error) {
+      console.error('Erreur chargement Operator:', error);
+      setSops([]);
+      setTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateProject = async (projectId, updates) => {
+  try {
+    await api.put(`/operator/projects/${projectId}`, updates);
+
+    // Recharger les projets
+    await loadProjects();
+    
+    return true;
+  } catch (error) {
+    console.error('Erreur de mise à jour:', error);
+    alert(`Erreur lors de la mise à jour du projet: ${error.message}`);
+    return false;
+  }
+};
+
+  // CRUD SOPs
+  const handleCreateSOP = async (sopData) => {
+    try {
+      await operatorService.createSOP(sopData);
+      await loadData();
+      setShowSOPModal(false);
+    } catch (error) {
+      console.error('Erreur création SOP:', error);
+      alert('Erreur lors de la création de la SOP');
+    }
+  };
+
+  const handleUpdateSOP = async (id, updates) => {
+  try {
+    // Trouver la SOP complÃ¨te
+    const currentSOP = sops.find(s => s.id === id);
+    if (!currentSOP) {
+      throw new Error('SOP non trouvée');
+    }
+
+    // Fusionner les updates avec les données existantes
+    const fullData = {
+      title: currentSOP.title,
+      description: currentSOP.description,
+      owner: currentSOP.owner,
+      steps: currentSOP.steps || [],
+      avg_time: currentSOP.avg_time || currentSOP.avgtime,
+      status: currentSOP.status,
+      category: currentSOP.category,
+      checklist: currentSOP.checklist || [],
+      ...updates  // Appliquer les mises à jour par-dessus
+    };
+
+    console.log('📝 Mise à jour SOP avec données complètes:', fullData);
+    
+    await operatorService.updateSOP(id, fullData);
+    await loadData();
+    setSelectedSOP(null);
+  } catch (error) {
+    console.error('Erreur mise à jour SOP:', error);
+    alert(`Erreur lors de la mise à jour de la SOP: ${error.message}`);
+  }
+};
+
+  const handleDeleteSOP = async (id) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette SOP ?')) return;
+    try {
+      await operatorService.deleteSOP(id);
+      await loadData();
+    } catch (error) {
+      console.error('Erreur suppression SOP:', error);
+      alert('Erreur lors de la suppression de la SOP');
+    }
+  };
+
+  // Construit une liste d'étapes à partir d'un projet (codes internes)
+  const buildProjectSteps = (project) => {
+    const parseData = (data) => {
+      if (!data) return [];
+      if (typeof data === 'string') {
+        try {
+          return JSON.parse(data);
+        } catch {
+          return [];
+        }
+      }
+      return Array.isArray(data) ? data : [];
+    };
+
+    const expenses = parseData(project.expenses);
+    const revenues = parseData(project.revenues);
+
+    const stepsExpenses = expenses.map((exp, index) => ({
+      id: `exp-${index}`,
+      type: 'expense',
+      label: exp.description || exp.category || 'Dépense',
+      code: exp.code || exp.category,
+      phase: exp.phase || project.currentPhase || 'investissement',
+      amount: parseFloat(exp.amount) || 0,
+      isDone: !!exp.isPaid
+    }));
+
+    const stepsRevenues = revenues.map((rev, index) => ({
+      id: `rev-${index}`,
+      type: 'revenue',
+      label: rev.description || 'Revenu',
+      code: rev.code,
+      phase: rev.phase || 'ventes',
+      amount: parseFloat(rev.amount) || 0,
+      isDone: !!rev.isPaid
+    }));
+
+    const allSteps = [...stepsExpenses, ...stepsRevenues];
+
+    const phasesOrder = ['investissement', 'logistique', 'ventes'];
+    const phaseLabels = {
+      investissement: 'Investissement',
+      logistique: 'Logistique',
+      ventes: 'Ventes'
+    };
+
+    const grouped = phasesOrder
+      .map(phase => ({
+        phase,
+        label: phaseLabels[phase],
+        items: allSteps.filter(s => s.phase === phase)
+      }))
+      .filter(group => group.items.length > 0);
+
+    return grouped;
+  };
+
+  // CRUD Tasks
+  const handleCreateTask = async (taskData) => {
+    try {
+      await operatorService.createTask(taskData);
+      await loadData();
+      setShowTaskModal(false);
+    } catch (error) {
+      console.error('Erreur création tâche:', error);
+      alert('Erreur lors de la création de la tâche');
+    }
+  };
+
+  const handleUpdateTask = async (id, updates) => {
+    try {
+      await operatorService.updateTask(id, updates);
+      await loadData();
+      setSelectedTask(null);
+    } catch (error) {
+      console.error('Erreur mise à jour tâche:', error);
+      alert('Erreur lors de la mise à jour de la tâche');
+    }
+  };
+
+  const handleDeleteTask = async (id) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cette tâche ?')) return;
+    try {
+      await operatorService.deleteTask(id);
+      await loadData();
+    } catch (error) {
+      console.error('Erreur suppression tâche:', error);
+      alert('Erreur lors de la suppression de la tâche');
+    }
+  };
+
+  // Stats SOPs/Tasks
+  const stats = {
+    totalSOPs: sops.length,
+    activeSOPs: sops.filter(s => s.status === 'active').length,
+    pendingTasks: tasks.filter(t => t.status !== 'done').length,
+    overdueSOPs: sops.filter(s => {
+      const lastReview = new Date(s.lastreview);
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      return lastReview < thirtyDaysAgo;
+    }).length
+  };
+
+// STATS PROJETS (nombres bruts + liste active)
+const projectStats = useMemo(() => {
+  const activeProjects = projects.filter(p => {
+    const status = (p.status || '').toLowerCase();
+    return status === 'active' || status === 'actif' || status.startsWith('phase');
+  });
+
+  const totalCost = activeProjects.reduce((sum, p) => {
+    // âœ… Convertir string â†’ number
+    const cost = parseFloat(p.totalCost || p.totalcost || 0);
+    return sum + cost;
+  }, 0);
+
+  const totalRevenues = activeProjects.reduce((sum, p) => {
+    // âœ… Convertir string â†’ number
+    const revenue = parseFloat(p.totalRevenues || p.totalrevenues || 0);
+    return sum + revenue;
+  }, 0);
+
+  const roi = totalCost > 0 ? ((totalRevenues - totalCost) / totalCost) * 100 : 0;
+
+  return {
+    active: activeProjects.length,
+    totalCost,
+    totalRevenues,
+    roi,
+    activeProjects
+  };
+}, [projects]);
+
+  // Transactions projets rÃ©centes
+  const projectTransactions = useMemo(() => {
+    return transactions
+      .filter(t => t.projectid && !t.isplanned)
+      .slice(0, 5)
+      .map(t => ({
+        ...t,
+        projectName: projects.find(p => p.id === t.projectid)?.name || 'Projet'
+      }));
+  }, [transactions, projects]);
+
+// ✅ CORRECT - Ajouter le calcul
+const stepGroups = useMemo(() => {
+  if (!projects.expenses && !projects.revenues) return [];
+  
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(projects.expenses);
+  const revenues = parseData(projects.revenues);
+  
+  return [
+    {
+      phase: 'expenses',
+      label: 'Dépenses',
+      items: expenses.map(exp => ({
+        id: exp.id || Math.random(),
+        code: exp.code,
+        label: exp.label,
+        amount: parseFloat(exp.amount || 0),
+        type: 'expense',
+        isDone: exp.isPaid || false
+      }))
+    },
+    {
+      phase: 'revenues',
+      label: 'Revenus',
+      items: revenues.map(rev => ({
+        id: rev.id || Math.random(),
+        code: rev.code,
+        label: rev.label,
+        amount: parseFloat(rev.amount || 0),
+        type: 'revenue',
+        isDone: rev.isReceived || false
+      }))
+    }
+  ].filter(g => g.items.length > 0);
+}, [projects]);
+
+  const generateCopyText = () => {
+  const now = new Date().toLocaleDateString('fr-FR', { 
+    weekday: 'long', 
+    day: 'numeric', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+  
+  let text = '';
+  
+  // ═══════════════════════════════════════════════════════════
+  // 📊 EN-TÊTE
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += '📊 OPERATOR DASHBOARD - RAPPORT COMPLET\n';
+  text += '═'.repeat(60) + '\n';
+  text += `📅 Date: ${now}\n`;
+  text += `⏰ Généré à: ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '\n';
+
+  // ═══════════════════════════════════════════════════════════
+  // 🎯 INDICATEURS CLÉS
+  // ═══════════════════════════════════════════════════════════
+  text += '🎯 INDICATEURS CLÉS\n';
+  text += '─'.repeat(60) + '\n';
+  text += `📋 SOPs Total: ${stats.totalSOPs} | Actives: ${stats.activeSOPs}\n`;
+  text += `✅ Tâches En Cours: ${stats.pendingTasks}\n`;
+  text += `🚀 Projets Actifs: ${projectStats.active}\n`;
+  text += `⚠️  SOPs à Revoir: ${stats.overdueSOPs}\n`;
+  text += '\n';
+
+  // ═══════════════════════════════════════════════════════════
+  // 💰 SYNTHÈSE FINANCIÈRE
+  // ═══════════════════════════════════════════════════════════
+  if (projectStats.active > 0) {
+    text += '💰 SYNTHÈSE FINANCIÈRE\n';
+    text += '─'.repeat(60) + '\n';
+    text += `💸 Investi Total: ${formatCurrency(projectStats.totalCost)}\n`;
+    text += `💵 CA Prévu: ${formatCurrency(projectStats.totalRevenues)}\n`;
+    text += `📈 ROI Moyen: ${projectStats.roi.toFixed(1)}%\n`;
+    text += `💎 Bénéfice Estimé: ${formatCurrency(projectStats.totalRevenues - projectStats.totalCost)}\n`;
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 📋 DÉTAILS DES SOPs
+  // ═══════════════════════════════════════════════════════════
+  if (sops.length > 0) {
+    text += '📋 STANDARD OPERATING PROCEDURES (SOPs)\n';
+    text += '─'.repeat(60) + '\n';
+    
+    sops.forEach((sop, index) => {
+      text += `\n${index + 1}. ${sop.title}\n`;
+      text += `   📝 Description: ${sop.description || 'N/A'}\n`;
+      text += `   👤 Responsable: ${sop.owner || 'Non assigné'}\n`;
+      text += `   📂 Catégorie: ${sop.category || 'Général'}\n`;
+      text += `   ⏱️  Durée moy.: ${sop.avg_time || sop.avgtime || 0} jours\n`;
+      text += `   🎯 Statut: ${
+        sop.status === 'active' ? '🟢 Active' : 
+        sop.status === 'draft' ? '🟡 Brouillon' : 
+        '⚫ Archivée'
+      }\n`;
+      
+      // Étapes
+      if (sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0) {
+        text += `   📌 Étapes (${sop.steps.length}):\n`;
+        sop.steps.forEach((step, idx) => {
+          text += `      ${idx + 1}) ${step.title}${step.duration ? ' (' + step.duration + ')' : ''}\n`;
+        });
+      }
+      
+      // Checklist
+      if (sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0) {
+        const completed = sop.checklist.filter(i => i.checked).length;
+        text += `   ✅ Checklist: ${completed}/${sop.checklist.length} complétée\n`;
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ✅ TÂCHES OPÉRATIONNELLES
+  // ═══════════════════════════════════════════════════════════
+  if (tasks.length > 0) {
+    text += '✅ TÂCHES OPÉRATIONNELLES\n';
+    text += '─'.repeat(60) + '\n';
+    
+    // Grouper par statut
+    const tasksByStatus = {
+      todo: tasks.filter(t => t.status === 'todo'),
+      'in-progress': tasks.filter(t => t.status === 'in-progress'),
+      done: tasks.filter(t => t.status === 'done')
+    };
+    
+    Object.entries(tasksByStatus).forEach(([status, taskList]) => {
+      if (taskList.length > 0) {
+        const statusLabel = 
+          status === 'todo' ? '📝 À FAIRE' :
+          status === 'in-progress' ? '⚙️  EN COURS' :
+          '✅ TERMINÉES';
+        
+        text += `\n${statusLabel} (${taskList.length})\n`;
+        
+        taskList.forEach((task, index) => {
+          text += `  ${index + 1}. ${task.title}\n`;
+          if (task.description) {
+            text += `     💬 ${task.description}\n`;
+          }
+          text += `     👤 Assigné: ${task.assigned_to || task.assignedto || 'Non assigné'}\n`;
+          text += `     📅 Échéance: ${task.due_date || task.duedate || 'Non définie'}\n`;
+          text += `     ⚡ Priorité: ${
+            task.priority === 'critical' ? '🔴 Critique' :
+            task.priority === 'high' ? '🟠 Haute' :
+            task.priority === 'medium' ? '🟡 Moyenne' :
+            '🟢 Faible'
+          }\n`;
+        });
+      }
+    });
+    text += '\n';
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // 🚀 PROJETS ACTIFS - DÉTAILS COMPLETS
+  // ═══════════════════════════════════════════════════════════
+if (projectStats.active > 0) {
+  text += `\n🚀 PROJETS ACTIFS - DÉTAILS COMPLETS\n`;
+  text += `${'─'.repeat(60)}\n`;
+  
+  projectStats.activeProjects.forEach((project, index) => {
+    const investedAmount = calculateInvestedAmount(project);
+    const totalBudget = parseFloat(project.totalCost || project.totalcost || 0);
+    const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+    const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+    const costs = parseFloat(project.totalcost || project.totalCost || 0);
+    const roi = costs > 0 ? ((revenues - costs) / costs) * 100 : 0;
+    const profit = revenues - costs;
+
+    text += `\n${index + 1}. 📦 ${project.name}\n`;
+    text += `   ${'-'.repeat(55)}\n`;
+    
+    if (project.description) {
+      text += `   📝 Description: ${project.description}\n`;
+    }
+    
+    text += `   📅 Créé le: ${project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : 'N/A'}\n`;
+    text += `   💰 Budget Total: ${formatCurrency(totalBudget)}\n`;
+    text += `   💸 Investi (Payé): ${formatCurrency(investedAmount)}\n`;
+    text += `   📊 Progression: ${progress.toFixed(1)}% payé\n`;
+    text += `   💵 Revenus Prévus: ${formatCurrency(revenues)}\n`;
+    text += `   📈 ROI: ${roi >= 0 ? '🟢' : '🔴'} ${roi.toFixed(1)}%\n`;
+    text += `   💎 Bénéfice Net: ${profit >= 0 ? '🟢' : '🔴'} ${formatCurrency(profit)}\n`;
+
+    // Parser expenses et revenues (JSONB)
+    const parseData = (data) => {
+      if (!data) return [];
+      if (typeof data === 'string') {
+        try { return JSON.parse(data); } 
+        catch { return []; }
+      }
+      return Array.isArray(data) ? data : [];
+    };
+
+    const expenses = parseData(project.expenses);
+    const projectRevenues = parseData(project.revenues);
+
+    // DÉPENSES (CORRIGÉ)
+    if (expenses.length > 0) {
+      text += `\n   💳 DÉPENSES (${expenses.length}):\n`;
+      expenses.forEach((exp, idx) => {
+        const status = exp.isPaid ? '✅ Payé' : '⏳ À payer';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Dépense';
+        
+        if (exp.description && exp.description.trim() !== '') {
+          label = exp.description.trim();
+        } else if (exp.label && exp.label.trim() !== '') {
+          label = exp.label.trim();
+        } else if (exp.code && exp.code.trim() !== '') {
+          label = exp.code.trim();
+        } else if (exp.category && exp.category.trim() !== '') {
+          label = exp.category.trim();
+        } else if (exp.phase && exp.phase.trim() !== '') {
+          label = `Dépense ${exp.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(exp.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // REVENUS (CORRIGÉ)
+    if (projectRevenues.length > 0) {
+      text += `\n   💰 REVENUS (${projectRevenues.length}):\n`;
+      projectRevenues.forEach((rev, idx) => {
+        const status = rev.isReceived ? '✅ Reçu' : '⏳ En attente';
+        
+        // CORRECTION : Logique améliorée pour le label
+        let label = 'Revenu';
+        
+        if (rev.description && rev.description.trim() !== '') {
+          label = rev.description.trim();
+        } else if (rev.label && rev.label.trim() !== '') {
+          label = rev.label.trim();
+        } else if (rev.code && rev.code.trim() !== '') {
+          label = rev.code.trim();
+        } else if (rev.category && rev.category.trim() !== '') {
+          label = rev.category.trim();
+        } else if (rev.phase && rev.phase.trim() !== '') {
+          label = `Revenu ${rev.phase}`;
+        }
+        
+        text += `      ${idx + 1}) ${label} - ${formatCurrency(rev.amount || 0)} ${status}\n`;
+      });
+    }
+
+    // TRANSACTIONS RÉCENTES (si disponibles)
+    if (transactions) {
+      const projectTransactions = transactions.filter(t => t.projectid === project.id);
+      if (projectTransactions.length > 0) {
+        text += `\n   💳 TRANSACTIONS RÉCENTES (${projectTransactions.length}):\n`;
+        projectTransactions.slice(0, 5).forEach((t) => {
+          const symbol = t.type === 'income' ? '+' : '-';
+          const icon = t.type === 'income' ? '💰' : '💸';
+          const desc = t.description ? ` - ${t.description.substring(0, 30)}` : '';
+          const date = t.transactiondate ? new Date(t.transactiondate).toLocaleDateString('fr-FR') : '';
+          text += `      ${icon} ${symbol}${formatCurrency(parseFloat(t.amount || 0))}${desc} ${date}\n`;
+        });
+        if (projectTransactions.length > 5) {
+          text += `      ... et ${projectTransactions.length - 5} autres\n`;
+        }
+      }
+    }
+
+    text += '\n';
+  });
+}
+
+  // ═══════════════════════════════════════════════════════════
+  // 🔚 FOOTER
+  // ═══════════════════════════════════════════════════════════
+  text += '═'.repeat(60) + '\n';
+  text += `⚡ Généré par Money Tracker • ${new Date().toLocaleTimeString('fr-FR')}\n`;
+  text += '═'.repeat(60) + '\n';
+
+  return text;
+};
+
+
+  if (loading) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="bg-white rounded-2xl p-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Chargement...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fonction pour calculer le montant réellement investi (payé)
+const calculateInvestedAmount = (project) => {
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+  
+  const expenses = parseData(project.expenses);
+  
+  // Somme des dépenses avec isPaid: true
+  const invested = expenses.reduce((sum, exp) => {
+    if (exp.isPaid) {
+      return sum + (parseFloat(exp.amount) || 0);
+    }
+    return sum;
+  }, 0);
+  
+  return invested;
+};
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden">
+        
+        {/* HEADER */}
+        <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Settings size={28} />
+                Operator Dashboard
+              </h2>
+              <p className="text-purple-100 mt-1">Execution • SOPs • Tâches • Projets Actifs</p>
+            </div>
+            <div className="flex items-center gap-3">
+
+                {/* Bouton Gantt Timeline */}
+        <li>
+          <button
+  type="button"
+  onClick={() => {
+    console.log("🎯 CLIC sur bouton Gantt Timeline");
+    setShowGanttTimeline(true); // ✅ Ouvrir le modal
+  }}
+  className={[
+    "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all shadow-md",
+    showGanttTimeline
+      ? "bg-green-600 text-white shadow-lg"
+      : "bg-green-600 text-white hover:bg-green-800"
+  ].join(" ")}
+>
+  <Calendar size={18} />
+  Gantt Timeline
+</button>
+
+        </li>
+              
+              <CopyButton getText={generateCopyText} />
+              <button
+                onClick={onClose}
+                className="text-white/80 hover:text-white hover:bg-white/20 p-2 rounded-lg transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 5 STATS CARDS */}
+        <div className="grid grid-cols-5 gap-4 mt-6 px-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <div className="text-gray-600 text-xs font-semibold uppercase tracking-wide">Total SOPs</div>
+            <div className="text-3xl font-bold text-gray-900 mt-1">{stats.totalSOPs}</div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-emerald-200 p-4">
+            <div className="text-emerald-600 text-xs font-semibold uppercase tracking-wide">SOPs Actives</div>
+            <div className="text-3xl font-bold text-emerald-700 mt-1">{stats.activeSOPs}</div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-yellow-200 p-4">
+            <div className="text-yellow-600 text-xs font-semibold uppercase tracking-wide">Tâches en Cours</div>
+            <div className="text-3xl font-bold text-yellow-700 mt-1">{stats.pendingTasks}</div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-red-200 p-4">
+            <div className="text-red-600 text-xs font-semibold uppercase tracking-wide">SOPs à Revoir</div>
+            <div className="text-3xl font-bold text-red-700 mt-1">{stats.overdueSOPs}</div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-blue-200 p-4">
+            <div className="text-blue-600 text-xs font-semibold uppercase tracking-wide">Projets Actifs</div>
+            <div className="text-3xl font-bold text-blue-700 mt-1">{projectStats.active}</div>
+          </div>
+        </div>
+
+        {/* CONTENT */}
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-280px)]">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            
+            {/* SOPs */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <FileText size={20} className="text-purple-600" />
+                  Standard Operating Procedures
+                </h3>
+                <button
+                  onClick={() => setShowSOPModal(true)}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition flex items-center gap-2 text-sm"
+                >
+                  <Plus size={16} />
+                  Nouvelle SOP
+                </button>
+              </div>
+
+                              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {sops.length === 0 ? (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg">
+                    <FileText size={48} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-gray-500">Aucune SOP crée</p>
+                    <button 
+                      onClick={() => setShowSOPModal(true)}
+                      className="mt-3 text-purple-600 hover:text-purple-700 font-semibold"
+                    >
+                      Créer votre première SOP
+                    </button>
+                  </div>
+                ) : (
+                  sops.map(sop => (
+                    <div
+                      key={sop.id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
+                      onClick={() => setSelectedSOP(sop)}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">{sop.title}</h4>
+                          <p className="text-xs text-gray-500 mt-1">{sop.description}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          sop.status === 'active' ? 'bg-green-100 text-green-700' :
+                          sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {sop.status === 'active' ? 'Active' : 
+                           sop.status === 'draft' ? 'Brouillon' : 'ArchivÃ©'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-600 mt-3">
+                        <span>{sop.owner}</span>
+                        <span>
+                          {Array.isArray(sop.steps) ? sop.steps.length : 0} étapes
+                        </span>
+                        <span>{sop.avg_time || sop.avgtime} j</span>
+                      </div>
+
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUpdateSOP(sop.id, {
+                              status: sop.status === 'active' ? 'archived' : 'active'
+                            });
+                          }}
+                          className="text-xs bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded transition"
+                        >
+                          {sop.status === 'active' ? (
+                            <>
+                              <Pause size={12} className="inline mr-1" />
+                              Archiver
+                            </>
+                          ) : (
+                            <>
+                              <Play size={12} className="inline mr-1" />
+                              Activer
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteSOP(sop.id);
+                          }}
+                          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded transition"
+                        >
+                          <Trash2 size={12} className="inline mr-1" />
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* TASKS */}
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <CheckSquare size={20} className="text-pink-600" />
+                  Tâches Opérationnelles
+                </h3>
+                <button
+                  onClick={() => setShowTaskModal(true)}
+                  className="bg-pink-600 text-white px-4 py-2 rounded-lg hover:bg-pink-700 transition flex items-center gap-2 text-sm"
+                >
+                  <Plus size={16} />
+                  Nouvelle Tâche
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                {tasks.length === 0 ? (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg">
+                    <CheckSquare size={48} className="mx-auto text-gray-300 mb-2" />
+                    <p className="text-gray-500">Aucune tâche crée</p>
+                    <button 
+                      onClick={() => setShowTaskModal(true)}
+                      className="mt-3 text-pink-600 hover:text-pink-700 font-semibold"
+                    >
+                      Créer votre première tâche
+                    </button>
+                  </div>
+                ) : (
+                  tasks.map(task => (
+                    <div
+                      key={task.id}
+                      className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900">{task.title}</h4>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {task.description || 'Pas de description'}
+                          </p>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          task.status === 'done' ? 'bg-green-100 text-green-700' :
+                          task.status === 'in-progress' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {task.status === 'done' ? 'TerminÃ©' :
+                           task.status === 'in-progress' ? 'En cours' : 'À faire'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs text-gray-600 mt-3">
+                        <span>{task.due_date || task.duedate}</span>
+                        <span>{task.assigned_to || task.assignee || 'Non assigné'}</span>
+                      </div>
+
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => setSelectedTask(task)}
+                          className="text-xs bg-blue-100 hover:bg-blue-200 px-3 py-1 rounded transition"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded transition"
+                        >
+                          <Trash2 size={12} className="inline mr-1" />
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* PROJETS ACTIFS */}
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+              <TrendingUp size={24} className="text-blue-600" />
+              Projets Actifs ({projectStats.active})
+            </h3>
+          </div>
+
+          {/* Impacts Financiers */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+              <div className="text-blue-600 text-sm font-medium mb-2">📊 Investissement Total</div>
+              <div className="text-3xl font-bold text-blue-900">
+                {formatCurrency(projectStats.totalCost)}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-6 border border-emerald-200">
+              <div className="text-emerald-600 text-sm font-medium mb-2">📅 Revenus Prévisionnels</div>
+              <div className="text-3xl font-bold text-emerald-900">
+                {formatCurrency(projectStats.totalRevenues)}
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-200">
+              <div className="text-purple-600 text-sm font-medium mb-2">🎯 ROI Estimé</div>
+              <div className={`text-3xl font-bold ${
+                projectStats.roi >= 0 ? 'text-emerald-700' : 'text-red-700'
+              }`}>
+                {projectStats.roi.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+
+{/* Liste Projets Actifs */}
+<div className="space-y-4 max-h-[350px] overflow-y-auto">
+  {projectStats.active === 0 ? (
+    <div className="text-center py-12...">...</div>
+  ) : (
+    projectStats.activeProjects.map((project) => {
+  const investedAmount = calculateInvestedAmount(project);
+  const totalBudget = parseFloat(project.totalcost || 0);
+  const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+
+  const parseData = (data) => {
+    if (!data) return [];
+    if (typeof data === 'string') {
+      try { return JSON.parse(data); } catch { return []; }
+    }
+    return Array.isArray(data) ? data : [];
+  };
+
+  const expenses = parseData(project.expenses);
+  const revenues = parseData(project.revenues);
+
+  const allSteps = [
+    ...expenses.map(e => ({ ...e, type: 'expense', phase: e.phase || 'general' })),
+    ...revenues.map(r => ({ ...r, type: 'revenue', phase: r.phase || 'general' }))
+  ];
+
+  const phases = [...new Set(allSteps.map(s => s.phase))];
+  const stepGroups = phases.map(phase => ({
+    phase,
+    label: phase.charAt(0).toUpperCase() + phase.slice(1),
+    items: allSteps.filter(s => s.phase === phase)
+  }));
+
+  return (
+    <div key={project.id} className="group border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50">
+      {/* En-tête projet */}
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex-1 mr-4">
+          <h4 className="font-bold text-xl text-gray-900 mb-2">{project.name}</h4>
+          <div className="flex items-center gap-3 mb-2 flex-wrap">
+            <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-semibold">
+              Actif
+            </span>
+            
+            <span className="text-sm font-medium text-gray-700">
+              {formatCurrency(investedAmount)}
+            </span>
+            
+            {/* ✅ CORRECTION : Affichage correct du pourcentage payé */}
+            <span className="text-xs text-gray-500">
+              {progress.toFixed(1)}% payé
+            </span>
+            
+            <span className="text-xs text-gray-500">
+              {project.createdat ? new Date(project.createdat).toLocaleDateString('fr-FR') : ''}
+            </span>
+          </div>
+          
+          {project.description && (
+            <p className="text-sm text-gray-600 line-clamp-2">{project.description}</p>
+          )}
+        </div>
+        
+        {/* ✅ CORRECTION : Calcul ROI correct */}
+        <div className="w-32 text-right flex-shrink-0">
+          <div className="text-xs text-gray-500 mb-1">ROI</div>
+          <div className={`text-2xl font-bold ${
+            ((parseFloat(project.totalrevenues || 0) - parseFloat(project.totalcost || 0)) > 0)
+              ? 'text-emerald-600'
+              : 'text-red-600'
+          }`}>
+            {(() => {
+              const revenues = parseFloat(project.totalrevenues || project.totalRevenues || 0);
+  const costs = parseFloat(project.totalcost || project.totalCost || 0);
+  
+  if (costs === 0) return revenues > 0 ? '∞' : '0';
+  
+  const roi = ((revenues - costs) / costs) * 100;
+  return roi.toFixed(0);
+            })()}%
+          </div>
+          
+          {/* ✅ AJOUT : Bénéfice net */}
+          <div className="text-xs text-gray-500 mt-1">
+            {formatCurrency(
+              (parseFloat(project.totalrevenues || 0)) - 
+              (parseFloat(project.totalcost || 0))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Suivi par étapes */}
+      {stepGroups.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {stepGroups.map(group => (
+            <div key={group.phase} className="mb-2">
+              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                {group.label}
+              </div>
+              <div className="space-y-1">
+                {group.items.map((step, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-xs bg-gray-50 rounded-lg px-2 py-1"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        step.type === 'expense' ? 'bg-red-400' : 'bg-emerald-400'
+                      }`}></span>
+                      <span className="truncate max-w-[180px]">
+                        {step.description || step.code || step.label || 'Sans nom'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-[11px] font-medium text-gray-600">
+                        {formatCurrency(step.amount || 0)}
+                      </span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
+                        step.isPaid || step.isReceived
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {step.isPaid || step.isReceived ? '✅ Fait' : '⏳ À faire'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Aperçu transactions projet */}
+      {transactions && transactions.filter(t => t.projectid === project.id).length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-xs font-semibold text-gray-500 mb-2">Dernières transactions</div>
+          <div className="flex flex-wrap gap-2">
+            {projectTransactions
+              .filter(t => t.projectid === project.id)
+              .slice(0, 3)
+              .map((t, idx) => (
+                <span
+                  key={t.id || idx}
+                  className={`px-2 py-1 text-xs rounded-full font-medium ${
+                    t.type === 'income' 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'bg-red-50 text-red-700'
+                  }`}
+                >
+                  {t.type === 'income' ? '+' : '-'}{formatCurrency(parseFloat(t.amount || 0))}
+                </span>
+              ))}
+            {projectTransactions.filter(t => t.projectid === project.id).length > 3 && (
+              <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                +{projectTransactions.filter(t => t.projectid === project.id).length - 3} autre(s)
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+})
+
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-gray-200 p-6 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div className="text-sm text-gray-600">
+              <strong>⚡ Prêt pour l'exécution</strong> • {stats.activeSOPs} SOPs actives • {stats.pendingTasks} tâches en cours • {projectStats.active} projets
+            </div>
+            <button
+              onClick={onClose}
+              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg transition-all text-sm"
+            >
+              Fermer Dashboard
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {selectedSOP && (
+        <SOPDetailsModal
+          sop={selectedSOP}
+          onClose={() => setSelectedSOP(null)}
+          onUpdate={handleUpdateSOP}
+        />
+      )}
+
+      {showSOPModal && (
+        <SOPCreateModal
+          onClose={() => setShowSOPModal(false)}
+          onCreate={handleCreateSOP}
+        />
+      )}
+
+      {showTaskModal && (
+        <TaskCreateModal
+          onClose={() => setShowTaskModal(false)}
+          onCreate={handleCreateTask}
+          sops={sops}
+        />
+      )}
+
+  {/* ✅ GANTT TIMELINE MODAL CORRIGÉ */}
+      {showGanttTimeline && (
+        <GanttTimelineModal
+          isOpen={showGanttTimeline}
+          onClose={() => {
+            console.log("🔴 Fermeture Gantt Timeline");
+            setShowGanttTimeline(false);
+          }}
+          projects={projects}
+          onUpdateProject={async (id, updates) => {
+            console.log("📝 Mise à jour projet:", id, updates);
+            try {
+              await projectsService.update(id, updates);
+              if (onProjectUpdated) onProjectUpdated();
+            } catch (error) {
+              console.error("❌ Erreur:", error);
+              alert("Erreur: " + error.message);
+            }
+          }}
+          onRefresh={async () => {
+            console.log("🔄 Rafraîchissement");
+            if (refreshProjects) await refreshProjects();
+          }}
+        />
+)}
+    </div>
+  );
+}
+
+// ============================================
+// COMPOSANT MODAL SOP CORRIGÉ (Avec Sauvegarde Checklist)
+// ============================================
+
+function SOPDetailsModal({ sop, onClose, onUpdate }) {
+  
+  // ✅ Fonction qui gère le clic et sauvegarde
+  const handleCheck = (index) => {
+    // 1. On copie la checklist pour ne pas modifier l'état directement
+    const updatedChecklist = sop.checklist.map((item, i) => {
+      if (i === index) {
+        // On inverse l'état (true <-> false)
+        return { ...item, checked: !item.checked }; 
+      }
+      return item;
+    });
+
+    // 2. On appelle la fonction de mise à jour du parent
+    // Cela va déclencher l'appel API (operatorService.updateSOP)
+    console.log("💾 Sauvegarde checklist...", updatedChecklist);
+    onUpdate(sop.id, { checklist: updatedChecklist });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[80vh] overflow-y-auto p-6 shadow-2xl">
+        
+        {/* En-tête */}
+        <div className="flex justify-between items-start mb-4 border-b pb-4">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">{sop.title}</h3>
+            <p className="text-sm text-gray-500 mt-1">{sop.description}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-full transition"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="space-y-6 text-sm">
+          
+          {/* Infos Générales */}
+          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Responsable</span>
+              <span className="font-medium text-gray-900">{sop.owner || "Non assigné"}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Durée moy.</span>
+              <span className="font-medium text-gray-900">{sop.avg_time || sop.avgtime || 0} jours</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Statut</span>
+              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold mt-1 ${
+                sop.status === 'active' ? 'bg-green-100 text-green-700' :
+                sop.status === 'draft' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-gray-200 text-gray-700'
+              }`}>
+                {sop.status === 'active' ? 'Active' : sop.status === 'draft' ? 'Brouillon' : 'Archivée'}
+              </span>
+            </div>
+            <div>
+              <span className="text-gray-500 block text-xs uppercase font-bold">Catégorie</span>
+              <span className="font-medium text-gray-900">{sop.category || "Général"}</span>
+            </div>
+          </div>
+
+          {/* Étapes */}
+          {sop.steps && Array.isArray(sop.steps) && sop.steps.length > 0 && (
+            <div>
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-purple-100 text-purple-700 w-6 h-6 rounded flex items-center justify-center text-xs">1</span>
+                Étapes ({sop.steps.length})
+              </h4>
+              <div className="space-y-3 pl-2">
+                {sop.steps.map((step, index) => (
+                  <div key={index} className="relative pl-6 border-l-2 border-gray-200 pb-2 last:pb-0">
+                    <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-gray-200 border-2 border-white"></div>
+                    <strong className="text-gray-900 block">{step.title}</strong>
+                    <p className="text-gray-600 text-xs mt-1">{step.description}</p>
+                    {step.duration && (
+                      <span className="text-xs text-purple-600 font-medium mt-1 block">⏱️ {step.duration}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ✅ CHECKLIST INTERACTIVE CORRIGÉE ✅ */}
+          {sop.checklist && Array.isArray(sop.checklist) && sop.checklist.length > 0 && (
+            <div className="bg-yellow-50/50 p-4 rounded-xl border border-yellow-100">
+              <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <span className="bg-yellow-100 text-yellow-700 w-6 h-6 rounded flex items-center justify-center text-xs">2</span>
+                Checklist de Validation ({sop.checklist.filter(i => i.checked).length}/{sop.checklist.length})
+              </h4>
+              
+              <div className="space-y-2">
+                {sop.checklist.map((item, index) => (
+                  <label 
+                    key={index} 
+                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer select-none ${
+                      item.checked 
+                        ? 'bg-green-50 border-green-200' 
+                        : 'bg-white border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      // 👇 C'est ici que la magie opère
+                      checked={item.checked || false} 
+                      onChange={() => handleCheck(index)}
+                      className="mt-1 w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <span className={`text-sm font-medium transition-all ${item.checked ? 'text-green-800 line-through opacity-60' : 'text-gray-800'}`}>
+                        {item.item}
+                      </span>
+                      {item.required && !item.checked && (
+                        <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                          Requis
+                        </span>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 pt-4 border-t flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition"
+          >
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function SOPCreateModal({ onClose, onCreate }) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    owner: '',
+    steps: [],
+    avg_time: '',
+    status: 'draft',
+    category: ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onCreate(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6">
+        <h3 className="text-xl font-bold mb-4">Nouvelle SOP</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Titre de la SOP"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+            required
+          />
+          <textarea
+            placeholder="Description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+            rows={3}
+          />
+          <input
+            type="text"
+            placeholder="Responsable"
+            value={formData.owner}
+            onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          />
+          <input
+            type="text"
+            placeholder="CatÃ©gorie"
+            value={formData.category}
+            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          />
+                    <input
+            type="number"
+            placeholder="DurÃ©e moyenne (jours)"
+            value={formData.avg_time}
+            onChange={(e) => setFormData({ ...formData, avg_time: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700"
+            >
+              CrÃ©er
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+            >
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TaskCreateModal({ onClose, onCreate, sops = [] }) {
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    due_date: '',
+    assigned_to: '',
+    status: 'todo',
+    sop_id: null
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onCreate(formData);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
+      <div className="bg-white rounded-xl max-w-lg w-full p-6">
+        <h3 className="text-xl font-bold mb-4">Nouvelle Tâche</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Titre de la tÃ¢che"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+            required
+          />
+          <textarea
+            placeholder="Description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+            rows={3}
+          />
+          <select
+            value={formData.priority}
+            onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          >
+            <option value="low">Priorité Faible</option>
+            <option value="medium">Priorité Moyenne</option>
+            <option value="high">Priorité Haute</option>
+            <option value="critical">Priorité Critique</option>
+          </select>
+          <input
+            type="date"
+            value={formData.due_date}
+            onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+            required
+          />
+          <input
+            type="text"
+            placeholder="AssignÃ© à"
+            value={formData.assigned_to}
+            onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          />
+          <select
+            value={formData.status}
+            onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+            className="w-full border rounded-lg px-3 py-2"
+          >
+            <option value="todo">À faire</option>
+            <option value="in-progress">En cours</option>
+            <option value="done">Terminer</option>
+          </select>
+          <select
+            value={formData.sop_id || ''}
+            onChange={(e) => setFormData({ 
+              ...formData, 
+              sop_id: e.target.value ? parseInt(e.target.value, 10) : null 
+            })}
+            className="w-full border rounded-lg px-3 py-2"
+          >
+            <option value="">Aucune SOP liée</option>
+            {sops.map(sop => (
+              <option key={sop.id} value={sop.id}>
+                {sop.title}
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="flex-1 bg-pink-600 text-white py-2 rounded-lg hover:bg-pink-700"
+            >
+              Créer
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+            >
+              Annuler
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

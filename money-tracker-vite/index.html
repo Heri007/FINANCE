@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>money-tracker-vite</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        // Capture les erreurs CSS
+        const originalConsoleError = console.error;
+        console.error = function (...args) {
+          if (
+            args[0] &&
+            args[0].includes &&
+            (args[0].includes('font-size') || args[0].includes('letter-spacing'))
+          ) {
+            console.warn('Erreur CSS détectée:', args);
+            // Affiche l'élément problématique
+            debugger;
+          }
+          originalConsoleError.apply(console, args);
+        };
+      });
+    </script>
+  </body>
+</html>
