@@ -27,7 +27,6 @@ import { PartnersSection } from '../../PartnersSection';
 import { ProfitDistributionPanel } from '../../ProfitDistributionPanel';
 import { toLocalISODate, toLocalISOString } from '../../../utils/dateUtils';
 
-
 export function LivestockModal({
   isOpen,
   onClose,
