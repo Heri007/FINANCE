@@ -679,12 +679,19 @@ export default function App() {
     }
   };
 
-  // ✅ VERSION CORRIGÉE COMPLÈTE
+  // ✅ VERSION HANDLERS OPTIMISEE
+// ✅ 1) Cas standard: un projet a été modifié (JSON, metadata, lignes) -> refresh projects suffit
 const handleProjectUpdated = useCallback(async (projectId) => {
+  await refreshProjects();
+}, [refreshProjects]);
+
+// ✅ 2) Cas spécial: une action a créé/modifié des transactions (mark-paid / mark-received)
+const handleProjectUpdatedWithTransactions = useCallback(async (projectId) => {
   await refreshProjects();
   await refreshTransactions();
   await refreshAccounts();
 }, [refreshProjects, refreshTransactions, refreshAccounts]);
+
 
   // ==========================================================================
   // HANDLERS - BACKUP ET RESTAURATION
@@ -1174,7 +1181,7 @@ const handleProjectUpdated = useCallback(async (projectId) => {
         onActivateProject={handleActivateProject}
         onDeleteProject={deleteProject}
         onCompleteProject={handleCompleteProject}
-        onProjectUpdate={refreshProjects}
+        onProjectUpdate={handleProjectUpdated}
         onDeactivateProject={deactivateProject} // ✅ Nouveau
         onReactivateProject={handleReactivateProject} // ✅ AJOUTER ICI
         onTransactionClick={handleTransactionClick}

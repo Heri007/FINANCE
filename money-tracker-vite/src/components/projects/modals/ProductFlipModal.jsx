@@ -1108,7 +1108,7 @@ const handleCancelPaymentRevenue = async (rev, index) => {
     };
 
     if (project?.id) {
-      await projectsService.updateProject(project.id, payload);
+      await projectsService.update(project.id, payload)
     } else {
       await projectsService.createProject(payload);
     }
