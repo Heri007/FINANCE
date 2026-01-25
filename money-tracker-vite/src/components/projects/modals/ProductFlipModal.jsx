@@ -72,302 +72,134 @@ export function ProductFlipModal({
     };
   }, []);
 
-// CHARGEMENT PROJET EXISTANT
+
+// CHARGEMENT PROJET EXISTANT - VERSION SIMPLIFIÉE
 useEffect(() => {
-const loadProjectData = async () => {
-      // 🛡️ CHECK 1: Au début
-      if (!isMountedRef.current) return;
-      
-      if (project) {
-        setProjectName(project.name);
-        setDescription(project.description);
-        setStatus(project.status || 'active');
+  const loadProjectData = async () => {
+    if (!isMountedRef.current) return;
 
-        const start = project.startDate || project.start_date;
-        const end = project.endDate || project.end_date;
-        setStartDate(start ? new Date(start) : new Date());
-        setEndDate(end ? new Date(end) : null);
+    if (project) {
+      setProjectName(project.name);
+      setDescription(project.description);
+      setStatus(project.status || 'active');
 
-        // Charger metadata
-        if (project.metadata) {
-          const meta = typeof project.metadata === 'string' 
-            ? JSON.parse(project.metadata) 
-            : project.metadata;
+      const start = project.startDate || project.start_date;
+      const end = project.endDate || project.end_date;
+      setStartDate(start ? new Date(start) : new Date());
+      setEndDate(end ? new Date(end) : null);
 
-          setProductName(meta.productName || '');
-          setSupplier(meta.supplier || '');
-          setPurchasePrice(meta.purchasePrice || 0);
-          setQuantity(meta.quantity || 0);
-          setSellingPrice(meta.sellingPrice || 0);
-          setTargetMargin(meta.targetMargin || 50);
-        }
+      // Charger metadata
+      if (project.metadata) {
+        const meta = typeof project.metadata === 'string' 
+          ? JSON.parse(project.metadata) 
+          : project.metadata;
+        setProductName(meta.productName || '');
+        setSupplier(meta.supplier || '');
+        setPurchasePrice(meta.purchasePrice || 0);
+        setQuantity(meta.quantity || 0);
+        setSellingPrice(meta.sellingPrice || 0);
+        setTargetMargin(meta.targetMargin || 50);
+      }
 
-        // Fonction helper
-        const parseList = (data) => {
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          try {
-            return JSON.parse(data);
-          } catch {
-            return [];
-          }
-        };
+      // ✅ CORRECTION : CHARGER DIRECTEMENT DEPUIS LA DB
+      if (project.id) {
+        try {
+          const fullProject = await projectsService.getById(project.id);
+          const allTx = await transactionsService.getAll();
 
-        let currentExpenses = parseList(project.expenses).map(e => ({
-          ...e,
-          id: e.id || uuidv4(),
-          date: e.date ? new Date(e.date) : new Date(),
-          amount: parseFloat(e.amount) || 0,
-        }));
+          if (!isMountedRef.current) return;
 
-        let currentRevenues = parseList(project.revenues).map(r => ({
-          ...r,
-          id: r.id || uuidv4(),
-          date: r.date ? new Date(r.date) : new Date(),
-          amount: parseFloat(r.amount) || 0,
-        }));
+          const projectTx = allTx.filter(t => String(t.project_id) === String(project.id));
 
-        // RÉCUPÉRER LES TRANSACTIONS RÉELLES LIÉES AU PROJET
-        if (project.id) {
-          try {
-            const allTx = await transactionsService.getAll();
+          // Helper pour parser
+          const parseList = (data) => {
+            if (!data) return [];
+            if (Array.isArray(data)) return data;
+            try {
+              return JSON.parse(data);
+            } catch {
+              return [];
+            }
+          };
 
-            // 🛡️ CHECK 2: Après appel async
-            if (!isMountedRef.current) return;
+          // ✅ CHARGER DEPUIS expenseLines (DB) - SOURCE DE VÉRITÉ
+          const expenseLines = parseList(fullProject.expenseLines || fullProject.expense_lines);
+          const revenueLines = parseList(fullProject.revenueLines || fullProject.revenue_lines);
 
-            const projectTx = allTx.filter(t => 
-              String(t.project_id) === String(project.id)
+          // ✅ MAPPER DIRECTEMENT expenseLines → expenses
+          const loadedExpenses = expenseLines.map(line => {
+            // Chercher la transaction liée
+            const tx = projectTx.find(t => 
+              t.type === 'expense' && 
+              String(t.project_line_id) === String(line.id)
             );
 
-            console.log(`💳 Transactions récupérées pour ProductFlip "${project.name}":`, projectTx.length);
+            const accName = tx 
+              ? accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu'
+              : '';
 
-            // Fusionner
-            const mergeTransactions = (lines, type) => {
-              return lines.map(line => {
-                const tx = projectTx.find(t => 
-                  t.type === type && String(t.project_line_id) === String(line.dbLineId)
-                );
-
-                if (tx) {
-                  const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-                  return {
-                    ...line,
-                    isPaid: true,
-                    account: accName,
-                    realDate: tx.transaction_date ? new Date(tx.transaction_date) : null,
-                  };
-                }
-                return line;
-              });
+            return {
+              id: uuidv4(),
+              dbLineId: line.id,
+              description: line.description || '',
+              amount: parseFloat(line.projectedAmount || line.projected_amount || line.projectedamount || 0),
+              category: line.category || 'Autre',
+              date: line.transaction_date ? new Date(line.transaction_date) : new Date(),
+              realDate: tx?.transaction_date ? new Date(tx.transaction_date) : null,
+              account: accName,
+              isPaid: !!(line.is_paid || line.ispaid),  // ✅ SOURCE DE VÉRITÉ
+              isRecurring: false,
             };
-
-                        currentExpenses = mergeTransactions(currentExpenses, 'expense');
-            currentRevenues = mergeTransactions(currentRevenues, 'income');
-
-            // ✅ AJOUT : FUSIONNER avec expenseLines et revenueLines
-            const fullProject = await projectsService.getById(project.id);
-            
-            // 🛡️ CHECK 3.5: Après second appel async
-            if (!isMountedRef.current) return;
-
-            const expenseLines = parseList(fullProject.expenseLines || fullProject.expense_lines);
-            const revenueLines = parseList(fullProject.revenueLines || fullProject.revenue_lines);
-
-            console.log(`🔍 Fusion: ${currentExpenses.length} JSON + ${expenseLines.length} DB | ${currentRevenues.length} JSON + ${revenueLines.length} DB`);
-
-            // ✅ NORMALISATION des descriptions
-const normalizeDesc = (str) => {
-  if (!str) return '';
-  return str
-    .trim()
-    .toLowerCase()
-    .replace(/[''`]/g, "'")
-    .replace(/\s+/g, ' ')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-};
-
-// Fusionner expenseLines
-expenseLines.forEach(dbLine => {
-  const existingIndex = currentExpenses.findIndex(e => {
-    // ✅ PRIORITÉ 1: Match par dbLineId (100% fiable)
-    if (e.dbLineId && dbLine.id && e.dbLineId === dbLine.id) {
-      return true;
-    }
-    
-    // ✅ PRIORITÉ 2: Match par description UNIQUEMENT (ignorer le montant)
-    const eDesc = normalizeDesc(e.description);
-    const dbDesc = normalizeDesc(dbLine.description);
-    
-    if (eDesc === dbDesc && eDesc.length > 0) {
-      return true;
-    }
-    
-    return false;
-  });
-  
-  if (existingIndex >= 0) {
-    // ✅ Mettre à jour avec données DB (PRIORITÉ à la DB pour isPaid et montant si > 0)
-    const dbAmount = parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0);
-    
-    currentExpenses[existingIndex] = {
-      ...currentExpenses[existingIndex],
-      dbLineId: dbLine.id,
-      isPaid: !!dbLine.is_paid,
-      // ✅ Utiliser le montant DB si > 0, sinon garder le JSON
-      amount: dbAmount > 0 ? dbAmount : currentExpenses[existingIndex].amount,
-      category: dbLine.category || currentExpenses[existingIndex].category,
-    };
-  } else {
-    // ✅ Ajouter SEULEMENT si description vraiment différente
-    console.log(`➕ Ligne DB: ${dbLine.description} (#${dbLine.id})`);
-    
-    currentExpenses.push({
-      id: uuidv4(),
-      dbLineId: dbLine.id,
-      description: dbLine.description || '',
-      amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
-      category: dbLine.category || 'Autre',
-      date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
-      account: '',
-      isPaid: !!dbLine.is_paid,
-      isRecurring: false,
-    });
-  }
-});
-
-// ✅ MÊME LOGIQUE pour revenueLines
-revenueLines.forEach(dbLine => {
-  const existingIndex = currentRevenues.findIndex(r => {
-    if (r.dbLineId && dbLine.id && r.dbLineId === dbLine.id) {
-      return true;
-    }
-    
-    const rDesc = normalizeDesc(r.description);
-    const dbDesc = normalizeDesc(dbLine.description);
-    
-    return rDesc === dbDesc && rDesc.length > 0;
-  });
-  
-  if (existingIndex >= 0) {
-    const dbAmount = parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0);
-    
-    currentRevenues[existingIndex] = {
-      ...currentRevenues[existingIndex],
-      dbLineId: dbLine.id,
-      isPaid: !!dbLine.is_received,
-      amount: dbAmount > 0 ? dbAmount : currentRevenues[existingIndex].amount,
-    };
-  } else {
-    console.log(`➕ Revenue DB: ${dbLine.description} (#${dbLine.id})`);
-    
-    currentRevenues.push({
-      id: uuidv4(),
-      dbLineId: dbLine.id,
-      description: dbLine.description || '',
-      amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
-      category: dbLine.category || 'Autre',
-      date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
-      account: '',
-      isPaid: !!dbLine.is_received,
-      isRecurring: false,
-    });
-  }
-});
-// Fusionner revenueLines (même logique)
-revenueLines.forEach(dbLine => {
-  const existingIndex = currentRevenues.findIndex(r => {
-    if (r.dbLineId && dbLine.id && r.dbLineId === dbLine.id) {
-      return true;
-    }
-    
-    const rDesc = (r.description || '').trim().toLowerCase();
-    const dbDesc = (dbLine.description || '').trim().toLowerCase();
-    const descMatch = rDesc === dbDesc;
-    
-    const amountMatch = Math.abs(
-      parseFloat(r.amount || 0) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)
-    ) < 0.01;
-    
-    return descMatch && amountMatch;
-  });
-  
-  if (existingIndex >= 0) {
-    currentRevenues[existingIndex] = {
-      ...currentRevenues[existingIndex],
-      dbLineId: dbLine.id,
-      isPaid: !!dbLine.is_received,
-    };
-  } else {
-    console.log(`➕ Ajout depuis revenue_lines: ${dbLine.description} (dbLineId: ${dbLine.id})`);
-    
-    currentRevenues.push({
-      id: uuidv4(),
-      dbLineId: dbLine.id,
-      description: dbLine.description || '',
-      amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
-      category: dbLine.category || 'Autre',
-      date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
-      account: '',
-      isPaid: !!dbLine.is_received,
-      isRecurring: false,
-    });
-  }
-});
-          } catch (err) {
-            // 🛡️ CHECK 3: Avant log d'erreur
-            if (!isMountedRef.current) return;
-            
-            console.error('Erreur synchronisation transactions:', err);
-          }
-        }
-
-                // 🛡️ CHECK 4: Avant setState
-        if (!isMountedRef.current) return;
-
-        // ✅ DÉDUPLICATION FINALE par dbLineId (sécurité supplémentaire)
-        const deduplicateLines = (items) => {
-          const seenIds = new Set();
-          const seenDescAmounts = new Set();
-          
-          return items.filter(item => {
-            // Déduplication par dbLineId
-            if (item.dbLineId) {
-              if (seenIds.has(item.dbLineId)) {
-                console.warn(`⚠️ Doublon dbLineId supprimé: ${item.description} (#${item.dbLineId})`);
-                return false;
-              }
-              seenIds.add(item.dbLineId);
-            }
-            
-            // Déduplication par description + montant (lignes sans dbLineId)
-            const key = `${item.description?.trim().toLowerCase()}_${item.amount}`;
-            if (seenDescAmounts.has(key)) {
-              console.warn(`⚠️ Doublon desc+montant supprimé: ${item.description}`);
-              return false;
-            }
-            seenDescAmounts.add(key);
-            
-            return true;
           });
-        };
 
-        const finalExpenses = deduplicateLines(currentExpenses);
-        const finalRevenues = deduplicateLines(currentRevenues);
+          // ✅ MAPPER DIRECTEMENT revenueLines → revenues
+          const loadedRevenues = revenueLines.map(line => {
+            const tx = projectTx.find(t => 
+              t.type === 'income' && 
+              String(t.project_line_id) === String(line.id)
+            );
 
-        if (finalExpenses.length !== currentExpenses.length || finalRevenues.length !== currentRevenues.length) {
-          console.log(`✅ Déduplication: ${currentExpenses.length} → ${finalExpenses.length} expenses | ${currentRevenues.length} → ${finalRevenues.length} revenues`);
+            const accName = tx 
+              ? accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu'
+              : '';
+
+            return {
+              id: uuidv4(),
+              dbLineId: line.id,
+              description: line.description || '',
+              amount: parseFloat(line.projectedAmount || line.projected_amount || line.projectedamount || 0),
+              category: line.category || 'Autre',
+              date: line.transaction_date ? new Date(line.transaction_date) : new Date(),
+              realDate: tx?.transaction_date ? new Date(tx.transaction_date) : null,
+              account: accName,
+              isPaid: !!(line.is_received || line.isreceived),  // ✅ SOURCE DE VÉRITÉ
+              isRecurring: false,
+            };
+          });
+
+          if (!isMountedRef.current) return;
+
+          setExpenses(loadedExpenses);
+          setRevenues(loadedRevenues);
+
+          console.log('🔍 STATE EXPENSES APRÈS SET:', loadedExpenses.slice(0, 3).map(e => ({
+  description: e.description,
+  amount: e.amount,
+  isPaid: e.isPaid
+})));
+
+        } catch (err) {
+          if (!isMountedRef.current) return;
+          console.error('❌ Erreur chargement projet:', err);
         }
-
-        setExpenses(finalExpenses);
-        setRevenues(finalRevenues);
-
-      } else {
-        resetForm();
       }
-    };
+    } else {
+      resetForm();
+    }
+  };
 
-    loadProjectData();
-  }, [project, isOpen, accounts]);
+  loadProjectData();
+}, [project, isOpen, accounts]);
 
 
   // ✅ AJOUTER APRÈS les useEffect (ligne ~200)
@@ -1426,98 +1258,116 @@ const handleCancelPaymentRevenue = async (rev, index) => {
 
   <div className="space-y-2 max-h-96 overflow-y-auto">
     {expenses.map((exp, idx) => {
-      // ✅ CALCULER isPaid DEPUIS LA DB (source de vérité)
-      const expenseLine = project?.expenseLines?.find(
-        line => String(line.id) === String(exp.dbLineId)
-      );
-      const isPaid = expenseLine?.is_paid || expenseLine?.ispaid || false;
+    // ✅ CORRECTION : Utiliser directement exp.isPaid de l'état
+    const isPaid = exp.isPaid || false;
 
-      return (
-        <div
-          key={exp.id}
-          className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+    console.log(`🎨 RENDERING EXPENSE ${idx}:`, {
+    description: exp.description,
+    amount: exp.amount,
+    isPaid: exp.isPaid
+  });
+
+    return (
+      <div
+        key={exp.id}
+        className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
+          isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+        }`}
+      >
+        {/* Description */}
+        <input
+          type="text"
+          value={exp.description}
+          onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
+          className="col-span-3 p-2 border rounded text-sm"
+          placeholder="Description"
+        />
+
+        {/* Catégorie */}
+        <select
+          value={exp.category}
+          onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
         >
-          <input
-            type="text"
-            value={exp.description}
-            onChange={(e) => updateExpense(exp.id, 'description', e.target.value)}
-            className="col-span-3 p-2 border rounded text-sm"
-            placeholder="Description"
-          />
-          <select
-            value={exp.category}
-            onChange={(e) => updateExpense(exp.id, 'category', e.target.value)}
-            className="col-span-2 p-2 border rounded text-sm"
-          >
-            {expenseCategories.map((cat) => (
-              <option key={cat.value} value={cat.value}>
-                {cat.label}
-              </option>
-            ))}
-          </select>
-          <CalculatorInput
-            value={exp.amount}
-            onChange={(val) => updateExpense(exp.id, 'amount', val)}
-            className="col-span-2 p-2 border rounded text-sm font-semibold"
-          />
-          <DatePicker
-            selected={exp.date}
-            onChange={(date) => updateExpense(exp.id, 'date', date)}
-            dateFormat="dd/MM/yy"
-            className="col-span-2 p-2 border rounded text-sm"
-            placeholderText="Date planifiée"
-          />
-          <DatePicker
-            selected={exp.realDate || null}
-            onChange={(date) => updateExpense(exp.id, 'realDate', date)}
-            dateFormat="dd/MM/yy"
-            className="col-span-2 p-2 border rounded text-sm bg-amber-50"
-            placeholderText="Date réelle"
-          />
-          <select
-            value={exp.account}
-            onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
-            className="col-span-2 p-2 border rounded text-sm"
-          >
-            <option value="">Compte</option>
-            {accounts.map((acc) => (
-              <option key={acc.id} value={acc.name}>
-                {acc.name}
-              </option>
-            ))}
-          </select>
-          
-          {!isPaid ? (
-            <button
-              disabled={isProcessingPayment}
-              onClick={async () => {
-                await handlePayerDepense(exp);
-              }}
-              className={`col-span-1 ${
-                isProcessingPayment 
-                  ? 'bg-gray-400 cursor-wait' 
-                  : 'bg-blue-600 hover:bg-blue-700'
-              } text-white p-2 rounded text-xs disabled:opacity-50`}
-              title="Marquer comme payé"
-            >
-              {isProcessingPayment ? '⏳...' : '💳 Payer'}
-            </button>
-          ) : (
-            <button
-              onClick={() => handleCancelPaymentExpense(exp, idx)}
-              className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
-              title="Annuler paiement"
-            >
-              ↩️
-            </button>
-          )}
-          
+          {expenseCategories.map((cat) => (
+            <option key={cat.value} value={cat.value}>
+              {cat.label}
+            </option>
+          ))}
+        </select>
+
+        {/* Montant */}
+        <CalculatorInput
+          value={exp.amount}
+          onChange={(val) => updateExpense(exp.id, 'amount', val)}
+          className="col-span-2 p-2 border rounded text-sm font-semibold"
+        />
+
+        {/* Date planifiée */}
+        <DatePicker
+          selected={exp.date}
+          onChange={(date) => updateExpense(exp.id, 'date', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm"
+          placeholderText="Date planifiée"
+        />
+
+        {/* Date réelle */}
+        <DatePicker
+          selected={exp.realDate || null}
+          onChange={(date) => updateExpense(exp.id, 'realDate', date)}
+          dateFormat="dd/MM/yy"
+          className="col-span-2 p-2 border rounded text-sm bg-amber-50"
+          placeholderText="Date réelle"
+        />
+
+        {/* Compte */}
+        <select
+          value={exp.account}
+          onChange={(e) => updateExpense(exp.id, 'account', e.target.value)}
+          className="col-span-2 p-2 border rounded text-sm"
+        >
+          <option value="">Compte</option>
+          {accounts.map((acc) => (
+            <option key={acc.id} value={acc.name}>
+              {acc.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Actions */}
+        {!isPaid ? (
+          // ✅ BOUTON PAYER
           <button
-            onClick={() => removeExpense(exp.id)}
-            className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+            disabled={isProcessingPayment}
+            onClick={async () => await handlePayerDepense(exp)}
+            className={`col-span-1 ${
+              isProcessingPayment
+                ? 'bg-gray-400 cursor-wait'
+                : 'bg-blue-600 hover:bg-blue-700'
+            } text-white p-2 rounded text-xs disabled:opacity-50`}
+            title="Marquer comme payé"
           >
-            <Trash2 className="w-4 h-4" />
+            {isProcessingPayment ? '...' : 'Payer'}
           </button>
+        ) : (
+          // ✅ BOUTON ANNULER
+          <button
+            onClick={() => handleCancelPaymentExpense(exp, idx)}
+            className="col-span-1 bg-orange-500 text-white p-2 rounded hover:bg-orange-600 text-xs"
+            title="Annuler paiement"
+          >
+            🔄 Annuler
+          </button>
+        )}
+
+        {/* Supprimer */}
+        <button
+          onClick={() => removeExpense(exp.id)}
+          className="col-span-1 text-red-600 hover:bg-red-100 p-2 rounded"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
         </div>
       );
     })}

@@ -72,17 +72,16 @@ const cleanList = (jsonOrArray, type) => {
     }
   }
 
-  return list.map((item) => {
+  return list
+  .map((item) => {
     const isNormalizedLine = item.id && Number.isInteger(item.id);
-
-    // ✅ CORRECTION : Détecter "Déjà Payé" comme paiement confirmé
+    
     const accountIndicatesPaid = 
       item.account?.toLowerCase().includes('déjà') || 
       item.account?.toLowerCase().includes('deja') ||
       item.account?.toLowerCase().includes('payé') ||
       item.account?.toLowerCase().includes('paye');
 
-    // ✅ Combiner tous les indicateurs de paiement
     const isPaid = !!(
       item.isPaid || 
       item.ispaid || 
@@ -90,8 +89,25 @@ const cleanList = (jsonOrArray, type) => {
       item.isReceived || 
       item.isreceived ||
       item.is_received ||
-      accountIndicatesPaid  // ✅ AJOUTÉ
+      accountIndicatesPaid
     );
+
+    const amount = parseFloat(
+      item.amount ||
+        item.projectedAmount ||
+        item.projectedamount ||
+        item.projected_amount ||
+        item.actualAmount ||
+        item.actualamount ||
+        item.actual_amount ||
+        item.montant ||
+        0
+    );
+
+    // 🔥 FILTRER LES LIGNES À 0 AR
+    if (amount === 0) {
+      return null;
+    }
 
     return {
       id: isNormalizedLine
@@ -99,18 +115,7 @@ const cleanList = (jsonOrArray, type) => {
         : item.id || `temp-${Math.random().toString(36)}`,
       description: item.description || item.category || 'Sans description',
       category: item.category || 'Autre',
-      amount: parseFloat(
-        item.amount ||
-          item.projectedAmount ||
-          item.projectedamount ||
-          item.projected_amount ||
-          item.actualAmount ||
-          item.actualamount ||
-          item.actual_amount ||
-          item.montant ||
-          0
-      ),
-      // ✅ TOUJOURS UN BOOLÉEN
+      amount: amount,
       isPaid: isPaid,
       date: item.date || item.transactionDate || item.transactiondate || item.transaction_date || new Date(),
       plannedDate: item.plannedDate || item.planned_date || null,
@@ -120,7 +125,8 @@ const cleanList = (jsonOrArray, type) => {
       isRecurring: !!item.isRecurring,
       dbLineId: item.id && Number.isInteger(item.id) ? item.id : item.dbLineId || null,
     };
-  });
+  })
+  .filter(item => item !== null);  // 🔥 SUPPRIMER LES null
 };
 
   // ✅ CORRECTION: Prioriser les données DB (is_paid) sur le JSON

@@ -160,26 +160,26 @@ console.log('startDate (ISO):', `${debugStartDate.getFullYear()}-${String(debugS
         });
       });
 
-      // --- Transactions PRÉVISIONNELLES (futures uniquement) ---
-      console.log('🔍 DEBUG plannedTransactions:', {
-        total: plannedTransactions.length,
-        currentDateStr: currentDate.toLocaleDateString(),
-        todayStr: today.toLocaleDateString(),
-        sample: plannedTransactions.slice(0, 3).map((tx) => {
-          const txDate = new Date(tx.plannedDate || tx.transaction_date || tx.date);
-          txDate.setHours(0, 0, 0, 0);
-          return {
-            date: txDate.toLocaleDateString(),
-            type: tx.type,
-            amount: tx.amount,
-            account: tx.account_name || tx.accountName || tx.account,
-            isToday: txDate.getTime() === today.getTime(),
-            isCurrentDate: txDate.getTime() === currentDate.getTime(),
-          };
-        }),
-      });
+// --- Transactions PRÉVISIONNELLES (futures uniquement) ---
+console.log('🔍 DEBUG plannedTransactions:', {
+  total: plannedTransactions.length,
+  currentDateStr: currentDate.toLocaleDateString(),
+  todayStr: today.toLocaleDateString(),
+  sample: plannedTransactions.slice(0, 3).map((tx) => {
+    const txDate = new Date(tx.plannedDate || tx.transaction_date || tx.date);
+    txDate.setHours(0, 0, 0, 0);
+    return {
+      date: txDate.toLocaleDateString(),
+      type: tx.type,
+      amount: tx.amount,
+      account: tx.account_name || tx.accountName || tx.account,
+      isToday: txDate.getTime() === today.getTime(),
+      isCurrentDate: txDate.getTime() === currentDate.getTime(),
+    };
+  }),
+});
 
-      // ========================================
+// ========================================
 // --- Transactions PRÉVISIONNELLES (futures uniquement) ---
 // ========================================
 
@@ -191,14 +191,17 @@ if (currentDate.getTime() === today.getTime()) {
   
   // ✅ Afficher CHAQUE transaction ligne par ligne
   plannedTransactions.forEach((tx, i) => {
-    console.log(`[${i}] ${tx.date} | ${tx.description} | ${tx.amount.toLocaleString()} Ar | ${tx.account} | Projet: ${tx.projectname}`);
+    // ✅ FIX: Utiliser plannedDate en priorité (cohérent avec la logique ci-dessous)
+    const txDateDisplay = tx.plannedDate || tx.transaction_date || tx.date;
+    console.log(`[${i}] ${txDateDisplay} | ${tx.description} | ${tx.amount.toLocaleString()} Ar | ${tx.account} | Projet: ${tx.projectname}`);
   });
   
   console.log('===========================================');
 }
 
 plannedTransactions.forEach((tx, index) => {
-  const txDateStr = tx.date;
+  // ✅ CORRECTION CRITIQUE: Chercher plannedDate en priorité
+  const txDateStr = tx.plannedDate || tx.transaction_date || tx.date;
 
   if (!txDateStr) {
     console.log('⚠️ Transaction prév. sans date (index', index, '):', tx);
@@ -259,7 +262,8 @@ plannedTransactions.forEach((tx, index) => {
   });
 });
 
-      const netRealCoffre = (day.coffreIn || 0) - (day.coffreOut || 0);
+
+const netRealCoffre = (day.coffreIn || 0) - (day.coffreOut || 0);
 const netPlannedCoffre = (day.coffrePlannedIn || 0) - (day.coffrePlannedOut || 0);
 
 // ✅ CORRECTION : currentDate >= today inclut aujourd'hui

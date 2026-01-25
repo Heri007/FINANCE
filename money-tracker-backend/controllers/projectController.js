@@ -102,40 +102,34 @@ const syncProjectLinesFromJson = async (client, project_id, rawExpenses, rawReve
   }
 
   // REVENUS
-  for (const rev of revenues) {
-    if (!rev?.plannedDate) continue;
+for (const rev of revenues) {
+  if (!rev?.plannedDate) continue;
 
-    await client.query(
-      `
-      INSERT INTO project_revenue_lines (
-        project_id,
-        description,
-        category,
-        projected_amount,
-        actual_amount,
-        transaction_date,
-        is_received
-      )
-      VALUES ($1, $2, $3, $4, COALESCE($5, 0), $6, COALESCE($7, false))
-      ON CONFLICT (project_id, description, projected_amount)
-      DO UPDATE SET
-        category = EXCLUDED.category,
-        transaction_date = EXCLUDED.transaction_date,
-        is_received = EXCLUDED.is_received
-      `,
-      [
-        project_id,
-        rev.description || '',
-        rev.category || 'Projet - Revenu',
-        Number(rev.amount || 0),
-        rev.actual_amount != null ? Number(rev.actual_amount) : null,
-        rev.plannedDate,
-        rev.is_paid === true,
-      ]
-    );
-  }
+  await client.query(
+    `INSERT INTO project_revenue_lines 
+     (project_id, description, category, projected_amount, actual_amount, 
+      transaction_date, is_received, products)
+     VALUES ($1, $2, $3, $4, COALESCE($5, 0), $6, COALESCE($7, false), $8)
+     ON CONFLICT (project_id, description, projected_amount) 
+     DO UPDATE SET 
+       category = EXCLUDED.category,
+       transaction_date = EXCLUDED.transaction_date,
+       is_received = EXCLUDED.is_received,
+       products = EXCLUDED.products
+    `,
+    [
+      projectId,
+      rev.description || '',
+      rev.category || 'Autre',
+      Number(rev.amount) || 0,
+      rev.actualAmount != null ? Number(rev.actualAmount) : null,
+      rev.plannedDate,
+      rev.isPaid === true,
+      JSON.stringify(rev.products || []),  // ✅ $8
+    ]
+  );
+}
 };
-
 
 // ============================================================================
 // HELPER : Recalculer automatiquement les totaux d'un projet
@@ -253,34 +247,41 @@ const syncJsonWithNormalizedLines = (projectExpensesJson, projectRevenuesJson, e
   const syncedExpenses = expenses.map(exp => {
     const normalizedLine = expenseLines.find(
       line => line.id && exp.dbLineId && 
-              line.id.toString() === exp.dbLineId.toString()
+              (line.id === exp.dbLineId || line.id.toString() === exp.dbLineId.toString())
     );
     
     if (normalizedLine) {
       return {
         ...exp,
-        is_paid: normalizedLine.is_paid,
-        actual_amount: normalizedLine.actual_amount,
-        transaction_date: normalizedLine.transaction_date
+        isPaid: normalizedLine.isPaid,           // ✅ camelCase
+        is_paid: normalizedLine.isPaid,          // ✅ snake_case (compatibilité)
+        actualAmount: normalizedLine.actualAmount, // ✅ camelCase
+        actual_amount: normalizedLine.actualAmount, // ✅ snake_case
+        transactionDate: normalizedLine.transactionDate, // ✅ camelCase
+        transaction_date: normalizedLine.transactionDate // ✅ snake_case
       };
     }
     return exp;
   });
   
-  // Synchroniser revenues
+  // Synchroniser revenues AVEC PRODUCTS
   const syncedRevenues = revenues.map(rev => {
     const normalizedLine = revenueLines.find(
       line => line.id && rev.dbLineId &&
-              line.id.toString() === rev.dbLineId.toString()
+              (line.id === rev.dbLineId || line.id.toString() === rev.dbLineId.toString())
     );
     
     if (normalizedLine) {
       return {
         ...rev,
-        isReceived: normalizedLine.isReceived,
-        is_paid: normalizedLine.isReceived,
-        actual_amount: normalizedLine.actual_amount,
-        transaction_date: normalizedLine.transaction_date
+        isReceived: normalizedLine.isReceived,         // ✅ camelCase
+        isPaid: normalizedLine.isReceived,             // ✅ Alias pour compatibilité
+        is_paid: normalizedLine.isReceived,            // ✅ snake_case
+        actualAmount: normalizedLine.actualAmount,     // ✅ camelCase
+        actual_amount: normalizedLine.actualAmount,    // ✅ snake_case
+        transactionDate: normalizedLine.transactionDate, // ✅ camelCase
+        transaction_date: normalizedLine.transactionDate, // ✅ snake_case
+        products: normalizedLine.products || rev.products || [] // ✅ PRÉSERVER PRODUCTS
       };
     }
     return rev;
@@ -288,7 +289,6 @@ const syncJsonWithNormalizedLines = (projectExpensesJson, projectRevenuesJson, e
   
   return { expenses: syncedExpenses, revenues: syncedRevenues };
 };
-
 
 // ============================================================================
 // 1. GET - Récupérer tous les projets avec mapping explicite
@@ -326,12 +326,12 @@ exports.getProjects = async (req, res) => {
       );
       
       const revLines = await pool.query(
-        `SELECT id, description, category, projected_amount, actual_amount,
-                transaction_date, is_received
-         FROM project_revenue_lines
-         WHERE project_id = $1 ORDER BY id ASC`,
-        [project.id]
-      );
+  `SELECT id, description, category, projected_amount, actual_amount,
+          transaction_date, is_received, products, created_at  
+   FROM project_revenue_lines
+   WHERE project_id = $1 ORDER BY id ASC`,
+  [project.id]
+);
       
       // Mapper les lignes normalisées
       const expenseLines = expLines.rows.map(r => ({
@@ -361,14 +361,6 @@ exports.getProjects = async (req, res) => {
         expenseLines,
         revenueLines
       );
-      
-      // Log pour debug
-      if (project.id === 24) {
-        const paidCount = expenses.filter(e => e.is_paid).length;
-        console.log(`🐔 Natiora (projet 24):`);
-        console.log(`  - expenseLines: ${expenseLines.length} lignes`);
-        console.log(`  - expenses JSON: ${expenses.length} items, ${paidCount} payés`);
-      }
       
       return {
         id: project.id,
@@ -412,7 +404,7 @@ exports.getProjects = async (req, res) => {
   }
 };
 
-// ============================================================================
+/// ============================================================================
 // 2. GET - Récupérer un projet par ID
 // ============================================================================
 exports.getProjectById = async (req, res) => {
@@ -450,39 +442,63 @@ exports.getProjectById = async (req, res) => {
       
       const revLines = await pool.query(
         `SELECT id, description, category, projected_amount, actual_amount,
-                transaction_date, is_received, created_at
+                transaction_date, is_received, products, created_at
          FROM project_revenue_lines
          WHERE project_id = $1 ORDER BY id ASC`,
         [id]
       );
       
+      // ✅ MAPPER les expense lines
       if (expLines.rows && expLines.rows.length > 0) {
         project.expenseLines = expLines.rows.map(r => ({
           id: r.id,
           description: r.description,
           category: r.category,
           projectedAmount: parseFloat(r.projected_amount || 0),
-          actual_amount: parseFloat(r.actual_amount || 0),
-          transaction_date: r.transaction_date,
-          is_paid: !!r.is_paid,
+          actualAmount: parseFloat(r.actual_amount || 0),
+          transactionDate: r.transaction_date,
+          isPaid: !!r.is_paid,
           createdAt: r.created_at
         }));
       }
       
+      // ✅ MAPPER les revenue lines AVEC PRODUCTS
       if (revLines.rows && revLines.rows.length > 0) {
-        project.revenueLines = revLines.rows.map(r => ({
-          id: r.id,
-          description: r.description,
-          category: r.category,
-          projectedAmount: parseFloat(r.projected_amount || 0),
-          actual_amount: parseFloat(r.actual_amount || 0),
-          transaction_date: r.transaction_date,
-          isReceived: !!r.is_received,
-          createdAt: r.created_at
-        }));
+        project.revenueLines = revLines.rows.map(r => {
+          // ✅ PARSER PRODUCTS depuis PostgreSQL JSONB
+          let parsedProducts = [];
+          try {
+            if (r.products) {
+              if (typeof r.products === 'string') {
+                parsedProducts = JSON.parse(r.products);
+              } else if (Array.isArray(r.products)) {
+                parsedProducts = r.products;
+              } else if (typeof r.products === 'object') {
+                // PostgreSQL JSONB renvoie déjà un objet
+                parsedProducts = r.products;
+              }
+            }
+          } catch (e) {
+            console.warn(`⚠️ Erreur parsing products pour revenue line ${r.id}:`, e);
+          }
+
+          console.log(`📦 Revenue ${r.id} products:`, parsedProducts);
+
+          return {
+            id: r.id,
+            description: r.description,
+            category: r.category,
+            projectedAmount: parseFloat(r.projected_amount || 0),
+            actualAmount: parseFloat(r.actual_amount || 0),
+            transactionDate: r.transaction_date,
+            isReceived: !!r.is_received,
+            products: parsedProducts,  // ✅ IMPORTANT
+            createdAt: r.created_at
+          };
+        });
       }
       
-      // ✅ AJOUT: Synchroniser le JSON
+      // ✅ SYNCHRONISER le JSON avec les lignes normalisées
       if (project.expenseLines || project.revenueLines) {
         const { expenses, revenues } = syncJsonWithNormalizedLines(
           project.expenses,
@@ -494,7 +510,7 @@ exports.getProjectById = async (req, res) => {
         project.expenses = expenses;
         project.revenues = revenues;
         
-        console.log(`✅ Projet ${id} synchronisé: ${expenses.filter(e => e.is_paid).length} dépenses payées`);
+        console.log(`✅ Projet ${id} synchronisé: ${expenses.filter(e => e.isPaid || e.is_paid).length} dépenses payées`);
       }
       
     } catch (e) {
@@ -507,7 +523,6 @@ exports.getProjectById = async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 };
-
 
 // ============================================================================
 // 3. POST - Créer un nouveau projet
@@ -680,209 +695,216 @@ exports.updateProject = async (req, res) => {
     const revenuesList = Array.isArray(revenues) ? revenues : JSON.parse(revenues || '[]');
     
     // ============================================================================
-// A. EXPENSES - Créer/Mettre à jour/Supprimer (CORRECTION FINALE)
-// ============================================================================
-const validExpenseIds = expensesList
-  .map(e => e.dbLineId)
-  .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
-  .map(dbId => parseInt(dbId, 10));
+    // A. EXPENSES - Créer/Mettre à jour/Supprimer
+    // ============================================================================
+    const validExpenseIds = expensesList
+      .map(e => e.dbLineId)
+      .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
+      .map(dbId => parseInt(dbId, 10));
 
-console.log(`🔍 Projet ${id}: ${validExpenseIds.length} expenses avec dbLineId valides sur ${expensesList.length}`);
+    console.log(`🔍 Projet ${id}: ${validExpenseIds.length} expenses avec dbLineId valides sur ${expensesList.length}`);
 
-if (validExpenseIds.length > 0) {
-  await client.query(
-    `DELETE FROM project_expense_lines 
-     WHERE project_id = $1 AND id != ALL($2::int[])`,
-    [id, validExpenseIds]
-  );
-  console.log(`🗑️ Lignes obsolètes supprimées (hors ${validExpenseIds.length} IDs)`);
-}
-
-const updatedExpenses = [];
-for (const item of expensesList) {
-  const hasValidDbLineId = item.dbLineId && 
-    (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
-  
-  if (hasValidDbLineId) {
-    try {
-      // ✅ CORRECTION 1: Vérifier l'état actuel dans la DB
-      const currentLine = await client.query(
-        `SELECT is_paid, actual_amount FROM project_expense_lines WHERE id = $1`,
-        [parseInt(item.dbLineId, 10)]
+    if (validExpenseIds.length > 0) {
+      await client.query(
+        `DELETE FROM project_expense_lines 
+         WHERE project_id = $1 AND id != ALL($2::int[])`,
+        [id, validExpenseIds]
       );
+      console.log(`🗑️ Lignes expenses obsolètes supprimées (hors ${validExpenseIds.length} IDs)`);
+    }
+
+    const updatedExpenses = [];
+    
+    for (const item of expensesList) {
+      const hasValidDbLineId = item.dbLineId && 
+        (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
       
-      // ✅ Vérifier que la ligne existe
-      if (currentLine.rows.length === 0) {
-        console.warn(`⚠️ Ligne ${item.dbLineId} introuvable, passage en INSERT`);
-        // Continuer avec INSERT ci-dessous
-      } else {
-        const isAlreadyPaid = currentLine.rows[0]?.is_paid;
-        
-        const updateFields = [];
-        const updateValues = [];
-        let paramIndex = 1;
-        
-        updateFields.push(`description = $${paramIndex++}`);
-        updateValues.push(item.description);
-        
-        updateFields.push(`category = $${paramIndex++}`);
-        updateValues.push(item.category || 'Autre');
-        
-        updateFields.push(`projected_amount = $${paramIndex++}`);
-        updateValues.push(parseFloat(item.amount) || 0);
-        
-        updateFields.push(`actual_amount = $${paramIndex++}`);
-        updateValues.push(parseFloat(item.actualAmount) || 0);
-        
-        updateFields.push(`transaction_date = $${paramIndex++}`);
-        updateValues.push(item.transaction_date || item.plannedDate || null);
-        
-        // ✅ NE METTRE À JOUR is_paid QUE si la ligne n'est PAS déjà payée
-        if (!isAlreadyPaid && item.isPaid !== undefined && item.isPaid !== null) {
-          updateFields.push(`is_paid = $${paramIndex++}`);
-          updateValues.push(!!item.isPaid);
+      if (hasValidDbLineId) {
+        try {
+          // Vérifier l'état actuel dans la DB
+          const currentLine = await client.query(
+            `SELECT is_paid, actual_amount FROM project_expense_lines WHERE id = $1`,
+            [parseInt(item.dbLineId, 10)]
+          );
+          
+          // Vérifier que la ligne existe
+          if (currentLine.rows.length === 0) {
+            console.warn(`⚠️ Ligne ${item.dbLineId} introuvable, passage en INSERT`);
+            // Continuer avec INSERT ci-dessous
+          } else {
+            const isAlreadyPaid = currentLine.rows[0]?.is_paid;
+            
+            const updateFields = [];
+            const updateValues = [];
+            let paramIndex = 1;
+            
+            updateFields.push(`description = $${paramIndex++}`);
+            updateValues.push(item.description || '');
+            
+            updateFields.push(`category = $${paramIndex++}`);
+            updateValues.push(item.category || 'Autre');
+            
+            updateFields.push(`projected_amount = $${paramIndex++}`);
+            updateValues.push(parseFloat(item.amount) || 0);
+            
+            updateFields.push(`actual_amount = $${paramIndex++}`);
+            updateValues.push(parseFloat(item.actualAmount) || 0);
+            
+            updateFields.push(`transaction_date = $${paramIndex++}`);
+            updateValues.push(item.transactionDate || item.plannedDate || null);
+            
+            // NE METTRE À JOUR is_paid QUE si la ligne n'est PAS déjà payée
+            if (!isAlreadyPaid && item.isPaid !== undefined && item.isPaid !== null) {
+              updateFields.push(`is_paid = $${paramIndex++}`);
+              updateValues.push(!!item.isPaid);
+            }
+            
+            updateValues.push(parseInt(item.dbLineId, 10));
+            
+            await client.query(
+              `UPDATE project_expense_lines 
+               SET ${updateFields.join(', ')} 
+               WHERE id = $${paramIndex}`,
+              updateValues
+            );
+            
+            console.log(`✅ Ligne expense ${item.dbLineId} mise à jour - ${item.description}`);
+            updatedExpenses.push(item);
+            continue; // Passer à l'itération suivante
+          }
+        } catch (err) {
+          console.error(`❌ Erreur UPDATE ligne ${item.dbLineId}:`, err);
+          // Continuer avec INSERT
         }
-        
-        updateValues.push(parseInt(item.dbLineId, 10));
-        
-        await client.query(
-          `UPDATE project_expense_lines 
-           SET ${updateFields.join(', ')} 
-           WHERE id = $${paramIndex}`,
-          updateValues
+      }
+      
+      // INSERT nouvelle ligne (si pas de dbLineId OU si UPDATE a échoué)
+      try {
+        const insertResult = await client.query(
+          `INSERT INTO project_expense_lines (
+            project_id, description, category, projected_amount, 
+            actual_amount, is_paid, transaction_date
+          )
+          VALUES ($1, $2, $3, $4, 0, false, $5)
+          RETURNING *`,
+          [
+            id,
+            item.description || '',
+            item.category || 'Autre',
+            parseFloat(item.amount || 0),
+            item.transactionDate || item.plannedDate || null
+          ]
         );
         
-        updatedExpenses.push(item);
-        continue; // ✅ Passer à l'itération suivante
+        if (!insertResult.rows || insertResult.rows.length === 0) {
+          throw new Error(`Impossible de créer la ligne expense: ${item.description}`);
+        }
+        
+        const newLine = insertResult.rows[0];
+        const newDbLineId = newLine.id;
+        
+        console.log(`✅ Ligne expense créée: ${newDbLineId} - ${item.description}`);
+        
+        updatedExpenses.push({ 
+          ...item, 
+          dbLineId: newDbLineId.toString() 
+        });
+      } catch (insertErr) {
+        console.error(`❌ Erreur INSERT ligne expense:`, insertErr);
+        throw insertErr; // Arrêter la transaction
       }
-    } catch (err) {
-      console.error(`❌ Erreur UPDATE ligne ${item.dbLineId}:`, err);
-      // Continuer avec INSERT
     }
-  }
-  
-  // ✅ INSERT nouvelle ligne (si pas de dbLineId OU si UPDATE a échoué)
-  try {
-    const insertResult = await client.query(`
-      INSERT INTO project_expense_lines (
-        project_id, description, category, projected_amount, 
-        actual_amount, is_paid, transaction_date
-      )
-      VALUES ($1, $2, $3, $4, 0, false, $5)
-      RETURNING *
-    `, [
-      id,
-      item.description,
-      item.category || 'Autre',
-      parseFloat(item.amount || 0),
-      item.transaction_date || item.plannedDate || null
-    ]);
-    
-    // ✅ CORRECTION 2: Vérifier que insertResult.rows[0] existe
-    if (!insertResult.rows || insertResult.rows.length === 0) {
-      throw new Error(`Impossible de créer la ligne: ${item.description}`);
+
+    // ============================================================================
+    // B. REVENUES - Créer/Mettre à jour
+    // ============================================================================
+    const validRevenueIds = revenuesList
+      .map(r => r.dbLineId)
+      .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
+      .map(dbId => parseInt(dbId, 10));
+
+    console.log(`🔍 Projet ${id}: ${validRevenueIds.length} revenues avec dbLineId valides sur ${revenuesList.length}`);
+
+    if (validRevenueIds.length > 0) {
+      await client.query(
+        `DELETE FROM project_revenue_lines 
+         WHERE project_id = $1 AND id != ALL($2::int[])`,
+        [id, validRevenueIds]
+      );
+      console.log(`🗑️ Lignes revenues obsolètes supprimées (hors ${validRevenueIds.length} IDs)`);
     }
-    
-    const newLine = insertResult.rows[0];
-    const newDbLineId = newLine.id;
-    
-    console.log(`✅ Ligne expense créée: ${newDbLineId} - ${item.description}`);
-    
-    updatedExpenses.push({ 
-      ...item, 
-      dbLineId: newDbLineId.toString() 
-    });
-  } catch (insertErr) {
-    console.error(`❌ Erreur INSERT ligne:`, insertErr);
-    throw insertErr; // Arrêter la transaction
-  }
-}
 
-// ============================================================================
-// B. REVENUES - Créer/Mettre à jour
-// ============================================================================
-const validRevenueIds = revenuesList
-  .map(r => r.dbLineId)
-  .filter(dbId => dbId && (Number.isInteger(dbId) || /^\d+$/.test(dbId)))
-  .map(dbId => parseInt(dbId, 10));
+    const updatedRevenues = [];
 
-console.log(`🔍 Projet ${id}: ${validRevenueIds.length} revenues avec dbLineId valides sur ${revenuesList.length}`);
+    for (const item of revenuesList) {
+      const hasValidDbLineId =
+        item.dbLineId && (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
 
-if (validRevenueIds.length > 0) {
-  await client.query(
-    `DELETE FROM project_revenue_lines 
-     WHERE project_id = $1 AND id != ALL($2::int[])`,
-    [id, validRevenueIds]
-  );
-  console.log(`🗑️ Lignes obsolètes supprimées (hors ${validRevenueIds.length} IDs)`);
-}
+      if (hasValidDbLineId) {
+        try {
+          // UPDATE avec products
+          await client.query(
+            `UPDATE project_revenue_lines
+             SET description = $1,
+                 category = $2,
+                 projected_amount = $3,
+                 transaction_date = $4,
+                 products = $5
+             WHERE id = $6`,
+            [
+              item.description || '',
+              item.category || 'Autre',
+              parseFloat(item.amount) || 0,
+              item.transactionDate || item.plannedDate || null,
+              JSON.stringify(item.products || []),
+              parseInt(item.dbLineId, 10),
+            ]
+          );
 
-const updatedRevenues = [];
-for (const item of revenuesList) {
-  const hasValidDbLineId = item.dbLineId && 
-    (Number.isInteger(item.dbLineId) || /^\d+$/.test(item.dbLineId));
+          console.log(`✅ Ligne revenue ${item.dbLineId} mise à jour - ${item.description}`);
+          updatedRevenues.push(item);
+        } catch (updateErr) {
+          console.error(`❌ Erreur UPDATE revenue ${item.dbLineId}:`, updateErr);
+          throw updateErr;
+        }
+      } else {
+        // INSERT nouvelle ligne
+        try {
+          const insertResult = await client.query(
+            `INSERT INTO project_revenue_lines
+             (project_id, description, category, projected_amount, 
+              actual_amount, is_received, transaction_date, products)
+             VALUES ($1, $2, $3, $4, 0, false, $5, $6)
+             RETURNING id`,
+            [
+              id,
+              item.description || '',
+              item.category || 'Autre',
+              parseFloat(item.amount) || 0,
+              item.transactionDate || item.plannedDate || null,
+              JSON.stringify(item.products || []),
+            ]
+          );
 
-  if (hasValidDbLineId) {
-    // ✅ UPDATE sans modifier is_received ni actual_amount
-    await client.query(
-      `UPDATE project_revenue_lines 
-       SET description = $1, 
-           category = $2, 
-           projected_amount = $3, 
-           transaction_date = $4
-       WHERE id = $5`,
-      [
-        item.description || '',
-        item.category || 'Autre',
-        parseFloat(item.amount || 0),
-        item.transaction_date || item.plannedDate || null,
-        parseInt(item.dbLineId, 10)
-      ]
-    );
-    
-    console.log(`🔄 Ligne revenue ${item.dbLineId} mise à jour: "${item.description}"`);
-    updatedRevenues.push(item);
-    
-  } else {
-    // ✅ INSERT nouvelle ligne
-    const insertResult = await client.query(
-      `INSERT INTO project_revenue_lines 
-       (project_id, description, category, projected_amount, actual_amount, is_received, transaction_date)
-       VALUES ($1, $2, $3, $4, 0, false, $5)
-       RETURNING id`,
-      [
-        id,
-        item.description || '',
-        item.category || 'Autre',
-        parseFloat(item.amount || 0),
-        item.transaction_date || item.plannedDate || null
-      ]
-    );
-    
-    // ✅ CORRECTION 3: Accès correct avec [0]
-    if (!insertResult.rows || insertResult.rows.length === 0) {
-      throw new Error(`Impossible de créer la ligne revenue: ${item.description}`);
+          if (!insertResult.rows || insertResult.rows.length === 0) {
+            throw new Error(`Impossible de créer la ligne revenue: ${item.description}`);
+          }
+
+          const newDbLineId = insertResult.rows[0].id;
+          console.log(`✅ Ligne revenue créée ${newDbLineId} - ${item.description}`);
+          updatedRevenues.push({ ...item, dbLineId: newDbLineId.toString() });
+        } catch (insertErr) {
+          console.error(`❌ Erreur INSERT revenue:`, insertErr);
+          throw insertErr;
+        }
+      }
     }
-    
-    const newDbLineId = insertResult.rows[0].id; // ✅ [0] ajouté
-    
-    if (!newDbLineId) {
-      throw new Error(`ID de ligne revenue manquant pour: ${item.description}`);
-    }
-    
-    console.log(`✅ Ligne revenue créée: ${newDbLineId} - ${item.description}`);
-    
-    updatedRevenues.push({
-      ...item,
-      dbLineId: newDbLineId.toString()
-    });
-  }
-}
-    
-    // ✅ MISE À JOUR FINALE DU JSON AVEC LES NOUVEAUX dbLineId
+
+    // MISE À JOUR FINALE DU JSON AVEC LES NOUVEAUX dbLineId
     await client.query(
       `UPDATE projects 
-       SET expenses = $1::jsonb, revenues = $2::jsonb 
+       SET expenses = $1::jsonb, 
+           revenues = $2::jsonb 
        WHERE id = $3`,
       [JSON.stringify(updatedExpenses), JSON.stringify(updatedRevenues), id]
     );
@@ -891,7 +913,7 @@ for (const item of revenuesList) {
     
     // Renvoyer le projet mis à jour
     const updatedProject = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
-    res.json(updatedProject.rows);
+    res.json(updatedProject.rows[0]); // ✅ CORRECTION: renvoyer rows[0] au lieu de rows
     
   } catch (error) {
     await client.query('ROLLBACK');

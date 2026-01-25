@@ -17,7 +17,7 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
 
  const handleRestore = async () => {
   if (!file) return;
-
+  
   if (!window.confirm(
     'ATTENTION: Cette action va remplacer toutes vos données actuelles par celles du backup.'
   )) return;
@@ -32,62 +32,92 @@ export function BackupImportModal({ onClose, onRestoreSuccess }) {
     try {
       const backupData = JSON.parse(e.target.result);
 
-      // Validation
+      // Validation de version
       if (!backupData.version || parseFloat(backupData.version) < 2.0) {
         throw new Error('Version de backup non supportée. Version 2.0+ requise.');
       }
 
+      // ✅ CORRECTION: Utiliser snake_case comme dans le fichier JSON
       const {
         accounts,
         transactions,
         receivables = [],
         projects = [],
         notes = [],
-        projectexpenselines = [],  // ✅ AJOUTER
-        projectrevenuelines = []   // ✅ AJOUTER
+        visions = [],
+        objectives = [],
+        employees = [],
+        project_partners = [],
+        profit_distributions = [],
+        partner_payments = [],
+        project_expense_lines = [],      // ✅ CORRIGÉ: snake_case
+        project_revenue_lines = []       // ✅ CORRIGÉ: snake_case
       } = backupData;
 
+      // Validation basique
       if (!Array.isArray(accounts) || !Array.isArray(transactions)) {
         throw new Error('Format invalide: accounts et transactions doivent être des tableaux');
       }
 
-      addLog(`✅ Fichier valide:
-        - ${accounts.length} comptes
-        - ${transactions.length} transactions
-        - ${receivables.length} receivables
-        - ${projects.length} projets
-        - ${projectexpenselines.length} lignes de dépenses
-        - ${projectrevenuelines.length} lignes de revenus
-        - ${notes?.length || 0} notes`
-      );
+      addLog(`✅ Fichier valide:`);
+      addLog(`  - ${accounts.length} comptes`);
+      addLog(`  - ${transactions.length} transactions`);
+      addLog(`  - ${receivables.length} receivables`);
+      addLog(`  - ${projects.length} projets`);
+      addLog(`  - ${project_expense_lines.length} lignes de dépenses`);  // ✅ CORRIGÉ
+      addLog(`  - ${project_revenue_lines.length} lignes de revenus`);   // ✅ CORRIGÉ
+      addLog(`  - ${notes?.length || 0} notes`);
+      addLog(`  - ${visions?.length || 0} visions`);
+      addLog(`  - ${objectives?.length || 0} objectifs`);
+      addLog(`  - ${employees?.length || 0} employés`);
+      addLog(`  - ${project_partners?.length || 0} associés`);
+      addLog(`  - ${profit_distributions?.length || 0} distributions`);
+      addLog(`  - ${partner_payments?.length || 0} paiements`);
 
-      // ✅ APPEL API AVEC TOUTES LES DONNÉES
-      addLog('📤 Envoi de la restauration au serveur...');
+      // ✅ Envoi de la restauration au serveur
+addLog('📤 Envoi de la restauration au serveur...');
 
-      const restorePayload = {
-        backup: backupData,
-        options: {
-          includeProjects: projects.length > 0,
-          includeProjectLines: true,  // ✅ NOUVEAU
-          dryRun: false,
-        }
-      };
+const restorePayload = {
+  backup: backupData,  // Envoyer TOUT le backup tel quel
+  options: {
+    includeProjects: projects.length > 0,
+    dryRun: false
+  }
+};
 
-      const result = await api.post('backup/restore-full', restorePayload);
+const response = await api.post('backup/restore-full', restorePayload);
 
-      addLog('✅ RESTAURATION RÉUSSIE !');
-      addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
-      addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
-      addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
-      addLog(`📊 Projets restaurés: ${result.summary.projects}`);
-      addLog(`📊 Lignes de dépenses: ${result.summary.expenseLines || 0}`);  // ✅ NOUVEAU
-      addLog(`📊 Lignes de revenus: ${result.summary.revenueLines || 0}`);   // ✅ NOUVEAU
+// ✅ CORRECTION: Gérer les deux cas (response.data OU response)
+const result = response.data || response;
 
-      setStatus('success');
-      setTimeout(() => {
-        onRestoreSuccess?.();
-        onClose();
-      }, 3000);
+// ✅ Validation de la structure de réponse
+if (!result || !result.summary) {
+  console.error('⚠️ Format de réponse inattendu:', result);
+  addLog('⚠️ Restauration effectuée mais format de réponse inattendu');
+  addLog('Vérifiez les données dans la base de données');
+  setStatus('success');
+  setTimeout(() => {
+    onRestoreSuccess?.();
+    onClose();
+  }, 3000);
+  return;
+}
+
+// ✅ Affichage du résumé
+addLog('✅ RESTAURATION RÉUSSIE !');
+addLog(`📊 Comptes restaurés: ${result.summary.accounts}`);
+addLog(`📊 Transactions restaurées: ${result.summary.transactions}`);
+addLog(`📊 Receivables restaurés: ${result.summary.receivables}`);
+addLog(`📊 Projets restaurés: ${result.summary.projects}`);
+addLog(`📊 Lignes de dépenses: ${result.summary.expenseLines || 0}`);
+addLog(`📊 Lignes de revenus: ${result.summary.revenueLines || 0}`);
+
+setStatus('success');
+
+setTimeout(() => {
+  onRestoreSuccess?.();
+  onClose();
+}, 3000);
 
     } catch (error) {
       console.error('❌ Erreur globale:', error);

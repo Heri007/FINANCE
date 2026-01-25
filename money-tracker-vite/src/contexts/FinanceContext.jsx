@@ -47,32 +47,27 @@ export function FinanceProvider({ children }) {
 
   // ✅ AJOUT : Cleanup des AbortControllers au unmount
   useEffect(() => {
-    return () => {
-      console.log('🧹 FinanceContext unmounting - Annulation des requêtes en cours');
-      
-      // Annuler toutes les requêtes en cours
-      Object.keys(abortControllers.current).forEach(key => {
-        if (abortControllers.current[key]) {
-          abortControllers.current[key].abort();
-        }
-      });
-    };
-  }, []);
+  return () => {
+    console.log('🧹 FinanceContext unmounting - Annulation des requêtes en cours');
+
+    Object.keys(abortControllers.current).forEach((key) => {
+      const ctrl = abortControllers.current[key];
+      if (ctrl) ctrl.abort();
+    });
+  };
+}, []);
 
   // ============================================================================
   // REFRESH FUNCTIONS
   // ============================================================================
-
   const refreshProjectLines = useCallback(async () => {
   if (!isAuthenticated) return;
 
-  // 🚫 Annuler la requête précédente
   if (abortControllers.current.projectLines) {
     abortControllers.current.projectLines.abort();
     console.log('🚫 Annulation requête projectLines en cours');
   }
 
-  // ✅ Créer un nouveau controller
   abortControllers.current.projectLines = new AbortController();
   const signal = abortControllers.current.projectLines.signal;
 
@@ -93,23 +88,18 @@ export function FinanceProvider({ children }) {
     }
 
     console.error('Erreur refresh project lines:', err);
-    setError({ 
-      message: 'Erreur lors du chargement des lignes de projet', 
-      details: err 
-    });
+    setError({ message: 'Erreur lors du chargement des lignes de projet', details: err });
   }
 }, [isAuthenticated]);
 
   const refreshAccounts = useCallback(async () => {
   if (!isAuthenticated) return;
 
-  // 🚫 Annuler la requête précédente
   if (abortControllers.current.accounts) {
     abortControllers.current.accounts.abort();
     console.log('🚫 Annulation requête accounts en cours');
   }
 
-  // ✅ Créer un nouveau controller
   abortControllers.current.accounts = new AbortController();
   const signal = abortControllers.current.accounts.signal;
 
@@ -134,15 +124,10 @@ export function FinanceProvider({ children }) {
     }
 
     console.error('Erreur chargement comptes:', err);
-    setError({ 
-      message: 'Erreur lors du chargement des comptes', 
-      details: err 
-    });
+    setError({ message: 'Erreur lors du chargement des comptes', details: err });
     setAccounts([]);
   } finally {
-    if (!signal.aborted) {
-      setAccountsLoading(false);
-    }
+    if (!signal.aborted) setAccountsLoading(false);
   }
 }, [isAuthenticated]);
 
@@ -940,7 +925,6 @@ Voulez-vous importer ces ${newTransactions.length} nouvelles transactions ?
   // ============================================================================
   // SELECTORS & COMPUTED VALUES
   // ============================================================================
-
   const visibleTransactions = useMemo(() => {
     let list = transactions;
     if (projectFilterId) {

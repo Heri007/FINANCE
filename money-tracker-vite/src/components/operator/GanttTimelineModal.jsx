@@ -422,51 +422,48 @@ const normalizedProjects = useMemo(() => {
     const totalamount = parseFloat(p.total_revenues || p.totalRevenues || p.totalAmount || 0);
     const status = p.status || 'draft';
     
-    // ✅ Calculer progression basée sur les dépenses
+// Calculer progression basée sur les dépenses
 let progress = 0;
 
-// Priorité 1 : Champ progress manuel
-if (p.progress) {
-  progress = parseFloat(p.progress);
-  console.log(`  ✅ Source: p.progress = ${progress}%`);
+// Priorité 1 : Metadata.progress (SAUF si = 0 ou undefined)
+const metadataProgress = p.metadata?.progress ? parseFloat(p.metadata.progress) : 0;
+if (metadataProgress > 0) {
+  progress = metadataProgress;
+  console.log(`📊 [${name}] Source: metadata.progress → ${progress}%`);
 }
-// Priorité 2 : Metadata
-else if (p.metadata?.progress) {
-  progress = parseFloat(p.metadata.progress);
-  console.log(`  ✅ Source: metadata.progress = ${progress}%`);
-}
-// Priorité 3 : Utiliser expense_progress_pct (depuis la vue SQL)
-else if (p.expenseprogresspct !== undefined || p.expense_progress_pct !== undefined) {
-  progress = parseFloat(p.expenseprogresspct || p.expense_progress_pct || 0);
-  console.log(`  ✅ Source: expense_progress_pct (vue SQL) = ${progress}%`);
-}
-// Priorité 4 : Calculer depuis les expenses (JSONB)
+// Priorité 2 : Calculer depuis les expenses JSONB
 else if (p.expenses && totalcost > 0) {
   const expensesArray = parseProjectExpenses({ expenses: p.expenses });
+  
   if (Array.isArray(expensesArray) && expensesArray.length > 0) {
+    console.log(`🔍 [${name}] Analyse de ${expensesArray.length} dépenses...`);
+    
     const paidAmount = expensesArray
-      .filter(exp => exp.isPaid === true)
-      .reduce((sum, exp) => sum + parseFloat(exp.amount || exp.projectedAmount || 0), 0);
+      .filter(exp => exp.is_paid === true) // ✅ ATTENTION: "is_paid" avec underscore
+      .reduce((sum, exp) => {
+        const amount = parseFloat(exp.amount || 0);
+        
+        if (amount > 0) {
+          console.log(`  💸 [${name}] "${exp.description}": ${amount.toLocaleString()} Ar (is_paid: ${exp.is_paid})`);
+        }
+        
+        return sum + amount;
+      }, 0);
     
     progress = (paidAmount / totalcost) * 100;
-    console.log(`  💰 Calculé depuis expenses JSONB: ${paidAmount} / ${totalcost} = ${progress.toFixed(1)}%`);
+    console.log(`💰 [${name}] Calcul: ${paidAmount.toLocaleString()} / ${totalcost.toLocaleString()} = ${progress.toFixed(1)}%`);
+  } else {
+    console.log(`⚠️ [${name}] Aucune dépense trouvée dans expenses JSONB`);
   }
-}
-// Priorité 5 : Calculer depuis total_paid_expenses vs total_cost
-else if (totalcost > 0 && p.totalpaidexpenses !== undefined) {
-  const paidExpenses = parseFloat(p.totalpaidexpenses || p.total_paid_expenses || 0);
-  progress = (paidExpenses / totalcost) * 100;
-  console.log(`  💸 Calculé depuis total_paid_expenses: ${paidExpenses} / ${totalcost} = ${progress.toFixed(1)}%`);
 }
 // Défaut : 0%
 else {
-  console.log(`  ⚠️ Aucune source de progression, défaut = 0%`);
+  console.log(`⚠️ [${name}] Aucune source de progression (totalcost: ${totalcost})`);
 }
 
 // Arrondir et limiter entre 0 et 100
 progress = Math.min(100, Math.max(0, Math.round(progress * 10) / 10));
-
-console.log(`✅ PROGRESSION FINALE pour "${name}": ${progress}%\n`);
+console.log(`✅ [${name}] PROGRESSION FINALE: ${progress}%`);
 
     const color = p.color || p.metadata?.color || '#3B82F6';
     const clientname = p.client_name || p.metadata?.client_name || 'N/A';

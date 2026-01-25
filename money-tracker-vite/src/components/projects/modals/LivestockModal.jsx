@@ -228,207 +228,215 @@ export function LivestockModal({
   const annualProfit = profitPerCycle * cycleCount;
   const annualROI = annualCost > 0 ? ((annualProfit / annualCost) * 100).toFixed(1) : 0;
 
-  // ===== CHARGEMENT PROJET EXISTANT =====
-  useEffect(() => {
-    const loadProjectData = async () => {
-      // 🛡️ CHECK 1: Au début
-      if (!isMountedRef.current) return;
-      
-      if (project) {
-        setProjectName(project.name);
-        setDescription(project.description);
-        setStatus(project.status || 'active');
+// ===== CHARGEMENT PROJET EXISTANT =====
+useEffect(() => {
+  const loadProjectData = async () => {
+    if (!isMountedRef.current) return;
+    
+    if (project) {
+      // ✅ CHARGER LES INFOS DE BASE DU PROJET
+      setProjectName(project.name);
+      setDescription(project.description);
+      setStatus(project.status || 'active');
 
-        const start = project.startDate || project.start_date;
-        const end = project.endDate || project.end_date;
-        setStartDate(start ? new Date(start) : new Date());
-        setEndDate(end ? new Date(end) : null);
+      const start = project.startDate || project.start_date;
+      const end = project.endDate || project.end_date;
+      setStartDate(start ? new Date(start) : new Date());
+      setEndDate(end ? new Date(end) : null);
 
-        // Charger metadata
-        if (project.metadata) {
-          const meta = typeof project.metadata === 'string' 
-            ? JSON.parse(project.metadata) 
-            : project.metadata;
+      // ✅ CHARGER METADATA
+      if (project.metadata) {
+        const meta = typeof project.metadata === 'string' 
+          ? JSON.parse(project.metadata) 
+          : project.metadata;
 
-          setAnimalType(meta.animalType || '');
-          setBreed(meta.breed || '');
-          setCycleCount(meta.cycleCount || 0);
-          setCycleDuration(meta.cycleDuration || 0);
-          setHeadsPerCycle(meta.headsPerCycle || 0);
-          setCurrentCycleNumber(meta.currentCycleNumber || 1);
-          setPoussinPrice(meta.poussinPrice || 0);
-          setFeedCostPerCycle(meta.feedCostPerCycle || 0);
-          setTargetWeight(meta.targetWeight || 0);
-          setSellingPricePerKg(meta.sellingPricePerKg || 0);
-          setSellingPricePerUnit(meta.sellingPricePerUnit || 0);
-          setMortalityRate(meta.mortalityRate || 4);
-          setFarmLocation(meta.farmLocation || '');
-          setCurrentHeadCount(meta.currentHeadCount || 0);
-          setSoldCount(meta.soldCount || 0);
-          setDeathCount(meta.deathCount || 0);
+        setAnimalType(meta.animalType || '');
+        setBreed(meta.breed || '');
+        setCycleCount(meta.cycleCount || 0);
+        setCycleDuration(meta.cycleDuration || 0);
+        setHeadsPerCycle(meta.headsPerCycle || 0);
+        setCurrentCycleNumber(meta.currentCycleNumber || 1);
+        setPoussinPrice(meta.poussinPrice || 0);
+        setFeedCostPerCycle(meta.feedCostPerCycle || 0);
+        setTargetWeight(meta.targetWeight || 0);
+        setSellingPricePerKg(meta.sellingPricePerKg || 0);
+        setSellingPricePerUnit(meta.sellingPricePerUnit || 0);
+        setMortalityRate(meta.mortalityRate || 4);
+        setFarmLocation(meta.farmLocation || '');
+        setCurrentHeadCount(meta.currentHeadCount || 0);
+        setSoldCount(meta.soldCount || 0);
+        setDeathCount(meta.deathCount || 0);
+      }
+
+      const parseList = (data) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        try {
+          return JSON.parse(data);
+        } catch {
+          return [];
         }
+      };
 
-        const parseList = (data) => {
-          if (!data) return [];
-          if (Array.isArray(data)) return data;
-          try {
-            return JSON.parse(data);
-          } catch {
-            return [];
-          }
-        };
-
-        let currentExpenses = parseList(project.expenses).map(e => ({
+      // ✅ FILTRER LES 0 Ar DÈS LE DÉPART
+      let currentExpenses = parseList(project.expenses)
+        .map(e => ({
           ...e,
           id: e.id || uuidv4(),
           date: e.date ? new Date(e.date) : new Date(),
           amount: parseFloat(e.amount) || 0,
-        }));
+          isPaid: !!(e.isPaid || e.ispaid || e.is_paid),
+        }))
+        .filter(e => e.amount > 0);
 
-        let currentRevenues = parseList(project.revenues).map(r => ({
+      let currentRevenues = parseList(project.revenues)
+        .map(r => ({
           ...r,
           id: r.id || uuidv4(),
           date: r.date ? new Date(r.date) : new Date(),
           amount: parseFloat(r.amount) || 0,
-        }));
+          isPaid: !!(r.isPaid || r.ispaid || r.is_paid || r.is_received || r.isreceived),
+        }))
+        .filter(r => r.amount > 0);
 
-        // RÉCUPÉRER ET FUSIONNER LES TRANSACTIONS
-        if (project.id) {
-          try {
-            const allTx = await transactionsService.getAll();
+      // RÉCUPÉRER ET FUSIONNER LES TRANSACTIONS
+      if (project.id) {
+        try {
+          const allTx = await transactionsService.getAll();
+          if (!isMountedRef.current) return;
 
-            // 🛡️ CHECK 2: Après appel async
-            if (!isMountedRef.current) return;
+          const projectTx = allTx.filter(t => 
+            String(t.project_id) === String(project.id)
+          );
 
-            const projectTx = allTx.filter(t => 
-              String(t.project_id) === String(project.id)
-            );
+          console.log(`💳 Transactions récupérées: ${projectTx.length}`);
 
-            console.log(`💳 Transactions récupérées pour Livestock "${project.name}":`, projectTx.length);
-
-            const mergeTransactions = (lines, type) => {
-              return lines.map(line => {
-                const tx = projectTx.find(t => 
-                  t.type === type && String(t.project_line_id) === String(line.dbLineId)
-                );
-
-                if (tx) {
-                  const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
-                  return {
-                    ...line,
-                    isPaid: true,
-                    account: accName,
-                    realDate: tx.transaction_date ? new Date(tx.transaction_date) : null,
-                  };
-                }
-                return line;
-              });
-            };
-
-            currentExpenses = mergeTransactions(currentExpenses, 'expense');
-            currentRevenues = mergeTransactions(currentRevenues, 'income');
-
-            // ✅ AJOUT : FUSIONNER avec expenseLines et revenueLines (lignes DB)
-            const fullProject = await projectsService.getById(project.id);
-            
-            // 🛡️ CHECK 3.5: Après rechargement du projet complet
-            if (!isMountedRef.current) return;
-
-            const expenseLines = parseList(fullProject.expenseLines || fullProject.expense_lines);
-            const revenueLines = parseList(fullProject.revenueLines || fullProject.revenue_lines);
-
-            console.log(`🔍 Fusion: ${currentExpenses.length} JSON + ${expenseLines.length} DB expenses | ${currentRevenues.length} JSON + ${revenueLines.length} DB revenues`);
-
-            // Fusionner expenseLines
-            expenseLines.forEach(dbLine => {
-              const existingIndex = currentExpenses.findIndex(e => 
-                e.dbLineId === dbLine.id || 
-                (e.description?.trim() === dbLine.description?.trim() && 
-                 Math.abs(parseFloat(e.amount) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)) < 0.01)
+          const mergeTransactions = (lines, type) => {
+            return lines.map(line => {
+              const tx = projectTx.find(t => 
+                t.type === type && String(t.project_line_id) === String(line.dbLineId)
               );
-              
-              if (existingIndex >= 0) {
-                // Mettre à jour avec données DB (priorité à la DB pour isPaid)
-                currentExpenses[existingIndex] = {
-                  ...currentExpenses[existingIndex],
-                  dbLineId: dbLine.id,
-                  isPaid: !!dbLine.is_paid,
-                  category: dbLine.category || currentExpenses[existingIndex].category,
-                };
 
-              } else {
-                // Ajouter ligne qui n'existe que dans project_expense_lines
-                console.log(`➕ Ajout depuis expense_lines: ${dbLine.description} (dbLineId: ${dbLine.id})`);
-                
+              if (tx) {
+                const accName = accounts.find(a => a.id === tx.account_id)?.name || 'Inconnu';
+                return {
+                  ...line,
+                  isPaid: true,
+                  account: accName,
+                  realDate: tx.transaction_date ? new Date(tx.transaction_date) : null,
+                };
+              }
+              return line;
+            });
+          };
+
+          currentExpenses = mergeTransactions(currentExpenses, 'expense');
+          currentRevenues = mergeTransactions(currentRevenues, 'income');
+
+          // FUSIONNER avec expenseLines et revenueLines (DB)
+          const fullProject = await projectsService.getById(project.id);
+          if (!isMountedRef.current) return;
+
+          const expenseLines = parseList(fullProject.expenseLines || fullProject.expense_lines);
+          const revenueLines = parseList(fullProject.revenueLines || fullProject.revenue_lines);
+
+          console.log(`🔍 Fusion: ${currentExpenses.length} JSON + ${expenseLines.length} DB expenses`);
+
+          // ✅ FUSION CORRIGÉE AVEC PRIORITÉ AU JSON
+          expenseLines.forEach(dbLine => {
+            const existingIndex = currentExpenses.findIndex(e => 
+              e.dbLineId === dbLine.id || 
+              (e.description?.trim() === dbLine.description?.trim() && 
+               Math.abs(parseFloat(e.amount) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)) < 0.01)
+            );
+            
+            if (existingIndex >= 0) {
+              const jsonIsPaid = currentExpenses[existingIndex].isPaid;
+              const dbIsPaid = !!(dbLine.is_paid || dbLine.ispaid || dbLine.isPaid);
+              
+              currentExpenses[existingIndex] = {
+                ...currentExpenses[existingIndex],
+                dbLineId: dbLine.id,
+                isPaid: jsonIsPaid || dbIsPaid,
+                category: dbLine.category || currentExpenses[existingIndex].category,
+              };
+              
+              console.log(`🔄 Fusion: ${dbLine.description}`);
+              console.log(`   - JSON isPaid: ${jsonIsPaid}, DB isPaid: ${dbIsPaid} → Final: ${jsonIsPaid || dbIsPaid}`);
+              
+            } else {
+              const amount = parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0);
+              if (amount > 0) {
+                console.log(`➕ Ajout: ${dbLine.description} (${amount} Ar, isPaid: ${!!dbLine.is_paid})`);
                 currentExpenses.push({
                   id: uuidv4(),
                   dbLineId: dbLine.id,
                   description: dbLine.description || '',
-                  amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
+                  amount: amount,
                   category: dbLine.category || 'Autre',
                   date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
                   account: '',
-                  isPaid: !!dbLine.is_paid,
+                  isPaid: !!(dbLine.is_paid || dbLine.ispaid || dbLine.isPaid),
                   isRecurring: false,
                 });
               }
-            });
+            }
+          });
 
-            // Fusionner revenueLines (même logique)
-            revenueLines.forEach(dbLine => {
-              const existingIndex = currentRevenues.findIndex(r => 
-                r.dbLineId === dbLine.id || 
-                (r.description?.trim() === dbLine.description?.trim() && 
-                 Math.abs(parseFloat(r.amount) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)) < 0.01)
-              );
+          // ✅ MÊME LOGIQUE POUR REVENUES
+          revenueLines.forEach(dbLine => {
+            const existingIndex = currentRevenues.findIndex(r => 
+              r.dbLineId === dbLine.id || 
+              (r.description?.trim() === dbLine.description?.trim() && 
+               Math.abs(parseFloat(r.amount) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)) < 0.01)
+            );
+            
+            if (existingIndex >= 0) {
+              const jsonIsPaid = currentRevenues[existingIndex].isPaid;
+              const dbIsPaid = !!(dbLine.is_received || dbLine.isreceived || dbLine.isReceived || dbLine.is_paid);
               
-              if (existingIndex >= 0) {
-                currentRevenues[existingIndex] = {
-                  ...currentRevenues[existingIndex],
-                  dbLineId: dbLine.id,
-                  isPaid: !!dbLine.is_received,
-                  category: dbLine.category || currentRevenues[existingIndex].category,
-                };
-
-              } else {
-                console.log(`➕ Ajout depuis revenue_lines: ${dbLine.description} (dbLineId: ${dbLine.id})`);
-                
+              currentRevenues[existingIndex] = {
+                ...currentRevenues[existingIndex],
+                dbLineId: dbLine.id,
+                isPaid: jsonIsPaid || dbIsPaid,
+                category: dbLine.category || currentRevenues[existingIndex].category,
+              };
+            } else {
+              const amount = parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0);
+              if (amount > 0) {
                 currentRevenues.push({
                   id: uuidv4(),
                   dbLineId: dbLine.id,
                   description: dbLine.description || '',
-                  amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
+                  amount: amount,
                   category: dbLine.category || 'Autre',
                   date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
                   account: '',
-                  isPaid: !!dbLine.is_received,
+                  isPaid: !!(dbLine.is_received || dbLine.isreceived || dbLine.isReceived),
                   isRecurring: false,
                 });
               }
-            });
+            }
+          });
 
-          } catch (err) {
-            // 🛡️ CHECK 3: Avant log d'erreur
-            if (!isMountedRef.current) return;
-            
-            console.error('❌ Erreur synchronisation:', err);
-          }
+        } catch (err) {
+          if (!isMountedRef.current) return;
+          console.error('❌ Erreur:', err);
         }
-
-        // 🛡️ CHECK 4: Avant setState
-        if (!isMountedRef.current) return;
-
-        setExpenses(currentExpenses);
-        setRevenues(currentRevenues);
-
-      } else {
-        resetForm();
       }
-    };
 
-    loadProjectData();
-  }, [project, isOpen, accounts]);
+      if (!isMountedRef.current) return;
 
+      setExpenses(currentExpenses);
+      setRevenues(currentRevenues);
+
+    } else {
+      resetForm();
+    }
+  };
+
+  loadProjectData();
+}, [project, isOpen, accounts]);
 
   const resetForm = () => {
     setProjectName('');
@@ -863,36 +871,48 @@ const handlePayerDepense = async (expense) => {
     
     console.log(`🔄 Rechargé: ${freshExpenses.length} expenses (dont ${expenseLines.length} DB)`);
     
-    expenseLines.forEach(dbLine => {
-      // Chercher si cette ligne existe déjà dans freshExpenses
-      const existingIndex = freshExpenses.findIndex(e => 
-        e.dbLineId === dbLine.id || 
-        (e.description === dbLine.description && Math.abs(e.amount - dbLine.projected_amount) < 0.01)
-      );
-      
-      if (existingIndex >= 0) {
-        // Mettre à jour avec les données DB (priorité à la DB)
-        freshExpenses[existingIndex] = {
-          ...freshExpenses[existingIndex],
-          dbLineId: dbLine.id,
-          isPaid: !!dbLine.is_paid,
-          amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || freshExpenses[existingIndex].amount),
-        };
-      } else {
-        
-        freshExpenses.push({
-          id: uuidv4(),
-          dbLineId: dbLine.id,
-          description: dbLine.description || '',
-          amount: parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0),
-          category: dbLine.category || 'Autre',
-          date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
-          account: '',
-          isPaid: !!dbLine.is_paid,
-          isRecurring: false,
-        });
-      }
-    });
+    // Fusionner expenseLines
+expenseLines.forEach(dbLine => {
+  const existingIndex = currentExpenses.findIndex(e => 
+    e.dbLineId === dbLine.id || 
+    (e.description?.trim() === dbLine.description?.trim() && 
+     Math.abs(parseFloat(e.amount) - parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0)) < 0.01)
+  );
+  
+  if (existingIndex >= 0) {
+    // ✅ PRIORITÉ AU JSON si is_paid est true dans le JSON
+    const jsonIsPaid = currentExpenses[existingIndex].isPaid;
+    const dbIsPaid = !!(dbLine.is_paid || dbLine.ispaid || dbLine.isPaid);
+    
+    currentExpenses[existingIndex] = {
+      ...currentExpenses[existingIndex],
+      dbLineId: dbLine.id,
+      isPaid: jsonIsPaid || dbIsPaid,  // ✅ PRIORITÉ AU TRUE
+      category: dbLine.category || currentExpenses[existingIndex].category,
+    };
+    
+    // ✅ LOG DÉTAILLÉ
+    console.log(`🔄 Fusion: ${dbLine.description}`);
+    console.log(`   - JSON isPaid: ${jsonIsPaid}, DB isPaid: ${dbIsPaid} → Final: ${jsonIsPaid || dbIsPaid}`);
+    
+  } else {
+    const amount = parseFloat(dbLine.projected_amount || dbLine.projectedamount || 0);
+    if (amount > 0) {
+      console.log(`➕ Ajout: ${dbLine.description} (${amount} Ar, isPaid: ${!!dbLine.is_paid})`);
+      currentExpenses.push({
+        id: uuidv4(),
+        dbLineId: dbLine.id,
+        description: dbLine.description || '',
+        amount: amount,
+        category: dbLine.category || 'Autre',
+        date: dbLine.transaction_date ? new Date(dbLine.transaction_date) : new Date(),
+        account: '',
+        isPaid: !!(dbLine.is_paid || dbLine.ispaid || dbLine.isPaid),
+        isRecurring: false,
+      });
+    }
+  }
+});
 
     setExpenses(freshExpenses);
 
@@ -1683,16 +1703,15 @@ const handleSave = async () => {
 
   <div className="space-y-2 max-h-96 overflow-y-auto">
     {expenses.map((exp, idx) => {
-      // ✅ CALCULER isPaid DEPUIS LA DB (identique à ProductFlipModal)
-      const expenseLine = project?.expenseLines?.find(
-        line => String(line.id) === String(exp.dbLineId)
-      );
-      const isPaid = expenseLine?.is_paid || expenseLine?.ispaid || false;
+      // ✅ CORRECTION : UTILISER exp.isPaid directement
+      const isPaid = exp.isPaid;
 
       return (
         <div
           key={exp.id}
-          className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'}`}
+          className={`bg-white p-3 rounded-lg border-2 grid grid-cols-12 gap-2 items-center ${
+            isPaid ? 'border-green-300 bg-green-50' : 'border-gray-200'
+          }`}
         >
           <input
             type="text"
@@ -1797,6 +1816,7 @@ const handleSave = async () => {
     </span>
   </div>
 </div>
+
 
           {/* SECTION 5: REVENUS */}
           <div className="bg-green-50 p-4 rounded-lg">
