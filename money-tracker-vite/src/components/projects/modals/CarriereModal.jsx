@@ -20,14 +20,105 @@ import transactionsService from '../../../services/transactionsService';
 import api from '../../../services/api';
 import { toLocalISODate, toLocalISOString } from '../../../utils/dateUtils';
 
+// Valeurs marchandes par substance (prix en USD/kg)
+const SUBSTANCE_PRICES = {
+  'Agate': [
+    { 
+      label: 'Agate (Calcédoine)', 
+      categories: [
+        { grade: 'A', price: 4 },
+        { grade: 'B', price: 2 },
+        { grade: 'C', price: 1.5 }
+      ]
+    },
+    { 
+      label: 'Agate géode', 
+      categories: [
+        { grade: 'A', price: 6 },
+        { grade: 'B', price: 4 },
+        { grade: 'C', price: 2.7 }
+      ]
+    }
+  ],
+  'Jaspe': [
+    { 
+      label: 'Jaspe standard', 
+      categories: [
+        { grade: 'A', price: 3 },
+        { grade: 'B', price: 2 },
+        { grade: 'C', price: 1.5 }
+      ]
+    }
+  ],
+  'Améthyste': [
+    { 
+      label: 'Agate géode améthyste', 
+      categories: [
+        { grade: 'A', price: 8 },
+        { grade: 'B', price: 5.5 },
+        { grade: 'C', price: 3 }
+      ]
+    }
+  ],
+  'Quartz rose': [
+    { 
+      label: '< 5kg', 
+      categories: [
+        { grade: 'A', price: 5.5 },
+        { grade: 'B', price: 3.2 },
+        { grade: 'C', price: 1.3 }
+      ]
+    },
+    { 
+      label: '5kg - 30kg', 
+      categories: [
+        { grade: 'A', price: 12 },
+        { grade: 'B', price: 5 },
+        { grade: 'C', price: 2 }
+      ]
+    }
+  ],
+  'Cristal (Quartz cristal géode)': [
+    { 
+      label: '< 500g', 
+      categories: [
+        { grade: 'A', price: 5 },
+        { grade: 'B', price: 3.4 },
+        { grade: 'C', price: 2 }
+      ]
+    },
+    { 
+      label: '500g - 5kg', 
+      categories: [
+        { grade: 'A', price: 9 },
+        { grade: 'B', price: 7 },
+        { grade: 'C', price: 4.5 }
+      ]
+    },
+    { 
+      label: '5kg - 30kg', 
+      categories: [
+        { grade: 'A', price: 20 },
+        { grade: 'B', price: 9 },
+        { grade: 'C', price: 6 }
+      ]
+    }
+  ]
+};
+
+// Taux pour le calcul RedRist
+const TAUX_REDRIST = 0.05; // 5%
+
 const makeEmptyLP1 = () => ({
-  numeroLP1: "",
-  substance: "",
+  numeroLP1: '',
+  substance: '',
+  typeSubstance: '', // Ex: "Agate (Calcédoine)" ou "< 5kg"
+  qualiteSubstance: '', // Catégorie: A, B ou C
   quantiteKg: 0,
-  prixUnitaireUSD: 0,
+  prixUnitaireUSD: 0, // Prix en USD/kg selon la catégorie choisie
   dateEmission: new Date(),
-  numeroOV: "",
-  statut: "En attente",
+  numeroOV: '',
+  statut: 'En attente',
 });
 
 const initialState = {
@@ -86,6 +177,13 @@ function reducer(state, action) {
       return state;
   }
 }
+
+// Calcul des Redevances et Ristournes
+const calculateRedRist = (quantiteKg, valeurMarchande, usdToMgaRate) => {
+  // RedRist = Quantité × Prix unitaire (valeur marchande) × Cours de change × 5%
+  return quantiteKg * valeurMarchande * usdToMgaRate * TAUX_REDRIST;
+};
+
 
 export function CarriereModal({
   isOpen,
@@ -524,6 +622,43 @@ const normalizeNumber = (value) => {
   const n = parseFloat(value || 0);
   return Number.isFinite(n) ? n : 0;
 };
+
+const handleAddLP1 = () => {
+  if (!newLP1.numeroLP1.trim()) {
+    alert('Le numéro LP1 est obligatoire');
+    return;
+  }
+  
+  if (!newLP1.substance || !newLP1.qualiteSubstance) {
+    alert('Veuillez choisir une substance et sa qualité');
+    return;
+  }
+  
+  if (newLP1.quantiteKg <= 0) {
+    alert('La quantité doit être supérieure à 0');
+    return;
+  }
+
+  const redRist = calculateRedRist(
+    newLP1.quantiteKg,
+    newLP1.valeurMarchande,
+    usdToMgaRate
+  );
+
+  const newLP1Entry = {
+    id: uuidv4(),
+    ...newLP1,
+    redRist, // Ajouter le montant RedRist calculé
+  };
+
+  setLp1List([...lp1List, newLP1Entry]);
+  
+  patch({
+    newLP1: makeEmptyLP1(),
+    showLP1Form: false
+  });
+};
+
 
 // AJOUTER CHARGE MANUELLE (useReducer/patch)
 const addExpense = () => {
@@ -1228,149 +1363,240 @@ if (!isOpen) return null;
           </div>
 
           {/* Formulaire LP1 */}
-          {showLP1Form && (
-            <div className="bg-white p-4 rounded-lg mb-4 border-2 border-blue-200 mt-4">
-              <h4 className="font-semibold mb-3">Nouveau LP1</h4>
+{showLP1Form && (
+  <div className="bg-white p-4 rounded-lg mb-4 border-2 border-blue-200 mt-4">
+    <h4 className="font-semibold mb-3">Nouveau LP1</h4>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">N° LP1 *</label>
-                  <input
-                    type="text"
-                    value={newLP1.numeroLP1}
-                    onChange={(e) =>
-                      patch({ newLP1: { ...newLP1, numeroLP1: e.target.value } })
-                    }
-                    className="w-full p-2 border rounded"
-                    placeholder="LP1-2025-001"
-                  />
-                </div>
+    <div className="grid grid-cols-3 gap-3">
+      {/* N° LP1 */}
+      <div>
+        <label className="block text-sm font-medium mb-1">N° LP1 *</label>
+        <input
+          type="text"
+          value={newLP1.numeroLP1}
+          onChange={(e) =>
+            patch({ newLP1: { ...newLP1, numeroLP1: e.target.value } })
+          }
+          className="w-full p-2 border rounded"
+          placeholder="LP1-2025-001"
+        />
+      </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Substance *</label>
-                  <input
-                    type="text"
-                    value={newLP1.substance}
-                    onChange={(e) =>
-                      patch({ newLP1: { ...newLP1, substance: e.target.value } })
-                    }
-                    className="w-full p-2 border rounded"
-                    placeholder="Agate"
-                    list="substances-list"
-                  />
-                </div>
+      {/* ÉTAPE 1: Choisir la substance principale */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Substance *</label>
+        <select
+          value={newLP1.substance}
+          onChange={(e) => {
+            patch({
+              newLP1: {
+                ...newLP1,
+                substance: e.target.value,
+                typeSubstance: '',
+                qualiteSubstance: '',
+                prixUnitaireUSD: 0
+              }
+            });
+          }}
+          className="w-full p-2 border rounded"
+        >
+          <option value="">-- Choisir une substance --</option>
+          {Object.keys(SUBSTANCE_PRICES).map(substance => (
+            <option key={substance} value={substance}>{substance}</option>
+          ))}
+        </select>
+      </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Quantité (kg) *</label>
-                  <CalculatorInput
-                    value={newLP1.quantiteKg}
-                    onChange={(val) => patch({ newLP1: { ...newLP1, quantiteKg: val } })}
-                    placeholder="27000"
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
+      {/* ÉTAPE 2: Choisir le type (taille/variété) */}
+      {newLP1.substance && (
+        <div>
+          <label className="block text-sm font-medium mb-1">Type / Taille *</label>
+          <select
+            value={newLP1.typeSubstance}
+            onChange={(e) => {
+              patch({
+                newLP1: {
+                  ...newLP1,
+                  typeSubstance: e.target.value,
+                  qualiteSubstance: '',
+                  prixUnitaireUSD: 0
+                }
+              });
+            }}
+            className="w-full p-2 border rounded"
+          >
+            <option value="">-- Choisir un type --</option>
+            {SUBSTANCE_PRICES[newLP1.substance]?.map((type, idx) => (
+              <option key={idx} value={type.label}>
+                {type.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Prix Unitaire (USD/kg) *</label>
-                  <CalculatorInput
-                    value={newLP1.prixUnitaireUSD}
-                    onChange={(val) =>
-                      patch({ newLP1: { ...newLP1, prixUnitaireUSD: val } })
-                    }
-                    placeholder="1.5"
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
+      {/* ÉTAPE 3: Choisir la catégorie (A, B, C) */}
+      {newLP1.substance && newLP1.typeSubstance && (
+        <div>
+          <label className="block text-sm font-medium mb-1">Catégorie *</label>
+          <select
+            value={newLP1.qualiteSubstance}
+            onChange={(e) => {
+              const selectedGrade = e.target.value;
+              const typeData = SUBSTANCE_PRICES[newLP1.substance]?.find(
+                t => t.label === newLP1.typeSubstance
+              );
+              const categoryData = typeData?.categories.find(
+                c => c.grade === selectedGrade
+              );
+              
+              patch({
+                newLP1: {
+                  ...newLP1,
+                  qualiteSubstance: selectedGrade,
+                  prixUnitaireUSD: categoryData?.price || 0
+                }
+              });
+            }}
+            className="w-full p-2 border rounded"
+          >
+            <option value="">-- Choisir une catégorie --</option>
+            {SUBSTANCE_PRICES[newLP1.substance]
+              ?.find(t => t.label === newLP1.typeSubstance)
+              ?.categories.map(category => (
+                <option key={category.grade} value={category.grade}>
+                  Catégorie {category.grade} - ${category.price}/kg
+                </option>
+              ))
+            }
+          </select>
+        </div>
+      )}
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date Émission</label>
-                  <DatePicker
-                    selected={newLP1.dateEmission}
-                    onChange={(date) =>
-                      patch({ newLP1: { ...newLP1, dateEmission: date } })
-                    }
-                    dateFormat="dd/MM/yyyy"
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
+      {/* Quantité (kg) */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Quantité (kg) *</label>
+        <CalculatorInput
+          value={newLP1.quantiteKg}
+          onChange={(val) => patch({ newLP1: { ...newLP1, quantiteKg: val } })}
+          placeholder="27000"
+          className="w-full p-2 border rounded"
+        />
+      </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-1">N° OV</label>
-                  <input
-                    type="text"
-                    value={newLP1.numeroOV}
-                    onChange={(e) =>
-                      patch({ newLP1: { ...newLP1, numeroOV: e.target.value } })
-                    }
-                    className="w-full p-2 border rounded"
-                    placeholder="OV-2025-001"
-                  />
-                </div>
-              </div>
+      {/* Prix Unitaire (lecture seule, rempli automatiquement) */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Prix Unitaire (USD/kg)</label>
+        <input
+          type="text"
+          value={newLP1.prixUnitaireUSD > 0 ? `$${newLP1.prixUnitaireUSD}` : ''}
+          readOnly
+          className="w-full p-2 border rounded bg-gray-100 text-gray-700 font-semibold"
+          placeholder="Sélectionner catégorie"
+        />
+      </div>
 
-              {/* Aperçu calculs */}
-              {newLP1.quantiteKg > 0 && newLP1.prixUnitaireUSD > 0 && (
-                <div className="mt-3 p-3 bg-blue-100 rounded text-sm">
-                  <p className="font-semibold mb-1">Calculs automatiques (en Ariary) :</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    <div>
-                      <span className="text-gray-600">Valeur totale:</span>
-                      <p className="font-bold">
-                        {formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD * usdToMgaRate)}
-                      </p>
-                    </div>
+      {/* Date Émission */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Date Émission</label>
+        <DatePicker
+          selected={newLP1.dateEmission}
+          onChange={(date) =>
+            patch({ newLP1: { ...newLP1, dateEmission: date } })
+          }
+          dateFormat="dd/MM/yyyy"
+          className="w-full p-2 border rounded"
+        />
+      </div>
 
-                    <div>
-                      <span className="text-gray-600">Ristourne (2%):</span>
-                      <p className="font-bold text-orange-600">
-                        {formatCurrency(
-                          newLP1.quantiteKg * newLP1.prixUnitaireUSD * usdToMgaRate * TAUX_RISTOURNE
-                        )}
-                      </p>
-                    </div>
+      {/* N° OV */}
+      <div>
+        <label className="block text-sm font-medium mb-1">N° OV</label>
+        <input
+          type="text"
+          value={newLP1.numeroOV}
+          onChange={(e) =>
+            patch({ newLP1: { ...newLP1, numeroOV: e.target.value } })
+          }
+          className="w-full p-2 border rounded"
+          placeholder="OV-2025-001"
+        />
+      </div>
+    </div>
 
-                    <div>
-                      <span className="text-gray-600">Redevance (3%):</span>
-                      <p className="font-bold text-red-600">
-                        {formatCurrency(
-                          newLP1.quantiteKg * newLP1.prixUnitaireUSD * usdToMgaRate * TAUX_REDEVANCE
-                        )}
-                      </p>
-                    </div>
+    {/* Aperçu calculs */}
+    {newLP1.quantiteKg > 0 && newLP1.prixUnitaireUSD > 0 && (
+      <div className="mt-3 p-3 bg-blue-100 rounded text-sm">
+        <p className="font-semibold mb-2">Calculs automatiques</p>
+        
+        {/* Résumé de la sélection */}
+        <div className="bg-white p-2 rounded border border-blue-200 mb-2">
+          <p className="text-xs text-gray-600">
+            <span className="font-semibold">{newLP1.substance}</span>
+            {newLP1.typeSubstance && (
+              <>
+                {' → '}
+                <span className="font-semibold">{newLP1.typeSubstance}</span>
+              </>
+            )}
+            {newLP1.qualiteSubstance && (
+              <>
+                {' → '}
+                <span className="font-semibold text-blue-600">
+                  Catégorie {newLP1.qualiteSubstance}
+                </span>
+              </>
+            )}
+          </p>
+          <p className="text-xs text-gray-600 mt-1">
+            Prix unitaire: <span className="font-bold">${newLP1.prixUnitaireUSD}/kg</span>
+          </p>
+        </div>
 
-                    <div>
-                      <span className="text-gray-600">Total DTSPM (5%):</span>
-                      <p className="font-bold text-red-800">
-                        {formatCurrency(
-                          newLP1.quantiteKg *
-                            newLP1.prixUnitaireUSD *
-                            usdToMgaRate *
-                            TAUX_TOTAL_DTSPM
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+        {/* Calculs */}
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <span className="text-gray-600">Valeur totale (USD)</span>
+            <p className="font-bold text-green-600">
+              ${(newLP1.quantiteKg * newLP1.prixUnitaireUSD).toFixed(2)}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-600">Valeur totale (Ar)</span>
+            <p className="font-bold">
+              {formatCurrency(newLP1.quantiteKg * newLP1.prixUnitaireUSD * usdToMgaRate)}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-600">RedRist (5%)</span>
+            <p className="font-bold text-red-600">
+              {formatCurrency(
+                calculateRedRist(newLP1.quantiteKg, newLP1.prixUnitaireUSD, usdToMgaRate)
               )}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
 
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={handleAddLP1}
-                  className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
-                >
-                  <Save className="w-4 h-4" />
-                  Enregistrer LP1
-                </button>
+    <div className="flex gap-2 mt-3">
+      <button
+        onClick={handleAddLP1}
+        className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-green-700"
+      >
+        <Save className="w-4 h-4" />
+        Enregistrer LP1
+      </button>
 
-                <button
-                  onClick={() => patch({ showLP1Form: false })}
-                  className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          )}
+      <button
+        onClick={() => patch({ showLP1Form: false })}
+        className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
+      >
+        Annuler
+      </button>
+    </div>
+  </div>
+)}
 
           {/* Liste des LP1 */}
           <div className="space-y-2 mt-4">
