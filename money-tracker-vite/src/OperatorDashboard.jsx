@@ -253,9 +253,10 @@ export function OperatorDashboard({
 // STATS PROJETS (nombres bruts + liste active)
 const projectStats = useMemo(() => {
   const activeProjects = projects.filter(p => {
-    const status = (p.status || '').toLowerCase();
-    return status === 'active' || status === 'actif' || status.startsWith('phase');
-  });
+  const status = p.status?.toLowerCase();
+  return status === 'active' || status === 'actif' || status === 'paused';
+});
+
 
   const totalCost = activeProjects.reduce((sum, p) => {
     // âœ… Convertir string â†’ number
@@ -504,7 +505,9 @@ if (projectStats.active > 0) {
     if (expenses.length > 0) {
       text += `\n   💳 DÉPENSES (${expenses.length}):\n`;
       expenses.forEach((exp, idx) => {
-        const status = exp.isPaid ? '✅ Payé' : '⏳ À payer';
+  const status = (exp.isPaid || exp.is_paid || exp.ispaid || exp.account === "Déjà Payé")
+    ? "✅ Payé" 
+    : "⏳ À payer";
         
         // CORRECTION : Logique améliorée pour le label
         let label = 'Dépense';
@@ -598,6 +601,22 @@ if (projectStats.active > 0) {
 
   // Fonction pour calculer le montant réellement investi (payé)
 const calculateInvestedAmount = (project) => {
+  console.log(`🔍 CALCUL INVESTI - ${project.name}:`, {
+    hasExpenses: !!project.expenses,
+    expensesType: typeof project.expenses,
+    expensesLength: project.expenses?.length,
+    firstExpense: project.expenses?.[0]
+  });
+
+  // 🚨 DEBUG SPÉCIAL POUR NEMO
+  if (project.name === 'NEMO EXPORT #001') {
+    console.log('🚨🚨🚨 NEMO - DONNÉES COMPLÈTES:', {
+      expenses_raw: project.expenses,
+      first_3: project.expenses?.slice(0, 3)
+    });
+  }
+
+  // Parse expenses
   const parseData = (data) => {
     if (!data) return [];
     if (typeof data === 'string') {
@@ -605,18 +624,49 @@ const calculateInvestedAmount = (project) => {
     }
     return Array.isArray(data) ? data : [];
   };
+
+  let expenses = parseData(project.expenses);
   
-  const expenses = parseData(project.expenses);
+  // ✅ NORMALISER les champs isPaid pour TOUS les formats
+  expenses = expenses.map(exp => {
+    // Détecter isPaid dans n'importe quel format
+    const isPaidValue = exp.isPaid ?? exp.is_paid ?? exp.ispaid ?? false;
+    
+    return {
+      ...exp,
+      isPaid: isPaidValue,
+      is_paid: isPaidValue,
+      ispaid: isPaidValue
+    };
+  });
+
+  console.log(`   📦 Expenses parsées: ${expenses.length}`);
+
+  // Le reste du code reste identique
+  let totalInvested = 0;
   
-  // Somme des dépenses avec isPaid: true
-  const invested = expenses.reduce((sum, exp) => {
-    if (exp.isPaid) {
-      return sum + (parseFloat(exp.amount) || 0);
+  expenses.forEach((expense, index) => {
+    if (index < 3) {
+      console.log(`   ${index + 1}. ${expense.description}:`, {
+        amount: expense.amount,
+        isPaid: expense.isPaid,
+        is_paid: expense.is_paid,
+        ispaid: expense.ispaid,
+        account: expense.account,
+        DETECTED: expense.isPaid || expense.is_paid || expense.ispaid || expense.account === 'Déjà Payé'
+      });
     }
-    return sum;
-  }, 0);
-  
-  return invested;
+
+    const amount = parseFloat(expense.amount || 0);
+    const isPaid = expense.isPaid || expense.is_paid || expense.ispaid || expense.account === 'Déjà Payé';
+    
+    if (isPaid) {
+      totalInvested += amount;
+    }
+  });
+
+  console.log(`   💰 TOTAL INVESTI: ${totalInvested.toLocaleString()} Ar`);
+  return totalInvested;
 };
 
   return (
@@ -915,32 +965,50 @@ const calculateInvestedAmount = (project) => {
     <div className="text-center py-12...">...</div>
   ) : (
     projectStats.activeProjects.map((project) => {
-  const investedAmount = calculateInvestedAmount(project);
-  const totalBudget = parseFloat(project.totalcost || 0);
-  const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
+      // ✅ 1. Parser les données D'ABORD
+      const parseData = (data) => {
+        if (!data) return [];
+        if (typeof data === 'string') {
+          try { return JSON.parse(data); } catch { return []; }
+        }
+        return Array.isArray(data) ? data : [];
+      };
 
-  const parseData = (data) => {
-    if (!data) return [];
-    if (typeof data === 'string') {
-      try { return JSON.parse(data); } catch { return []; }
-    }
-    return Array.isArray(data) ? data : [];
-  };
+      const expenses = parseData(project.expenses);
+      const revenues = parseData(project.revenues);
 
-  const expenses = parseData(project.expenses);
-  const revenues = parseData(project.revenues);
+      // ✅ 2. Calculer l'investi
+      const investedAmount = calculateInvestedAmount(project);
+      
+      // ✅ 3. Calculer le TOTAL BUDGET à partir des expenses
+      const totalBudget = expenses.reduce((sum, exp) => {
+        return sum + parseFloat(exp.amount || 0);
+      }, 0);
+      
+      // ✅ 4. Calculer le pourcentage APRÈS avoir totalBudget
+      const progress = totalBudget > 0 ? (investedAmount / totalBudget) * 100 : 0;
 
-  const allSteps = [
-    ...expenses.map(e => ({ ...e, type: 'expense', phase: e.phase || 'general' })),
-    ...revenues.map(r => ({ ...r, type: 'revenue', phase: r.phase || 'general' }))
-  ];
+      // 🔍 DEBUG - Afficher les calculs
+      console.log(`📊 ${project.name}:`, {
+        investedAmount: `${investedAmount.toLocaleString()} Ar`,
+        totalBudget: `${totalBudget.toLocaleString()} Ar`,
+        progress: `${progress.toFixed(1)}%`,
+        nbExpenses: expenses.length
+      });
 
-  const phases = [...new Set(allSteps.map(s => s.phase))];
-  const stepGroups = phases.map(phase => ({
-    phase,
-    label: phase.charAt(0).toUpperCase() + phase.slice(1),
-    items: allSteps.filter(s => s.phase === phase)
-  }));
+      // ✅ 5. Construire les steps pour l'affichage
+      const allSteps = [
+        ...expenses.map(e => ({ ...e, type: 'expense', phase: e.phase || 'general' })),
+        ...revenues.map(r => ({ ...r, type: 'revenue', phase: r.phase || 'general' }))
+      ];
+
+      const phases = [...new Set(allSteps.map(s => s.phase))];
+      const stepGroups = phases.map(phase => ({
+        phase,
+        label: phase.charAt(0).toUpperCase() + phase.slice(1),
+        items: allSteps.filter(s => s.phase === phase)
+      }));
+
 
   return (
     <div key={project.id} className="group border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-all bg-gradient-to-br from-white to-gray-50">
@@ -1027,13 +1095,17 @@ const calculateInvestedAmount = (project) => {
                       <span className="text-[11px] font-medium text-gray-600">
                         {formatCurrency(step.amount || 0)}
                       </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${
-                        step.isPaid || step.isReceived
-                          ? 'bg-emerald-100 text-emerald-700' 
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {step.isPaid || step.isReceived ? '✅ Fait' : '⏳ À faire'}
-                      </span>
+                      <span className="text-10px px-2 py-0.5 rounded-full whitespace-nowrap ...">
+  {(() => {
+    const isPaid = step.isPaid || 
+                   step.is_paid || 
+                   step.ispaid || 
+                   step.isReceived || 
+                   step.account === "Déjà Payé";
+    return isPaid ? "✅ Fait" : "⏳ À faire";
+  })()}
+</span>
+
                     </div>
                   </div>
                 ))}

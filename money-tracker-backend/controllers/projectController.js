@@ -253,8 +253,9 @@ const syncJsonWithNormalizedLines = (projectExpensesJson, projectRevenuesJson, e
     if (normalizedLine) {
       return {
         ...exp,
-        isPaid: normalizedLine.isPaid,           // ✅ camelCase
-        is_paid: normalizedLine.isPaid,          // ✅ snake_case (compatibilité)
+        isPaid: normalizedLine.is_paid,        // camelCase pour frontend
+    is_paid: normalizedLine.is_paid,       // snake_case original
+    ispaid: normalizedLine.is_paid,        // lowercase legacy
         actualAmount: normalizedLine.actualAmount, // ✅ camelCase
         actual_amount: normalizedLine.actualAmount, // ✅ snake_case
         transactionDate: normalizedLine.transactionDate, // ✅ camelCase

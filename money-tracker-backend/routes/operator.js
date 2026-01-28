@@ -401,4 +401,68 @@ router.put('/projects/:id', async (req, res) => {
   }
 });
 
+// ============================================================================
+// ROUTE PROJECTS - RÉCUPÉRATION DES PROJETS AVEC EXPENSES/REVENUES
+// ============================================================================
+
+router.get('/projects', async (req, res) => {
+  try {
+    console.log('📡 GET /api/operator/projects - Requête reçue');
+    
+    const result = await pool.query(`
+      SELECT 
+        id,
+        name,
+        description,
+        status,
+        created_at,
+        updated_at,
+        start_date,
+        end_date,
+        total_cost,
+        total_revenues,
+        expenses,  -- ✅ IMPORTANT: Inclure explicitement
+        revenues,  -- ✅ IMPORTANT
+        budget,
+        priority,
+        progress,
+        category,
+        notes,
+        metadata
+      FROM projects
+      WHERE status != 'archived'
+      ORDER BY name
+    `);
+    
+    // 🔍 DEBUG: Afficher le premier projet
+    if (result.rows.length > 0) {
+      const firstProject = result.rows[0];
+      console.log(`\n✅ ${result.rows.length} projets chargés`);
+      console.log(`📦 Premier projet: ${firstProject.name}`);
+      console.log(`   - Expenses:`, {
+        exists: !!firstProject.expenses,
+        type: typeof firstProject.expenses,
+        length: Array.isArray(firstProject.expenses) ? firstProject.expenses.length : 'N/A',
+        first: firstProject.expenses && firstProject.expenses[0] 
+          ? {
+              description: firstProject.expenses[0].description,
+              amount: firstProject.expenses[0].amount,
+              isPaid: firstProject.expenses[0].isPaid,
+              is_paid: firstProject.expenses[0].is_paid,
+              ispaid: firstProject.expenses[0].ispaid,
+              account: firstProject.expenses[0].account
+            }
+          : 'N/A'
+      });
+    }
+    
+    res.json(result.rows);
+    
+  } catch (err) {
+    console.error('❌ GET /api/operator/projects - Erreur:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
+

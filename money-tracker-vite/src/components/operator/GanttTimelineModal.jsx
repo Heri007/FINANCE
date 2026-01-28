@@ -50,18 +50,25 @@ const parseProjectExpenses = (project) => {
 const calculateProjectMetrics = (project) => {
   const expenses = parseProjectExpenses(project);
   
+  // Montant payé
   const paid = Array.isArray(expenses)
-    ? expenses.filter(exp => exp.isPaid === true).reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0)
+    ? expenses
+        .filter(exp => exp.isPaid === true || exp.is_paid === true || exp.ispaid === true)
+        .reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0)
     : 0;
-    
-  const unpaid = Array.isArray(expenses)
-    ? expenses.filter(exp => exp.isPaid === false || !exp.isPaid).reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0)
-    : parseFloat(project.totalcost || 0);
-    
-  const profit = parseFloat(project.totalamount || 0) - parseFloat(project.totalcost || 0);
   
+  // Montant non payé (inverse de paid)
+  const unpaid = Array.isArray(expenses)
+    ? expenses
+        .filter(exp => !(exp.isPaid === true || exp.is_paid === true || exp.ispaid === true))
+        .reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0)
+    : parseFloat(project.totalcost || 0);
+  
+  // Profit = Revenus - Coûts totaux
+  const profit = parseFloat(project.totalamount || 0) - parseFloat(project.totalcost || 0);
   return { paid, unpaid, profit };
 };
+
 
 // ✅ OPTIMISATION #5.1 : Sous-composant mémoïsé pour les badges de statut
 const StatusBadge = memo(({ status }) => {
@@ -178,7 +185,7 @@ const ProjectRow = memo(({
           <div className="mt-2 text-xs text-gray-600 space-y-0.5">
             <div className="flex justify-between">
               <span className="text-gray-500">Progression</span>
-              <span className="font-semibold">{project.progress || 0}%</span>
+              <span className="font-semibold">{project.progress}%</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Revenus</span>
